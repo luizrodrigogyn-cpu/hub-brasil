@@ -1,0 +1,13 @@
+"use client";
+import { useEffect, useState } from "react";
+
+type Item = Record<string, string | number | null>;
+export default function AdminDashboard() {
+  const [data, setData] = useState<{ suppliers: Item[]; products: Item[]; events: Item[] }>({ suppliers: [], products: [], events: [] });
+  const [tab, setTab] = useState<"suppliers" | "products" | "events">("suppliers");
+  const load = () => fetch("/api/admin/content").then((r) => r.json()).then(setData);
+  useEffect(() => { load(); }, []);
+  async function act(entity: string, id: number, action: string, value?: string) { await fetch("/api/admin/content", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ entity, id, action, value }) }); await load(); }
+  const rows = data[tab];
+  return <><div className="admin-tabs"><button className={tab === "suppliers" ? "active" : ""} onClick={() => setTab("suppliers")}>Fornecedores ({data.suppliers.length})</button><button className={tab === "products" ? "active" : ""} onClick={() => setTab("products")}>Produtos ({data.products.length})</button><button className={tab === "events" ? "active" : ""} onClick={() => setTab("events")}>Eventos ({data.events.length})</button></div><div className="moderation-list">{rows.length === 0 ? <div className="admin-empty">Nenhum conteúdo nesta seção.</div> : rows.map((item) => { const entity = tab === "suppliers" ? "supplier" : tab === "products" ? "product" : "event"; const title = String(item.company || item.name || "Sem nome"); return <article key={`${entity}-${item.id}`}><div><span className={`status ${item.status}`}>{String(item.status)}</span><h2>{title}</h2><p>{tab === "suppliers" ? `${item.phone} · ${item.email || "sem e-mail"}` : tab === "products" ? `${item.supplierName} · ${item.category}` : `${item.city}, ${item.state} · ${item.eventDate}`}</p>{tab === "suppliers" && <small>{item.phoneVerifiedAt ? "✓ Telefone validado" : "Telefone aguardando validação"}</small>}</div><div className="moderation-actions">{tab === "suppliers" && !item.phoneVerifiedAt && <button onClick={() => act(entity, Number(item.id), "verify_phone")}>Validar telefone</button>}<button onClick={() => act(entity, Number(item.id), "approve")}>Aprovar</button><button onClick={() => act(entity, Number(item.id), "reject")}>Reprovar</button><button onClick={() => { const value = window.prompt("Novo nome", title); if (value) act(entity, Number(item.id), tab === "suppliers" ? "edit_company" : "edit_name", value); }}>Editar</button><button className="danger" onClick={() => { if (window.confirm("Remover definitivamente este conteúdo?")) act(entity, Number(item.id), "delete"); }}>Remover</button></div></article>; })}</div></>;
+}

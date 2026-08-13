@@ -86,7 +86,10 @@ export default function Home() {
     const form = new FormData(event.currentTarget);
     const payload = Object.fromEntries(form.entries());
     try {
-      await fetch("/api/leads", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
+      const response = await fetch("/api/leads", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
+      const result = await response.json();
+      if (response.status === 401) { window.location.href = result.signIn; return; }
+      if (!response.ok) { setToast(result.error || "Não foi possível cadastrar."); return; }
     } catch { /* Local preview still demonstrates the complete gated flow. */ }
     setRegistered(true);
     setUserRole(registrationRole);
@@ -96,7 +99,7 @@ export default function Home() {
       setView("supplier-dashboard");
     }
     setRegisterOpen(false);
-    setToast("Acesso liberado. Bem-vindo ao Hub Brasil!");
+    setToast(registrationRole === "supplier" ? "Cadastro enviado. O gestor validará seu telefone e sua empresa." : "Acesso liberado. Bem-vindo ao Hub Brasil!");
     if (selectedSupplier && registrationRole === "client") setView("supplier");
     window.setTimeout(() => setToast(""), 3500);
   }
@@ -107,9 +110,8 @@ export default function Home() {
     form.set("supplierName", supplierCompany || "Fornecedor cadastrado");
     const photo = form.get("photo");
     const preview = photo instanceof File && photo.size ? URL.createObjectURL(photo) : null;
-    const local: Product = { id: Date.now(), supplierName: String(form.get("supplierName")), name: String(form.get("name")), category: String(form.get("category")), technicalDetails: String(form.get("technicalDetails")), averagePrice: String(form.get("averagePrice") || "") || null, imageUrl: preview };
-    try { const response = await fetch("/api/products", { method: "POST", body: form }); const data = await response.json(); if (response.ok) Object.assign(local, data.product); } catch {}
-    setProducts((current) => [local, ...current]); setProductFormOpen(false); setView("products"); setToast("Produto cadastrado com sucesso."); window.setTimeout(() => setToast(""), 3500);
+    try { const response = await fetch("/api/products", { method: "POST", body: form }); const data = await response.json(); if (response.status === 401) { window.location.href = data.signIn; return; } if (!response.ok) { setToast(data.error); return; } } catch { setToast("Não foi possível enviar o produto."); return; }
+    if (preview) URL.revokeObjectURL(preview); setProductFormOpen(false); setView("supplier-dashboard"); setToast("Produto enviado para aprovação do gestor."); window.setTimeout(() => setToast(""), 3500);
   }
 
   async function rateSupplier(name: string, stars: number) {
@@ -117,7 +119,7 @@ export default function Home() {
     const current = ratings[name] || { average: 0, total: 0 };
     const optimistic = { average: (current.average * current.total + stars) / (current.total + 1), total: current.total + 1 };
     setRatings((all) => ({ ...all, [name]: optimistic }));
-    try { const response = await fetch("/api/ratings", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ supplierName: name, stars }) }); const data = await response.json(); if (response.ok) setRatings((all) => ({ ...all, [name]: data })); } catch {}
+    try { const response = await fetch("/api/ratings", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ supplierName: name, stars }) }); const data = await response.json(); if (response.status === 401) { window.location.href = data.signIn; return; } if (response.ok) setRatings((all) => ({ ...all, [name]: data })); } catch {}
   }
 
   function showSupplier(supplier: Supplier) {
@@ -151,11 +153,8 @@ export default function Home() {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const payload = Object.fromEntries(form.entries()) as Record<string, string>;
-    try { await fetch("/api/events", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) }); } catch {}
-    const date = new Date(`${payload.date}T12:00:00`);
-    const created: HubEvent = { id: Date.now(), name: payload.name, supplier: selectedSupplier?.name || "Seu fornecedor", venue: payload.venue, city: payload.city, state: payload.state, date: payload.date, displayDate: date.toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" }).toUpperCase().replace(".", ""), link: payload.link, x: 68, y: 77 };
-    setEvents((current) => [...current, created]);
-    setSelectedEvent(created); setEventFormOpen(false); setView("events"); setToast("Evento enviado para publicação no mapa.");
+    try { const response = await fetch("/api/events", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) }); const data = await response.json(); if (response.status === 401) { window.location.href = data.signIn; return; } if (!response.ok) { setToast(data.error); return; } } catch { setToast("Não foi possível enviar o evento."); return; }
+    setEventFormOpen(false); setView("supplier-dashboard"); setToast("Evento enviado para aprovação do gestor.");
     window.setTimeout(() => setToast(""), 3500);
   }
 
@@ -305,7 +304,7 @@ export default function Home() {
               <label>Telefone / WhatsApp<input name="phone" required inputMode="tel" placeholder="(00) 00000-0000" /></label>
               <div className="or"><span></span>Informe um dos dois<span></span></div>
               <div className="field-row"><label>Empresa<input name="company" required={registrationRole === "supplier"} placeholder="Nome da empresa" /></label><label>Instagram<input name="instagram" placeholder="@suaempresa" /></label></div>
-              <label className="consent"><input type="checkbox" required /> <span>Concordo com a Política de Privacidade e com o uso dos meus dados para liberar o acesso à plataforma.</span></label>
+              <label className="consent"><input type="checkbox" required /> <span>Li e concordo com a <a href="/privacidade" target="_blank">Política de Privacidade</a> e os <a href="/termos" target="_blank">Termos de Uso</a>.</span></label>
               <button className="primary full" type="submit">{registrationRole === "supplier" ? "Criar perfil da empresa" : "Liberar meu acesso"} <span>→</span></button>
             </form>
             <small>Seus dados só serão compartilhados com um fornecedor quando você solicitar contato.</small>
