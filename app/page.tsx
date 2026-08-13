@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 
 type Supplier = {
   id: number;
@@ -36,6 +36,12 @@ export default function Home() {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("Todas as categorias");
   const [toast, setToast] = useState("");
+  const [welcomeOpen, setWelcomeOpen] = useState(false);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setWelcomeOpen(true), 900);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   const filtered = useMemo(() => suppliers.filter((supplier) => {
     const matchesQuery = `${supplier.name} ${supplier.city} ${supplier.state}`.toLowerCase().includes(query.toLowerCase());
@@ -175,6 +181,29 @@ export default function Home() {
         <button className={view === "directory" ? "active" : ""} onClick={() => setView("directory")}><span>▦</span>Fornecedores</button>
         <button onClick={() => setRegisterOpen(true)}><span>◎</span>Conta</button>
       </nav>
+
+      {welcomeOpen && !registered && !registerOpen && (
+        <div className="welcome-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setWelcomeOpen(false); }}>
+          <section className="welcome-modal" role="dialog" aria-modal="true" aria-labelledby="welcome-title">
+            <button className="modal-close" onClick={() => setWelcomeOpen(false)} aria-label="Fechar">×</button>
+            <div className="welcome-glow"></div>
+            <div className="welcome-content">
+              <span className="welcome-symbol"><span></span><span></span><span></span></span>
+              <span className="eyebrow">VOCÊ FAZ PARTE DESSA CONSTRUÇÃO</span>
+              <h2 id="welcome-title">Vamos construir um mercado de rastreamento <em>mais forte.</em></h2>
+              <p>O Hub Brasil nasceu para aproximar profissionais, revelar bons fornecedores e criar novas oportunidades em todo o país.</p>
+              <ul>
+                <li><i>✓</i> Encontre fornecedores especializados</li>
+                <li><i>✓</i> Conheça produtos e novas tecnologias</li>
+                <li><i>✓</i> Faça conexões comerciais de confiança</li>
+              </ul>
+              <button className="primary welcome-cta" onClick={() => { setWelcomeOpen(false); setSelectedSupplier(null); setRegisterOpen(true); }}>Quero acessar <span>→</span></button>
+              <button className="welcome-later" onClick={() => setWelcomeOpen(false)}>Explorar primeiro</button>
+              <small>Cadastro rápido. Informe apenas seu nome, telefone e empresa ou Instagram.</small>
+            </div>
+          </section>
+        </div>
+      )}
 
       {registerOpen && (
         <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setRegisterOpen(false); }}>
