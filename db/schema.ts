@@ -7,6 +7,7 @@ export const leads = sqliteTable("leads", {
   phone: text("phone").notNull(),
   company: text("company"),
   instagram: text("instagram"),
+  role: text("role").notNull().default("client"),
   consentAt: text("consent_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
@@ -31,5 +32,24 @@ export const supplierEvents = sqliteTable("supplier_events", {
   registrationUrl: text("registration_url").notNull(),
   description: text("description"),
   status: text("status").notNull().default("pending"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const products = sqliteTable("products", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  supplierName: text("supplier_name").notNull(),
+  name: text("name").notNull(),
+  category: text("category").notNull(),
+  technicalDetails: text("technical_details").notNull(),
+  averagePrice: text("average_price"),
+  imageKey: text("image_key"),
+  status: text("status").notNull().default("published"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const supplierRatings = sqliteTable("supplier_ratings", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  supplierName: text("supplier_name").notNull(),
+  stars: integer("stars").notNull(),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });

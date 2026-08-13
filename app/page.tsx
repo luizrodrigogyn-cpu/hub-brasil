@@ -14,6 +14,7 @@ type Supplier = {
 };
 
 type HubEvent = { id: number; name: string; supplier: string; venue: string; city: string; state: string; date: string; displayDate: string; link: string; x: number; y: number; demo?: boolean };
+type Product = { id: number; supplierName: string; name: string; category: string; technicalDetails: string; averagePrice?: string | null; imageUrl?: string | null };
 
 const suppliers: Supplier[] = [
   { id: 1, name: "TrackOne Tecnologia", initials: "T1", category: "Rastreadores", city: "São Paulo", state: "SP", description: "Rastreadores homologados e soluções para gestão de frotas.", accent: "blue" },
@@ -23,7 +24,7 @@ const suppliers: Supplier[] = [
 ];
 
 export default function Home() {
-  const [view, setView] = useState<"map" | "directory" | "supplier" | "events">("map");
+  const [view, setView] = useState<"map" | "directory" | "supplier" | "events" | "products" | "supplier-dashboard">("map");
   const [registered, setRegistered] = useState(false);
   const [registerOpen, setRegisterOpen] = useState(false);
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
@@ -34,11 +35,36 @@ export default function Home() {
   const [eventFormOpen, setEventFormOpen] = useState(false);
   const [events, setEvents] = useState<HubEvent[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<HubEvent | null>(null);
+  const [registrationRole, setRegistrationRole] = useState<"client" | "supplier">("client");
+  const [userRole, setUserRole] = useState<"client" | "supplier" | null>(null);
+  const [supplierCompany, setSupplierCompany] = useState("");
+  const [productFormOpen, setProductFormOpen] = useState(false);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [ratings, setRatings] = useState<Record<string, { average: number; total: number }>>({});
 
   useEffect(() => {
     const timer = window.setTimeout(() => setWelcomeOpen(true), 900);
+    fetch("/api/products").then((response) => response.json()).then((data) => setProducts(data.products || [])).catch(() => {});
+    fetch("/api/ratings").then((response) => response.json()).then((data) => setRatings(data.ratings || {})).catch(() => {});
     return () => window.clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    if (eventFormOpen && userRole !== "supplier") {
+      setEventFormOpen(false);
+      setRegistrationRole("supplier");
+      setRegisterOpen(true);
+    }
+  }, [eventFormOpen, userRole]);
+
+  useEffect(() => {
+    if (selectedProduct && !registered) {
+      setSelectedProduct(null);
+      setRegistrationRole("client");
+      setRegisterOpen(true);
+    }
+  }, [selectedProduct, registered]);
 
   const filtered = useMemo(() => suppliers.filter((supplier) => {
     const matchesQuery = `${supplier.name} ${supplier.city} ${supplier.state}`.toLowerCase().includes(query.toLowerCase());
@@ -63,15 +89,62 @@ export default function Home() {
       await fetch("/api/leads", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
     } catch { /* Local preview still demonstrates the complete gated flow. */ }
     setRegistered(true);
+    setUserRole(registrationRole);
+    if (registrationRole === "supplier") {
+      const company = String(payload.company || "").trim();
+      setSupplierCompany(company);
+      setView("supplier-dashboard");
+    }
     setRegisterOpen(false);
     setToast("Acesso liberado. Bem-vindo ao Hub Brasil!");
-    if (selectedSupplier) setView("supplier");
+    if (selectedSupplier && registrationRole === "client") setView("supplier");
     window.setTimeout(() => setToast(""), 3500);
+  }
+
+  async function createProduct(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    form.set("supplierName", supplierCompany || "Fornecedor cadastrado");
+    const photo = form.get("photo");
+    const preview = photo instanceof File && photo.size ? URL.createObjectURL(photo) : null;
+    const local: Product = { id: Date.now(), supplierName: String(form.get("supplierName")), name: String(form.get("name")), category: String(form.get("category")), technicalDetails: String(form.get("technicalDetails")), averagePrice: String(form.get("averagePrice") || "") || null, imageUrl: preview };
+    try { const response = await fetch("/api/products", { method: "POST", body: form }); const data = await response.json(); if (response.ok) Object.assign(local, data.product); } catch {}
+    setProducts((current) => [local, ...current]); setProductFormOpen(false); setView("products"); setToast("Produto cadastrado com sucesso."); window.setTimeout(() => setToast(""), 3500);
+  }
+
+  async function rateSupplier(name: string, stars: number) {
+    if (userRole !== "client") { setToast("Entre como usuário para avaliar fornecedores."); window.setTimeout(() => setToast(""), 3000); return; }
+    const current = ratings[name] || { average: 0, total: 0 };
+    const optimistic = { average: (current.average * current.total + stars) / (current.total + 1), total: current.total + 1 };
+    setRatings((all) => ({ ...all, [name]: optimistic }));
+    try { const response = await fetch("/api/ratings", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ supplierName: name, stars }) }); const data = await response.json(); if (response.ok) setRatings((all) => ({ ...all, [name]: data })); } catch {}
   }
 
   function showSupplier(supplier: Supplier) {
     setSelectedSupplier(supplier);
     requestAccess(supplier);
+  }
+
+  function openEventForm() {
+    if (userRole !== "supplier") {
+      setRegistrationRole("supplier");
+      setRegisterOpen(true);
+      setToast("Cadastre-se como fornecedor para publicar eventos.");
+      window.setTimeout(() => setToast(""), 3500);
+      return;
+    }
+    setEventFormOpen(true);
+  }
+
+  function openProduct(product: Product) {
+    if (!registered) {
+      setRegistrationRole("client");
+      setRegisterOpen(true);
+      setToast("Identifique-se para ver as informações técnicas.");
+      window.setTimeout(() => setToast(""), 3500);
+      return;
+    }
+    setSelectedProduct(product);
   }
 
   async function createEvent(event: FormEvent<HTMLFormElement>) {
@@ -96,12 +169,13 @@ export default function Home() {
         <nav className="desktop-nav" aria-label="Navegação principal">
           <button className={view === "map" ? "active" : ""} onClick={() => setView("map")}>Mapa</button>
           <button className={view === "directory" ? "active" : ""} onClick={() => setView("directory")}>Fornecedores</button>
-          <button onClick={() => { setView("directory"); setCategory("Rastreadores"); }}>Produtos</button>
+          <button className={view === "products" ? "active" : ""} onClick={() => setView("products")}>Produtos</button>
           <button className={view === "events" ? "active" : ""} onClick={() => setView("events")}>Eventos</button>
         </nav>
         <div className="top-actions">
           <a className="admin-link" href="/admin">Ver cadastros</a>
           {registered ? <span className="access-chip"><i></i>Acesso liberado</span> : <button className="text-action" onClick={() => setRegisterOpen(true)}>Entrar</button>}
+          {userRole === "supplier" && <button className="text-action" onClick={() => setView("supplier-dashboard")}>Minha empresa</button>}
           <button className="primary small" onClick={() => { setSelectedSupplier(null); setRegisterOpen(true); }}>Quero acessar</button>
         </div>
       </header>
@@ -167,6 +241,7 @@ export default function Home() {
               <div><span className="verified demo">Perfil demonstrativo</span><h1>{selectedSupplier.name}</h1><p>{selectedSupplier.category} · {selectedSupplier.city}, {selectedSupplier.state}</p></div>
               <div className="profile-actions"><button className="event-create" onClick={() => setEventFormOpen(true)}>＋ Cadastrar evento</button></div>
             </div>
+            <div className="rating-panel"><div><strong>{ratings[selectedSupplier.name] ? ratings[selectedSupplier.name].average.toFixed(1) : "Sem avaliações"}</strong>{ratings[selectedSupplier.name] && <span>{"★".repeat(Math.round(ratings[selectedSupplier.name].average))}</span>}</div><p>Avalie este fornecedor</p><div className="star-picker">{[1,2,3,4,5].map((star) => <button key={star} onClick={() => rateSupplier(selectedSupplier.name, star)} aria-label={`${star} estrelas`}>★</button>)}</div></div>
             <div className="profile-columns">
               <div><h2>Produtos em destaque</h2><div className="product-grid">{["Rastreador veicular", "Rastreador compacto", "Chicote universal"].map((name, index) => <article className="product-card" key={name}><div className={`product-visual p${index + 1}`}><span>{index === 2 ? "ACESSÓRIO" : "RASTREAMENTO"}</span><div className="device"></div></div><span className="category">{index === 2 ? "Acessórios" : "Rastreadores"}</span><h3>{name}</h3><p>Informações disponíveis no cadastro real</p><button onClick={() => setToast("Este é um produto ilustrativo.")}>Ver informações →</button></article>)}</div></div>
               <aside className="contact-panel"><h3>Contato comercial</h3><p>Telefone, Instagram e canais comerciais serão exibidos somente quando o fornecedor real tiver seu cadastro aprovado.</p><dl><div><dt>Localização</dt><dd>{selectedSupplier.city}, {selectedSupplier.state}</dd></div></dl></aside>
@@ -175,6 +250,9 @@ export default function Home() {
         )}
 
         {view === "events" && <section className="events-page"><div className="page-heading"><div><span className="eyebrow">AGENDA DO SETOR</span><h1>Próximos eventos</h1><p>Encontros, feiras e treinamentos promovidos por fornecedores.</p></div><button className="primary" onClick={() => setEventFormOpen(true)}>＋ Cadastrar evento</button></div>{events.length === 0 ? <div className="events-empty"><strong>Nenhum evento real publicado ainda</strong><p>Quando um evento for cadastrado e aprovado, ele aparecerá nesta agenda e no mapa.</p><button className="event-create" onClick={() => setEventFormOpen(true)}>Cadastrar o primeiro evento</button></div> : <div className="events-grid">{events.sort((a,b) => a.date.localeCompare(b.date)).map((item) => <article className="event-card" key={item.id}><div className="calendar-block"><strong>{item.displayDate.split(" ")[0]}</strong><span>{item.displayDate.split(" ")[1]}</span><small>{item.displayDate.split(" ")[2]}</small></div><div className="event-card-copy"><span className="eyebrow">EVENTO CADASTRADO</span><h2>{item.name}</h2><p>⌖ {item.venue} · {item.city}, {item.state}</p><small>Promovido por {item.supplier}</small></div><a href={item.link} target="_blank" rel="noreferrer">Inscrever-se →</a></article>)}</div>}</section>}
+        {view === "products" && <section className="products-page"><div className="page-heading"><div><span className="eyebrow">CATÁLOGO DO SETOR</span><h1>Produtos</h1><p>Fotos e informações publicadas pelos próprios fornecedores.</p></div>{userRole === "supplier" && <button className="primary" onClick={() => setProductFormOpen(true)}>＋ Cadastrar produto</button>}</div>{products.length === 0 ? <div className="events-empty"><strong>Nenhum produto cadastrado ainda</strong><p>Os cards aparecerão aqui conforme os fornecedores adicionarem seus produtos.</p>{userRole === "supplier" ? <button className="event-create" onClick={() => setProductFormOpen(true)}>Cadastrar o primeiro produto</button> : <button className="event-create" onClick={() => { setRegistrationRole("supplier"); setRegisterOpen(true); }}>Sou fornecedor</button>}</div> : <div className="catalog-grid">{products.map((product) => <article className="catalog-card" key={product.id} onClick={() => setSelectedProduct(product)}><div className="catalog-photo">{product.imageUrl ? <img src={product.imageUrl} alt={product.name} /> : <span>Sem foto</span>}</div><div className="catalog-copy"><span className="category">{product.category}</span><h2>{product.name}</h2><p>{product.supplierName}</p>{product.averagePrice && <strong>Preço médio: {product.averagePrice}</strong>}<button>Ver informações técnicas →</button></div></article>)}</div>}</section>}
+
+        {view === "supplier-dashboard" && <section className="supplier-dashboard"><div className="page-heading"><div><span className="eyebrow">PERFIL EMPRESA</span><h1>{supplierCompany || "Minha empresa"}</h1><p>Gerencie produtos, informações técnicas, fotos e eventos.</p></div></div><div className="management-grid"><button onClick={() => setProductFormOpen(true)}><span>▣</span><strong>Cadastrar produto</strong><small>Foto, categoria, especificações e preço médio</small></button><button onClick={() => setEventFormOpen(true)}><span>★</span><strong>Cadastrar evento</strong><small>Local, data e link de inscrição</small></button><button onClick={() => setView("products")}><span>⌕</span><strong>Ver meus produtos</strong><small>Acompanhe o catálogo publicado</small></button></div></section>}
       </main>
 
       <nav className="mobile-nav" aria-label="Navegação móvel">
@@ -184,6 +262,10 @@ export default function Home() {
       </nav>
 
       {eventFormOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setEventFormOpen(false); }}><section className="access-modal event-form" role="dialog" aria-modal="true" aria-labelledby="event-form-title"><button className="modal-close" onClick={() => setEventFormOpen(false)} aria-label="Fechar">×</button><span className="eyebrow">ÁREA DO FORNECEDOR</span><h2 id="event-form-title">Cadastrar novo evento</h2><p>Após a revisão, o evento aparecerá na agenda e como um ponto especial no mapa.</p><form onSubmit={createEvent}><label>Nome do evento<input name="name" required placeholder="Ex.: Encontro de Integradores" /></label><div className="field-row"><label>Data<input name="date" type="date" required /></label><label>Local<input name="venue" required placeholder="Centro de eventos" /></label></div><div className="field-row"><label>Cidade<input name="city" required placeholder="São Paulo" /></label><label>Estado<select name="state" required><option value="">Selecione</option><option>SP</option><option>PR</option><option>MG</option><option>RJ</option><option>GO</option><option>PE</option></select></label></div><label>Link para inscrição<input name="link" type="url" required placeholder="https://seusite.com/inscricao" /></label><label>Descrição<textarea name="description" rows={3} placeholder="Conte brevemente sobre o evento" /></label><button className="primary full" type="submit">Enviar evento para publicação <span>→</span></button></form></section></div>}
+
+      {selectedProduct && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedProduct(null); }}><section className="access-modal product-detail" role="dialog" aria-modal="true"><button className="modal-close" onClick={() => setSelectedProduct(null)} aria-label="Fechar">×</button><div className="detail-photo">{selectedProduct.imageUrl ? <img src={selectedProduct.imageUrl} alt={selectedProduct.name} /> : <span>Produto sem foto</span>}</div><span className="category">{selectedProduct.category}</span><h2>{selectedProduct.name}</h2><strong className="detail-supplier">{selectedProduct.supplierName}</strong><h3>Informações técnicas</h3><p>{selectedProduct.technicalDetails}</p>{selectedProduct.averagePrice && <div className="price-box"><small>PREÇO MÉDIO INFORMADO</small><strong>{selectedProduct.averagePrice}</strong></div>}<button className="primary full" onClick={() => setSelectedProduct(null)}>Fechar <span>×</span></button></section></div>}
+
+      {productFormOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setProductFormOpen(false); }}><section className="access-modal event-form" role="dialog" aria-modal="true"><button className="modal-close" onClick={() => setProductFormOpen(false)} aria-label="Fechar">×</button><span className="eyebrow">ÁREA DO FORNECEDOR</span><h2>Cadastrar produto</h2><p>O produto será exibido no catálogo com a sua empresa como fornecedora.</p><form onSubmit={createProduct}><label>Foto do produto<input name="photo" type="file" accept="image/jpeg,image/png,image/webp" required /></label><label>Nome do produto<input name="name" required placeholder="Ex.: Rastreador 4G LTE" /></label><label>Categoria<select name="category" required><option value="">Selecione</option><option>Rastreadores</option><option>Conectividade M2M</option><option>Câmeras veiculares</option><option>Tags e identificação</option><option>Acessórios</option></select></label><label>Informações técnicas<textarea name="technicalDetails" rows={5} required placeholder="Tecnologia, alimentação, conectividade, homologações e demais especificações" /></label><label>Preço médio aproximado<input name="averagePrice" placeholder="Ex.: R$ 250 a R$ 320" /></label><button className="primary full" type="submit">Publicar produto <span>→</span></button></form></section></div>}
 
       {welcomeOpen && !registered && !registerOpen && (
         <div className="welcome-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setWelcomeOpen(false); }}>
@@ -216,13 +298,15 @@ export default function Home() {
             <span className="eyebrow">ACESSO PROFISSIONAL</span>
             <h2 id="access-title">Identifique-se para acessar</h2>
             <p>Precisamos conhecer quem está buscando fornecedores. É rápido e seus dados ficam protegidos.</p>
+            <div className="role-selector"><button className={registrationRole === "client" ? "active" : ""} onClick={() => setRegistrationRole("client")}><strong>Sou usuário</strong><span>Quero encontrar e avaliar fornecedores</span></button><button className={registrationRole === "supplier" ? "active" : ""} onClick={() => setRegistrationRole("supplier")}><strong>Sou fornecedor</strong><span>Quero publicar produtos e eventos</span></button></div>
             <form onSubmit={register}>
+              <input type="hidden" name="role" value={registrationRole} />
               <label>Seu nome<input name="name" required placeholder="Como podemos chamar você?" /></label>
               <label>Telefone / WhatsApp<input name="phone" required inputMode="tel" placeholder="(00) 00000-0000" /></label>
               <div className="or"><span></span>Informe um dos dois<span></span></div>
-              <div className="field-row"><label>Empresa<input name="company" placeholder="Nome da empresa" /></label><label>Instagram<input name="instagram" placeholder="@suaempresa" /></label></div>
+              <div className="field-row"><label>Empresa<input name="company" required={registrationRole === "supplier"} placeholder="Nome da empresa" /></label><label>Instagram<input name="instagram" placeholder="@suaempresa" /></label></div>
               <label className="consent"><input type="checkbox" required /> <span>Concordo com a Política de Privacidade e com o uso dos meus dados para liberar o acesso à plataforma.</span></label>
-              <button className="primary full" type="submit">Liberar meu acesso <span>→</span></button>
+              <button className="primary full" type="submit">{registrationRole === "supplier" ? "Criar perfil da empresa" : "Liberar meu acesso"} <span>→</span></button>
             </form>
             <small>Seus dados só serão compartilhados com um fornecedor quando você solicitar contato.</small>
           </section>

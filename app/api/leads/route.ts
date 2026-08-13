@@ -8,10 +8,11 @@ export async function POST(request: Request) {
     const phone = body.phone?.trim();
     const company = body.company?.trim() || null;
     const instagram = body.instagram?.trim() || null;
+    const role = body.role === "supplier" ? "supplier" : "client";
     if (!name || !phone || (!company && !instagram)) {
       return Response.json({ error: "Preencha nome, telefone e empresa ou Instagram." }, { status: 400 });
     }
-    const [lead] = await getDb().insert(leads).values({ name, phone, company, instagram }).returning();
+    const [lead] = await getDb().insert(leads).values({ name, phone, company, instagram, role }).returning();
     return Response.json({ lead }, { status: 201 });
   } catch {
     return Response.json({ error: "Não foi possível registrar o acesso." }, { status: 500 });

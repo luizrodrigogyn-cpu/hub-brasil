@@ -15,6 +15,13 @@
       "when": 1786642488350,
       "tag": "0001_woozy_newton_destine",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1786643966696,
+      "tag": "0002_normal_owl",
+      "breakpoints": true
     }
   ]
 }
