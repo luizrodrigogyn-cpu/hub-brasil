@@ -13,12 +13,21 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://hub-brasil-marketplace.rodrigomel.chatgpt.site"),
   title: "Hub Brasil — Tecnologia para rastreamento veicular",
   description: "Encontre fornecedores validados, produtos especializados e conexões comerciais para o mercado de rastreamento veicular.",
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",
   },
+  openGraph: {
+    title: "Hub Brasil — O marketplace do rastreamento veicular",
+    description: "Fornecedores validados, produtos especializados e eventos do setor em todo o Brasil.",
+    images: [{ url: "/og.png", width: 1733, height: 909, alt: "Hub Brasil — O marketplace do rastreamento veicular" }],
+    locale: "pt_BR",
+    type: "website",
+  },
+  twitter: { card: "summary_large_image", title: "Hub Brasil", description: "O marketplace do rastreamento veicular", images: ["/og.png"] },
 };
 
 export default function RootLayout({

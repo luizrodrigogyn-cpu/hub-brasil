@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const leads = sqliteTable("leads", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -12,6 +12,10 @@ export const leads = sqliteTable("leads", {
   email: text("email"),
   status: text("status").notNull().default("pending"),
   phoneVerifiedAt: text("phone_verified_at"),
+  category: text("category"),
+  city: text("city"),
+  state: text("state"),
+  description: text("description"),
   consentAt: text("consent_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 }, (table) => ({ authUserIdIdx: uniqueIndex("idx_leads_auth_user_id").on(table.authUserId) }));
@@ -37,8 +41,9 @@ export const supplierEvents = sqliteTable("supplier_events", {
   description: text("description"),
   status: text("status").notNull().default("pending"),
   ownerUserId: text("owner_user_id"),
+  supplierName: text("supplier_name"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-});
+}, (table) => ({ statusIdx: index("idx_events_status").on(table.status) }));
 
 export const products = sqliteTable("products", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -51,7 +56,7 @@ export const products = sqliteTable("products", {
   status: text("status").notNull().default("pending"),
   ownerUserId: text("owner_user_id"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-});
+}, (table) => ({ statusIdx: index("idx_products_status").on(table.status) }));
 
 export const supplierRatings = sqliteTable("supplier_ratings", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -60,3 +65,12 @@ export const supplierRatings = sqliteTable("supplier_ratings", {
   raterUserId: text("rater_user_id"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 }, (table) => ({ uniqueRating: uniqueIndex("idx_ratings_supplier_rater").on(table.supplierName, table.raterUserId) }));
+
+export const moderationAudit = sqliteTable("moderation_audit", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  adminEmail: text("admin_email").notNull(),
+  entity: text("entity").notNull(),
+  entityId: integer("entity_id").notNull(),
+  action: text("action").notNull(),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => ({ createdIdx: index("idx_audit_created_at").on(table.createdAt) }));
