@@ -19,3 +19,17 @@ export const leadEvents = sqliteTable("lead_events", {
   eventType: text("event_type").notNull(),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
+
+export const supplierEvents = sqliteTable("supplier_events", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  supplierId: integer("supplier_id"),
+  name: text("name").notNull(),
+  venue: text("venue").notNull(),
+  city: text("city").notNull(),
+  state: text("state").notNull(),
+  eventDate: text("event_date").notNull(),
+  registrationUrl: text("registration_url").notNull(),
+  description: text("description"),
+  status: text("status").notNull().default("pending"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});

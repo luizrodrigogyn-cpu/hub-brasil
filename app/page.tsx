@@ -14,6 +14,8 @@ type Supplier = {
   accent: string;
 };
 
+type HubEvent = { id: number; name: string; supplier: string; venue: string; city: string; state: string; date: string; displayDate: string; link: string; x: number; y: number; demo?: boolean };
+
 const suppliers: Supplier[] = [
   { id: 1, name: "TrackOne Tecnologia", initials: "T1", category: "Rastreadores", city: "São Paulo", state: "SP", description: "Rastreadores 4G homologados e soluções para gestão de frotas.", products: 12, accent: "blue" },
   { id: 2, name: "Nexo M2M", initials: "NX", category: "Conectividade M2M", city: "Campinas", state: "SP", description: "Conectividade multioperadora para rastreamento em todo o Brasil.", products: 8, accent: "cyan" },
@@ -27,8 +29,13 @@ const cities = [
   { city: "Curitiba", state: "PR", count: 1, x: 61, y: 84 },
 ];
 
+const demoEvents: HubEvent[] = [
+  { id: 1, name: "Encontro Nacional de Rastreamento", supplier: "TrackOne Tecnologia", venue: "Expo Center Norte", city: "São Paulo", state: "SP", date: "2026-10-22", displayDate: "22 OUT 2026", link: "https://example.com/inscricao", x: 68, y: 77, demo: true },
+  { id: 2, name: "Conexões M2M Sul", supplier: "VisionCam Brasil", venue: "Centro de Eventos Positivo", city: "Curitiba", state: "PR", date: "2026-11-12", displayDate: "12 NOV 2026", link: "https://example.com/inscricao", x: 61, y: 84, demo: true },
+];
+
 export default function Home() {
-  const [view, setView] = useState<"map" | "directory" | "supplier">("map");
+  const [view, setView] = useState<"map" | "directory" | "supplier" | "events">("map");
   const [registered, setRegistered] = useState(false);
   const [registerOpen, setRegisterOpen] = useState(false);
   const [selectedCity, setSelectedCity] = useState(cities[1]);
@@ -37,6 +44,9 @@ export default function Home() {
   const [category, setCategory] = useState("Todas as categorias");
   const [toast, setToast] = useState("");
   const [welcomeOpen, setWelcomeOpen] = useState(false);
+  const [eventFormOpen, setEventFormOpen] = useState(false);
+  const [events, setEvents] = useState<HubEvent[]>(demoEvents);
+  const [selectedEvent, setSelectedEvent] = useState<HubEvent | null>(demoEvents[0]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setWelcomeOpen(true), 900);
@@ -77,6 +87,18 @@ export default function Home() {
     requestAccess(supplier);
   }
 
+  async function createEvent(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const payload = Object.fromEntries(form.entries()) as Record<string, string>;
+    try { await fetch("/api/events", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) }); } catch {}
+    const date = new Date(`${payload.date}T12:00:00`);
+    const created: HubEvent = { id: Date.now(), name: payload.name, supplier: selectedSupplier?.name || "Seu fornecedor", venue: payload.venue, city: payload.city, state: payload.state, date: payload.date, displayDate: date.toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" }).toUpperCase().replace(".", ""), link: payload.link, x: 68, y: 77 };
+    setEvents((current) => [...current, created]);
+    setSelectedEvent(created); setEventFormOpen(false); setView("events"); setToast("Evento enviado para publicação no mapa.");
+    window.setTimeout(() => setToast(""), 3500);
+  }
+
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -88,6 +110,7 @@ export default function Home() {
           <button className={view === "map" ? "active" : ""} onClick={() => setView("map")}>Mapa</button>
           <button className={view === "directory" ? "active" : ""} onClick={() => setView("directory")}>Fornecedores</button>
           <button onClick={() => { setView("directory"); setCategory("Rastreadores"); }}>Produtos</button>
+          <button className={view === "events" ? "active" : ""} onClick={() => setView("events")}>Eventos</button>
         </nav>
         <div className="top-actions">
           {registered ? <span className="access-chip"><i></i>Acesso liberado</span> : <button className="text-action" onClick={() => setRegisterOpen(true)}>Entrar</button>}
@@ -122,6 +145,7 @@ export default function Home() {
                     <span>{item.count}</span>
                   </button>
                 ))}
+                {events.map((item) => <button key={`event-${item.id}`} className={`event-pin ${selectedEvent?.id === item.id ? "selected" : ""}`} style={{ left: `${item.x}%`, top: `${item.y}%` }} onClick={() => setSelectedEvent(item)} aria-label={`Evento ${item.name}, em ${item.city}`}><span>★</span></button>)}
               </div>
               <span className="map-caption">LOCALIZAÇÕES DE DEMONSTRAÇÃO</span>
               <div className="city-popover">
@@ -130,6 +154,7 @@ export default function Home() {
                 <button onClick={() => setView("directory")} aria-label={`Ver fornecedores de ${selectedCity.city}`}>→</button>
               </div>
               <div className="map-legend"><i></i> Clique nos pontos para explorar</div>
+              {selectedEvent && <div className="event-popover"><span className="event-date">{selectedEvent.displayDate}</span><div><small>PRÓXIMO EVENTO {selectedEvent.demo ? "· DEMONSTRAÇÃO" : ""}</small><strong>{selectedEvent.name}</strong><span>{selectedEvent.city}, {selectedEvent.state}</span></div><button onClick={() => setView("events")}>Ver →</button></div>}
               <a className="map-source" href="https://commons.wikimedia.org/wiki/File:Brazil_states_blank.png" target="_blank" rel="noreferrer">Mapa: Wikimedia Commons · CC BY-SA</a>
             </div>
           </section>
@@ -166,7 +191,7 @@ export default function Home() {
             <div className="profile-hero">
               <div className={`supplier-logo large ${selectedSupplier.accent}`}>{selectedSupplier.initials}</div>
               <div><span className="verified demo">Perfil demonstrativo</span><h1>{selectedSupplier.name}</h1><p>{selectedSupplier.category} · {selectedSupplier.city}, {selectedSupplier.state}</p></div>
-              <a className="primary contact" href="https://wa.me/5511999999999?text=Olá!%20Encontrei%20sua%20empresa%20no%20Hub%20Brasil." target="_blank" rel="noreferrer">Conversar no WhatsApp</a>
+              <div className="profile-actions"><button className="event-create" onClick={() => setEventFormOpen(true)}>＋ Cadastrar evento</button><a className="primary contact" href="https://wa.me/5511999999999?text=Olá!%20Encontrei%20sua%20empresa%20no%20Hub%20Brasil." target="_blank" rel="noreferrer">Conversar no WhatsApp</a></div>
             </div>
             <div className="profile-columns">
               <div><h2>Produtos em destaque</h2><div className="product-grid">{["Rastreador 4G HX-200", "Rastreador compacto MiniOne", "Chicote universal 12 vias"].map((name, index) => <article className="product-card" key={name}><div className={`product-visual p${index + 1}`}><span>{index === 2 ? "ACESSÓRIO" : "4G LTE"}</span><div className="device"></div></div><span className="category">{index === 2 ? "Acessórios" : "Rastreadores"}</span><h3>{name}</h3><p>{index === 0 ? "A partir de R$ 189" : index === 1 ? "A partir de R$ 159" : "A partir de R$ 32"}</p><button onClick={() => setToast("Interesse registrado. Abrindo canal de contato…")}>Solicitar informações →</button></article>)}</div></div>
@@ -174,6 +199,8 @@ export default function Home() {
             </div>
           </section>
         )}
+
+        {view === "events" && <section className="events-page"><div className="page-heading"><div><span className="eyebrow">AGENDA DO SETOR</span><h1>Próximos eventos</h1><p>Encontros, feiras e treinamentos promovidos por fornecedores.</p></div><button className="primary" onClick={() => setEventFormOpen(true)}>＋ Cadastrar evento</button></div><div className="events-grid">{events.sort((a,b) => a.date.localeCompare(b.date)).map((item) => <article className="event-card" key={item.id}><div className="calendar-block"><strong>{item.displayDate.split(" ")[0]}</strong><span>{item.displayDate.split(" ")[1]}</span><small>{item.displayDate.split(" ")[2]}</small></div><div className="event-card-copy"><span className="eyebrow">{item.demo ? "EVENTO DEMONSTRATIVO" : "EVENTO CADASTRADO"}</span><h2>{item.name}</h2><p>⌖ {item.venue} · {item.city}, {item.state}</p><small>Promovido por {item.supplier}</small></div><a href={item.link} target="_blank" rel="noreferrer">Inscrever-se →</a></article>)}</div></section>}
       </main>
 
       <nav className="mobile-nav" aria-label="Navegação móvel">
@@ -181,6 +208,8 @@ export default function Home() {
         <button className={view === "directory" ? "active" : ""} onClick={() => setView("directory")}><span>▦</span>Fornecedores</button>
         <button onClick={() => setRegisterOpen(true)}><span>◎</span>Conta</button>
       </nav>
+
+      {eventFormOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setEventFormOpen(false); }}><section className="access-modal event-form" role="dialog" aria-modal="true" aria-labelledby="event-form-title"><button className="modal-close" onClick={() => setEventFormOpen(false)} aria-label="Fechar">×</button><span className="eyebrow">ÁREA DO FORNECEDOR</span><h2 id="event-form-title">Cadastrar novo evento</h2><p>Após a revisão, o evento aparecerá na agenda e como um ponto especial no mapa.</p><form onSubmit={createEvent}><label>Nome do evento<input name="name" required placeholder="Ex.: Encontro de Integradores 2026" /></label><div className="field-row"><label>Data<input name="date" type="date" required /></label><label>Local<input name="venue" required placeholder="Centro de eventos" /></label></div><div className="field-row"><label>Cidade<input name="city" required placeholder="São Paulo" /></label><label>Estado<select name="state" required><option value="">Selecione</option><option>SP</option><option>PR</option><option>MG</option><option>RJ</option><option>GO</option><option>PE</option></select></label></div><label>Link para inscrição<input name="link" type="url" required placeholder="https://seusite.com/inscricao" /></label><label>Descrição<textarea name="description" rows={3} placeholder="Conte brevemente sobre o evento" /></label><button className="primary full" type="submit">Enviar evento para publicação <span>→</span></button></form></section></div>}
 
       {welcomeOpen && !registered && !registerOpen && (
         <div className="welcome-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setWelcomeOpen(false); }}>
