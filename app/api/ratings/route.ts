@@ -1,10 +1,13 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { getDb } from "../../../db";
-import { supplierRatings } from "../../../db/schema";
+import { leads, supplierRatings } from "../../../db/schema";
 import { getApiUser } from "../../admin-auth";
 
 export async function GET() {
   try {
+    const user = await getApiUser();
+    const [viewer] = user ? await getDb().select({ id: leads.id }).from(leads).where(and(eq(leads.authUserId, user.userId), eq(leads.status, "approved"))) : [];
+    if (!viewer) return Response.json({ ratings: {} });
     const summaries = await getDb().select({ supplierName: supplierRatings.supplierName, average: sql<number>`avg(${supplierRatings.stars})`, total: sql<number>`count(*)` }).from(supplierRatings).groupBy(supplierRatings.supplierName);
     return Response.json({ ratings: Object.fromEntries(summaries.map((item) => [item.supplierName, { average: Number(item.average), total: Number(item.total) }])) });
   } catch { return Response.json({ ratings: {} }); }

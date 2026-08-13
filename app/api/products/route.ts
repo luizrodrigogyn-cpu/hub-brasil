@@ -9,7 +9,7 @@ export async function GET() {
     const user = await getApiUser();
     const [viewer] = user ? await getDb().select({ id: leads.id }).from(leads).where(and(eq(leads.authUserId, user.userId), eq(leads.status, "approved"))) : [];
     const rows = await getDb().select({ id: products.id, supplierName: products.supplierName, name: products.name, category: products.category, technicalDetails: products.technicalDetails, averagePrice: products.averagePrice, imageKey: products.imageKey }).from(products).where(eq(products.status, "approved")).orderBy(desc(products.createdAt));
-    return Response.json({ products: rows.map((item) => ({ id: item.id, supplierName: item.supplierName, name: item.name, category: item.category, technicalDetails: viewer ? item.technicalDetails : "", averagePrice: item.averagePrice, imageUrl: item.imageKey ? `/api/product-images?key=${encodeURIComponent(item.imageKey)}` : null })) });
+    return Response.json({ products: rows.map((item) => ({ id: item.id, supplierName: viewer ? item.supplierName : "Fornecedor protegido", name: item.name, category: item.category, technicalDetails: viewer ? item.technicalDetails : "", averagePrice: viewer ? item.averagePrice : null, imageUrl: item.imageKey ? `/api/product-images?key=${encodeURIComponent(item.imageKey)}` : null })) });
   } catch { return Response.json({ products: [] }); }
 }
 

@@ -13,6 +13,7 @@ type Supplier = {
   accent: string;
   phone?: string | null;
   instagram?: string | null;
+  phonePreview?: string | null;
 };
 
 type HubEvent = { id: number; name: string; supplier: string; venue: string; city: string; state: string; date: string; displayDate: string; link: string; x: number; y: number; demo?: boolean };
@@ -50,13 +51,17 @@ export default function Home() {
     try { const response = await fetch("/api/suppliers"); const data = await response.json(); setSuppliers((data.suppliers || []).map((item: Supplier) => ({ ...item, initials: item.name.split(/\s+/).slice(0,2).map((part) => part[0]).join("").toUpperCase(), description: item.description || "Fornecedor aprovado no Hub Brasil.", accent: "blue" }))); } catch {}
   }
 
+  async function refreshProducts() {
+    try { const response = await fetch("/api/products"); const data = await response.json(); setProducts(data.products || []); } catch {}
+  }
+
   useEffect(() => {
     const timer = window.setTimeout(() => setWelcomeOpen(true), 900);
-    fetch("/api/products").then((response) => response.json()).then((data) => setProducts(data.products || [])).catch(() => {});
+    refreshProducts();
     fetch("/api/ratings").then((response) => response.json()).then((data) => setRatings(data.ratings || {})).catch(() => {});
     refreshSuppliers();
     fetch("/api/events").then((response) => response.json()).then((data) => setEvents((data.events || []).map((item: Record<string, string | number>) => { const [x,y] = mapPoint(String(item.state)); const date = new Date(`${item.eventDate}T12:00:00`); return { id: Number(item.id), name: String(item.name), supplier: String(item.supplierName || "Fornecedor aprovado"), venue: String(item.venue), city: String(item.city), state: String(item.state), date: String(item.eventDate), displayDate: date.toLocaleDateString("pt-BR", { day:"2-digit", month:"short", year:"numeric" }).toUpperCase().replace(".", ""), link: String(item.registrationUrl), x, y }; }))).catch(() => {});
-    fetch("/api/me").then((response) => response.json()).then((data) => { if (data.profile) { setRegistered(true); setUserRole(data.profile.role); setSupplierCompany(data.profile.company || ""); setSupplierApproved(data.profile.status === "approved" && Boolean(data.profile.phoneVerifiedAt)); setWelcomeOpen(false); } }).catch(() => {});
+    fetch("/api/me").then((response) => response.json()).then((data) => { if (data.profile) { setRegistered(true); setUserRole(data.profile.role); setSupplierCompany(data.profile.company || ""); setSupplierApproved(data.profile.status === "approved" && Boolean(data.profile.phoneVerifiedAt)); setWelcomeOpen(false); refreshSuppliers(); refreshProducts(); } }).catch(() => {});
     return () => window.clearTimeout(timer);
   }, []);
 
@@ -104,6 +109,7 @@ export default function Home() {
     } catch { setToast("Não foi possível concluir o cadastro. Tente novamente."); return; }
     setRegistered(true);
     await refreshSuppliers();
+    await refreshProducts();
     setUserRole(registrationRole);
     if (registrationRole === "supplier") {
       const company = String(payload.company || "").trim();
@@ -237,9 +243,9 @@ export default function Home() {
                 <article className="supplier-card" key={supplier.id}>
                   <div className="supplier-top"><div className={`supplier-logo ${supplier.accent}`}>{supplier.initials}</div><span className="verified">Fornecedor aprovado</span></div>
                   <span className="category">{supplier.category}</span>
-                  <h2>{registered ? supplier.name : `${supplier.name.slice(0, 3)}••••••••`}</h2>
+                  <h2>{registered ? supplier.name : "Empresa protegida"}</h2>
                   <p>{supplier.description}</p>
-                  <div className="card-meta"><span>⌖ {supplier.city}, {supplier.state}</span></div>
+                  <div className="card-meta"><span>⌖ {supplier.city}, {supplier.state}</span><span>☎ {registered ? supplier.phone : supplier.phonePreview}</span></div>
                   <button className="card-action" onClick={() => showSupplier(supplier)}>{registered ? "Ver perfil completo" : "Identifique-se para acessar"}<span>→</span></button>
                 </article>
               ))}

@@ -4,7 +4,7 @@ import { leads, supplierEvents } from "../../../db/schema";
 import { getApiUser } from "../../admin-auth";
 
 export async function GET() {
-  try { return Response.json({ events: await getDb().select({ id: supplierEvents.id, name: supplierEvents.name, supplierName: supplierEvents.supplierName, venue: supplierEvents.venue, city: supplierEvents.city, state: supplierEvents.state, eventDate: supplierEvents.eventDate, registrationUrl: supplierEvents.registrationUrl, description: supplierEvents.description }).from(supplierEvents).where(and(eq(supplierEvents.status, "approved"), gte(supplierEvents.eventDate, new Date().toISOString().slice(0, 10)))) }); }
+  try { const user = await getApiUser(); const [viewer] = user ? await getDb().select({ id: leads.id }).from(leads).where(and(eq(leads.authUserId, user.userId), eq(leads.status, "approved"))) : []; const events = await getDb().select({ id: supplierEvents.id, name: supplierEvents.name, supplierName: supplierEvents.supplierName, venue: supplierEvents.venue, city: supplierEvents.city, state: supplierEvents.state, eventDate: supplierEvents.eventDate, registrationUrl: supplierEvents.registrationUrl, description: supplierEvents.description }).from(supplierEvents).where(and(eq(supplierEvents.status, "approved"), gte(supplierEvents.eventDate, new Date().toISOString().slice(0, 10)))); return Response.json({ events: events.map((item) => ({ ...item, supplierName: viewer || !item.supplierName ? item.supplierName : "Organizador protegido" })) }); }
   catch { return Response.json({ events: [] }); }
 }
 
