@@ -29,3 +29,4 @@
 .admin-tabs b{display:inline-grid;place-items:center;min-width:20px;height:20px;margin-left:6px;border-radius:20px;background:#ffbd4a;color:#15100a;font-size:11px}.verify-link{display:block;color:var(--cyan);font-size:12px;margin-top:7px}.moderation-actions button:disabled{opacity:.55}
 .site-footer{min-height:70px;padding:20px 5vw;display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--border);color:#7188a7;font-size:12px}.site-footer div{display:flex;gap:20px}.site-footer a{color:#9bb0ca;text-decoration:none}.site-footer a:hover{color:var(--cyan)}
 @media(max-width:560px){.site-footer{padding-bottom:85px;align-items:flex-start;gap:14px;flex-direction:column}.site-footer div{flex-wrap:wrap}}
+.editorial-badge{display:inline-block;margin-left:7px;padding:4px 8px;border-radius:20px;background:#16395f;color:var(--cyan);font-size:9px;text-transform:uppercase;letter-spacing:.7px}
