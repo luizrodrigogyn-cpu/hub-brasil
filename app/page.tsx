@@ -22,18 +22,16 @@ const suppliers: Supplier[] = [
 ];
 
 const cities = [
-  { city: "Recife", state: "PE", count: 9, x: 76, y: 29 },
-  { city: "Brasília", state: "DF", count: 11, x: 53, y: 47 },
-  { city: "Belo Horizonte", state: "MG", count: 14, x: 61, y: 59 },
-  { city: "São Paulo", state: "SP", count: 28, x: 55, y: 69 },
-  { city: "Curitiba", state: "PR", count: 12, x: 50, y: 78 },
+  { city: "Belo Horizonte", state: "MG", count: 1, x: 72, y: 70 },
+  { city: "São Paulo", state: "SP", count: 2, x: 68, y: 77 },
+  { city: "Curitiba", state: "PR", count: 1, x: 61, y: 84 },
 ];
 
 export default function Home() {
   const [view, setView] = useState<"map" | "directory" | "supplier">("map");
   const [registered, setRegistered] = useState(false);
   const [registerOpen, setRegisterOpen] = useState(false);
-  const [selectedCity, setSelectedCity] = useState(cities[3]);
+  const [selectedCity, setSelectedCity] = useState(cities[1]);
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("Todas as categorias");
@@ -95,7 +93,7 @@ export default function Home() {
         {view === "map" && (
           <section className="map-layout">
             <div className="map-copy">
-              <span className="eyebrow">O mercado de rastreamento em um só lugar</span>
+              <span className="eyebrow">Protótipo com dados demonstrativos</span>
               <h1>Encontre quem move<br/>a tecnologia veicular<br/><em>no Brasil.</em></h1>
               <p>Fornecedores validados, produtos especializados e conexões comerciais de confiança.</p>
               <div className="search-box">
@@ -104,33 +102,36 @@ export default function Home() {
                 <button onClick={() => setView("directory")}>Buscar</button>
               </div>
               <div className="trust-row">
-                <div><strong>74</strong><span>fornecedores</span></div>
-                <div><strong>16</strong><span>estados</span></div>
-                <div><strong>240+</strong><span>produtos</span></div>
+                <div><strong>0</strong><span>fornecedores reais</span></div>
+                <div><strong>4</strong><span>perfis de demonstração</span></div>
+                <div><strong>3</strong><span>estados simulados</span></div>
               </div>
             </div>
             <div className="map-panel" aria-label="Mapa ilustrativo de fornecedores no Brasil">
               <div className="map-grid"></div>
-              <div className="brazil-shape"></div>
-              <span className="map-caption">FORNECEDORES POR REGIÃO</span>
-              {cities.map((item) => (
-                <button key={item.city} className={`map-pin ${selectedCity.city === item.city ? "selected" : ""}`} style={{ left: `${item.x}%`, top: `${item.y}%` }} onClick={() => setSelectedCity(item)} aria-label={`${item.city}, ${item.count} fornecedores`}>
-                  <span>{item.count}</span>
-                </button>
-              ))}
+              <div className="brazil-map">
+                <img src="/brazil-states-map.png" alt="Mapa geográfico do Brasil dividido por estados" />
+                {cities.map((item) => (
+                  <button key={item.city} className={`map-pin ${selectedCity.city === item.city ? "selected" : ""}`} style={{ left: `${item.x}%`, top: `${item.y}%` }} onClick={() => setSelectedCity(item)} aria-label={`${item.city}, ${item.count} cadastro de demonstração`}>
+                    <span>{item.count}</span>
+                  </button>
+                ))}
+              </div>
+              <span className="map-caption">LOCALIZAÇÕES DE DEMONSTRAÇÃO</span>
               <div className="city-popover">
                 <span className="location-dot"></span>
-                <div><strong>{selectedCity.city}, {selectedCity.state}</strong><small>{selectedCity.count} fornecedores validados</small></div>
+                <div><strong>{selectedCity.city}, {selectedCity.state}</strong><small>{selectedCity.count} {selectedCity.count === 1 ? "perfil demonstrativo" : "perfis demonstrativos"}</small></div>
                 <button onClick={() => setView("directory")} aria-label={`Ver fornecedores de ${selectedCity.city}`}>→</button>
               </div>
               <div className="map-legend"><i></i> Clique nos pontos para explorar</div>
+              <a className="map-source" href="https://commons.wikimedia.org/wiki/File:Brazil_states_blank.png" target="_blank" rel="noreferrer">Mapa: Wikimedia Commons · CC BY-SA</a>
             </div>
           </section>
         )}
 
         {view === "directory" && (
           <section className="directory-page">
-            <div className="page-heading"><div><span className="eyebrow">REDE VALIDADA</span><h1>Fornecedores</h1><p>Parceiros especializados em tecnologia para rastreamento veicular.</p></div><span>{filtered.length} empresas encontradas</span></div>
+            <div className="page-heading"><div><span className="eyebrow">CATÁLOGO DE DEMONSTRAÇÃO</span><h1>Fornecedores</h1><p>Os nomes, contatos, produtos e números abaixo são fictícios.</p></div><span>{filtered.length} perfis demonstrativos</span></div>
             <div className="filters">
               <label className="wide"><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar fornecedor ou cidade" /></label>
               <select value={category} onChange={(event) => setCategory(event.target.value)} aria-label="Filtrar por categoria">
@@ -141,7 +142,7 @@ export default function Home() {
             <div className="supplier-grid">
               {filtered.map((supplier) => (
                 <article className="supplier-card" key={supplier.id}>
-                  <div className="supplier-top"><div className={`supplier-logo ${supplier.accent}`}>{supplier.initials}</div><span className="verified">✓ Validado</span></div>
+                  <div className="supplier-top"><div className={`supplier-logo ${supplier.accent}`}>{supplier.initials}</div><span className="verified demo">Demonstração</span></div>
                   <span className="category">{supplier.category}</span>
                   <h2>{registered ? supplier.name : `${supplier.name.slice(0, 3)}••••••••`}</h2>
                   <p>{supplier.description}</p>
@@ -158,7 +159,7 @@ export default function Home() {
             <button className="back" onClick={() => setView("directory")}>← Voltar aos fornecedores</button>
             <div className="profile-hero">
               <div className={`supplier-logo large ${selectedSupplier.accent}`}>{selectedSupplier.initials}</div>
-              <div><span className="verified">✓ Fornecedor validado</span><h1>{selectedSupplier.name}</h1><p>{selectedSupplier.category} · {selectedSupplier.city}, {selectedSupplier.state}</p></div>
+              <div><span className="verified demo">Perfil demonstrativo</span><h1>{selectedSupplier.name}</h1><p>{selectedSupplier.category} · {selectedSupplier.city}, {selectedSupplier.state}</p></div>
               <a className="primary contact" href="https://wa.me/5511999999999?text=Olá!%20Encontrei%20sua%20empresa%20no%20Hub%20Brasil." target="_blank" rel="noreferrer">Conversar no WhatsApp</a>
             </div>
             <div className="profile-columns">
