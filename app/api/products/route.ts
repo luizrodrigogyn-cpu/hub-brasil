@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, or } from "drizzle-orm";
 import { env } from "cloudflare:workers";
 import { getDb } from "../../../db";
 import { leads, products } from "../../../db/schema";
@@ -9,7 +9,11 @@ export async function GET() {
     const user = await getApiUser();
     const [viewer] = user ? await getDb().select({ id: leads.id }).from(leads).where(and(eq(leads.authUserId, user.userId), eq(leads.status, "approved"))) : [];
     const rows = await getDb().select({ id: products.id, supplierName: products.supplierName, name: products.name, category: products.category, technicalDetails: products.technicalDetails, averagePrice: products.averagePrice, imageKey: products.imageKey }).from(products).where(eq(products.status, "approved")).orderBy(desc(products.createdAt));
-    return Response.json({ products: rows.map((item) => ({ id: item.id, supplierName: viewer ? item.supplierName : "Fornecedor protegido", name: item.name, category: item.category, technicalDetails: viewer ? item.technicalDetails : "", averagePrice: viewer ? item.averagePrice : null, imageUrl: item.imageKey ? `/api/product-images?key=${encodeURIComponent(item.imageKey)}` : null })) });
+    const visibleProducts = await Promise.all(rows.map(async (item) => {
+      const [supplier] = viewer ? await getDb().select({ phone: leads.phone }).from(leads).where(and(or(eq(leads.company, item.supplierName), eq(leads.name, item.supplierName)), eq(leads.role, "supplier"), eq(leads.status, "approved"))) : [];
+      return { id: item.id, supplierName: viewer ? item.supplierName : "Fornecedor protegido", supplierPhone: viewer ? supplier?.phone || null : null, name: item.name, category: item.category, technicalDetails: viewer ? item.technicalDetails : "", imageUrl: item.imageKey ? `/api/product-images?key=${encodeURIComponent(item.imageKey)}` : null };
+    }));
+    return Response.json({ products: visibleProducts });
   } catch { return Response.json({ products: [] }); }
 }
 
@@ -27,8 +31,12 @@ export async function POST(request: Request) {
       imageKey = `${crypto.randomUUID()}-${photo.name.replace(/[^a-zA-Z0-9._-]/g, "-")}`;
       await env.PRODUCT_IMAGES.put(imageKey, await photo.arrayBuffer(), { httpMetadata: { contentType: photo.type } });
     }
-    const values = { supplierName: supplier.company || supplier.name, name: String(form.get("name") || "").trim(), category: String(form.get("category") || "").trim(), technicalDetails: String(form.get("technicalDetails") || "").trim(), averagePrice: String(form.get("averagePrice") || "").trim() || null, imageKey, ownerUserId: user.userId, status: "pending" };
-    if (!values.name || !values.category || !values.technicalDetails) return Response.json({ error: "Preencha os campos obrigatórios." }, { status: 400 });
+    const specifications = String(form.get("technicalDetails") || "").trim();
+    const application = String(form.get("application") || "").trim();
+    const differentials = String(form.get("differentials") || "").trim();
+    const technicalDetails = `ESPECIFICAÇÕES TÉCNICAS\n${specifications}\n\nAPLICAÇÃO\n${application}\n\nDIFERENCIAIS\n${differentials}`;
+    const values = { supplierName: supplier.company || supplier.name, name: String(form.get("name") || "").trim(), category: String(form.get("category") || "").trim(), technicalDetails, averagePrice: null, imageKey, ownerUserId: user.userId, status: "pending" };
+    if (!values.name || !values.category || !specifications || !application || !differentials) return Response.json({ error: "Preencha especificações, aplicação e diferenciais." }, { status: 400 });
     const [product] = await getDb().insert(products).values(values).returning();
     return Response.json({ product, pending: true }, { status: 201 });
   } catch { return Response.json({ error: "Não foi possível cadastrar o produto." }, { status: 500 }); }
