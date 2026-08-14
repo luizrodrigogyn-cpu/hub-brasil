@@ -88,6 +88,21 @@ export default function Home() {
     return matchesQuery && matchesCategory && matchesState;
   }), [query, category, stateFilter]);
 
+  const plottedEvents = useMemo(() => {
+    const eventsByState = new Map<string, HubEvent[]>();
+    events.forEach((item) => eventsByState.set(item.state, [...(eventsByState.get(item.state) || []), item]));
+
+    return events.flatMap((item) => {
+      const stateEvents = eventsByState.get(item.state) || [item];
+      const index = stateEvents.findIndex((eventItem) => eventItem.id === item.id);
+      if (stateEvents.length === 1) return item;
+
+      const angle = (index / stateEvents.length) * Math.PI * 2 - Math.PI / 2;
+      const radius = Math.min(5, 2.8 + stateEvents.length * 0.35);
+      return { ...item, x: item.x + Math.cos(angle) * radius, y: item.y + Math.sin(angle) * radius };
+    });
+  }, [events]);
+
   function requestAccess(supplier?: Supplier) {
     if (supplier) setSelectedSupplier(supplier);
     if (!registered) {
@@ -217,7 +232,7 @@ export default function Home() {
               <div className="brazil-map">
                 <img src="/brazil-states-map.png" alt="Mapa geográfico do Brasil dividido por estados" />
                 {suppliers.map((item) => { const [x,y] = mapPoint(item.state); return <button key={`supplier-${item.id}`} className="map-pin" style={{ left: `${x}%`, top: `${y}%` }} onClick={() => showSupplier(item)} aria-label={`Fornecedor ${item.name}, em ${item.city}`}><span>{item.initials}</span></button>; })}
-                {events.map((item) => <button key={`event-${item.id}`} className={`event-pin ${selectedEvent?.id === item.id ? "selected" : ""}`} style={{ left: `${item.x}%`, top: `${item.y}%` }} onClick={() => setSelectedEvent(item)} aria-label={`Evento ${item.name}, em ${item.city}`}><span>★</span></button>)}
+                {plottedEvents.map((item) => <button key={`event-${item.id}`} className={`event-pin ${selectedEvent?.id === item.id ? "selected" : ""}`} style={{ left: `${item.x}%`, top: `${item.y}%` }} onClick={() => setSelectedEvent(item)} aria-label={`Evento ${item.name}, em ${item.city}`} title={`${item.name} · ${item.city}/${item.state}`}><span>★</span></button>)}
               </div>
               <span className="map-caption">FORNECEDORES E EVENTOS APROVADOS</span>
               {!selectedEvent && suppliers.length === 0 && events.length === 0 && <div className="map-empty"><strong>Mapa pronto para receber cadastros reais</strong><span>Fornecedores e eventos aparecerão aqui após aprovação.</span></div>}
@@ -233,7 +248,7 @@ export default function Home() {
             <div className="filters">
               <label className="wide"><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar fornecedor ou cidade" /></label>
               <select value={category} onChange={(event) => setCategory(event.target.value)} aria-label="Filtrar por categoria">
-                <option>Todas as categorias</option><option>Rastreadores</option><option>Conectividade M2M</option><option>Câmeras veiculares</option><option>Tags e identificação</option>
+                <option>Todas as categorias</option><option>Rastreadores</option><option>Plataformas de rastreamento veicular</option><option>Conectividade M2M</option><option>Câmeras veiculares</option><option>Tags e identificação</option>
               </select>
               <select value={stateFilter} onChange={(event) => setStateFilter(event.target.value)} aria-label="Filtrar por estado"><option>Todo o Brasil</option>{Array.from(new Set(suppliers.map((item) => item.state))).sort().map((state) => <option key={state}>{state}</option>)}</select>
             </div>
@@ -289,7 +304,7 @@ export default function Home() {
 
       {selectedProduct && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedProduct(null); }}><section className="access-modal product-detail" role="dialog" aria-modal="true"><button className="modal-close" onClick={() => setSelectedProduct(null)} aria-label="Fechar">×</button><div className="detail-photo">{selectedProduct.imageUrl ? <img src={selectedProduct.imageUrl} alt={selectedProduct.name} /> : <span>Produto sem foto</span>}</div><span className="category">{selectedProduct.category}</span><h2>{selectedProduct.name}</h2><strong className="detail-supplier">{selectedProduct.supplierName}</strong><h3>Informações técnicas</h3><p>{selectedProduct.technicalDetails}</p>{selectedProduct.averagePrice && <div className="price-box"><small>PREÇO MÉDIO INFORMADO</small><strong>{selectedProduct.averagePrice}</strong></div>}<button className="primary full" onClick={() => setSelectedProduct(null)}>Fechar <span>×</span></button></section></div>}
 
-      {productFormOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setProductFormOpen(false); }}><section className="access-modal event-form" role="dialog" aria-modal="true"><button className="modal-close" onClick={() => setProductFormOpen(false)} aria-label="Fechar">×</button><span className="eyebrow">ÁREA DO FORNECEDOR</span><h2>Cadastrar produto</h2><p>O produto será exibido no catálogo com a sua empresa como fornecedora.</p><form onSubmit={createProduct}><label>Foto do produto<input name="photo" type="file" accept="image/jpeg,image/png,image/webp" required /></label><label>Nome do produto<input name="name" required placeholder="Ex.: Rastreador 4G LTE" /></label><label>Categoria<select name="category" required><option value="">Selecione</option><option>Rastreadores</option><option>Conectividade M2M</option><option>Câmeras veiculares</option><option>Tags e identificação</option><option>Acessórios</option></select></label><label>Informações técnicas<textarea name="technicalDetails" rows={5} required placeholder="Tecnologia, alimentação, conectividade, homologações e demais especificações" /></label><label>Preço médio aproximado<input name="averagePrice" placeholder="Ex.: R$ 250 a R$ 320" /></label><button className="primary full" type="submit">Publicar produto <span>→</span></button></form></section></div>}
+      {productFormOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setProductFormOpen(false); }}><section className="access-modal event-form" role="dialog" aria-modal="true"><button className="modal-close" onClick={() => setProductFormOpen(false)} aria-label="Fechar">×</button><span className="eyebrow">ÁREA DO FORNECEDOR</span><h2>Cadastrar produto</h2><p>O produto será exibido no catálogo com a sua empresa como fornecedora.</p><form onSubmit={createProduct}><label>Foto do produto<input name="photo" type="file" accept="image/jpeg,image/png,image/webp" required /></label><label>Nome do produto<input name="name" required placeholder="Ex.: Rastreador 4G LTE" /></label><label>Categoria<select name="category" required><option value="">Selecione</option><option>Rastreadores</option><option>Plataformas de rastreamento veicular</option><option>Conectividade M2M</option><option>Câmeras veiculares</option><option>Tags e identificação</option><option>Acessórios</option></select></label><label>Informações técnicas<textarea name="technicalDetails" rows={5} required placeholder="Tecnologia, alimentação, conectividade, homologações e demais especificações" /></label><label>Preço médio aproximado<input name="averagePrice" placeholder="Ex.: R$ 250 a R$ 320" /></label><button className="primary full" type="submit">Publicar produto <span>→</span></button></form></section></div>}
 
       {welcomeOpen && !registered && !registerOpen && (
         <div className="welcome-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setWelcomeOpen(false); }}>
@@ -329,7 +344,7 @@ export default function Home() {
               <label>Telefone / WhatsApp<input name="phone" required inputMode="tel" placeholder="(00) 00000-0000" /></label>
               <div className="or"><span></span>Informe um dos dois<span></span></div>
               <div className="field-row"><label>Empresa<input name="company" required={registrationRole === "supplier"} placeholder="Nome da empresa" /></label><label>Instagram<input name="instagram" placeholder="@suaempresa" /></label></div>
-              {registrationRole === "supplier" && <><label>Categoria principal<select name="category" required><option value="">Selecione</option><option>Rastreadores</option><option>Conectividade M2M</option><option>Câmeras veiculares</option><option>Tags e identificação</option><option>Acessórios</option></select></label><div className="field-row"><label>Cidade<input name="city" required placeholder="Cidade da sede" /></label><label>Estado<select name="state" required><option value="">UF</option>{["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"].map((state) => <option key={state}>{state}</option>)}</select></label></div><label>Apresentação da empresa<textarea name="description" rows={3} placeholder="Especialidades, diferenciais e região atendida" /></label></>}
+              {registrationRole === "supplier" && <><label>Categoria principal<select name="category" required><option value="">Selecione</option><option>Rastreadores</option><option>Plataformas de rastreamento veicular</option><option>Conectividade M2M</option><option>Câmeras veiculares</option><option>Tags e identificação</option><option>Acessórios</option></select></label><div className="field-row"><label>Cidade<input name="city" required placeholder="Cidade da sede" /></label><label>Estado<select name="state" required><option value="">UF</option>{["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"].map((state) => <option key={state}>{state}</option>)}</select></label></div><label>Apresentação da empresa<textarea name="description" rows={3} placeholder="Especialidades, diferenciais e região atendida" /></label></>}
               <label className="consent"><input type="checkbox" required /> <span>Li e concordo com a <a href="/privacidade" target="_blank">Política de Privacidade</a> e os <a href="/termos" target="_blank">Termos de Uso</a>.</span></label>
               <button className="primary full" type="submit">{registrationRole === "supplier" ? "Criar perfil da empresa" : "Liberar meu acesso"} <span>→</span></button>
             </form>
