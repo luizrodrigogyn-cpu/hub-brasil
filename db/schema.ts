@@ -16,6 +16,8 @@ export const leads = sqliteTable("leads", {
   city: text("city"),
   state: text("state"),
   description: text("description"),
+  logoKey: text("logo_key"),
+  logoConsentAt: text("logo_consent_at"),
   consentAt: text("consent_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   consentVersion: text("consent_version").notNull().default("2026-08-14"),
   contactConsent: integer("contact_consent", { mode: "boolean" }).notNull().default(true),

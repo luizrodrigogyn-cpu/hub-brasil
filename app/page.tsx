@@ -18,6 +18,7 @@ type Supplier = {
   verifiedAt?: string | null;
   qualityScore?: number;
   qualityReasons?: string[];
+  logoKey?: string | null;
 };
 
 type HubEvent = { id: number; name: string; supplier: string; venue: string; city: string; state: string; date: string; displayDate: string; link: string; x: number; y: number; demo?: boolean };
@@ -52,6 +53,10 @@ const audienceGroups = [
 
 function displayCategory(category: string) {
   return category === "Câmeras veiculares" || category === "ADAS e DSM" ? "Videotelemetria" : category;
+}
+
+function supplierLogoUrl(key?: string | null) {
+  return key ? `/api/supplier-logo?key=${encodeURIComponent(key)}` : null;
 }
 
 function mapPoint(state: string) {
@@ -162,13 +167,21 @@ export default function Home() {
   async function register(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    const payload = Object.fromEntries(form.entries());
+    const logo = form.get("logo");
+    const payload = Object.fromEntries([...form.entries()].filter(([key]) => key !== "logo"));
     try {
       const response = await fetch("/api/leads", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
       const result = await response.json();
       if (response.status === 401) { window.location.href = result.signIn; return; }
       if (!response.ok) { setToast(result.error || "Não foi possível cadastrar."); return; }
     } catch { setToast("Não foi possível concluir o cadastro. Tente novamente."); return; }
+    if (registrationRole === "supplier" && logo instanceof File && logo.size) {
+      const logoForm = new FormData();
+      logoForm.set("logo", logo);
+      logoForm.set("logoConsent", String(payload.logoConsent === "on"));
+      const logoResponse = await fetch("/api/supplier-logo", { method: "POST", body: logoForm });
+      if (!logoResponse.ok) { const result = await logoResponse.json().catch(() => ({})); setToast(result.error || "Cadastro criado, mas não foi possível enviar a logo."); }
+    }
     setRegistered(true);
     await refreshSuppliers();
     await refreshProducts();
@@ -314,7 +327,7 @@ export default function Home() {
               <div className="map-grid"></div>
               <div className="brazil-map">
                 <img src="/brazil-states-map.png" alt="Mapa geográfico do Brasil dividido por estados" />
-                {suppliers.map((item) => { const [x,y] = mapPoint(item.state); return <button key={`supplier-${item.id}`} className="map-pin" style={{ left: `${x}%`, top: `${y}%` }} onClick={() => showSupplier(item)} aria-label={`Fornecedor ${item.name}, em ${item.city}`}><span>{item.initials}</span></button>; })}
+                {suppliers.map((item) => { const [x,y] = mapPoint(item.state); const logoUrl = supplierLogoUrl(item.logoKey); return <button key={`supplier-${item.id}`} className={`map-pin ${logoUrl ? "logo" : ""}`} style={{ left: `${x}%`, top: `${y}%` }} onClick={() => showSupplier(item)} aria-label={`Fornecedor ${item.name}, em ${item.city}`}>{logoUrl ? <img src={logoUrl} alt="" /> : <span>{item.initials}</span>}</button>; })}
                 {plottedEvents.map((item) => <button key={`event-${item.id}`} className={`event-pin ${selectedEvent?.id === item.id ? "selected" : ""}`} style={{ left: `${item.x}%`, top: `${item.y}%` }} onClick={() => setSelectedEvent(item)} aria-label={`Evento ${item.name}, em ${item.city}`} title={`${item.name} · ${item.city}/${item.state}`}><span>★</span></button>)}
               </div>
               <span className="map-caption">FORNECEDORES E EVENTOS APROVADOS</span>
@@ -365,7 +378,7 @@ export default function Home() {
               {filtered.length === 0 && <div className="events-empty"><strong>Nenhum fornecedor aprovado ainda</strong><p>Novos fornecedores aparecerão aqui após validação do telefone e aprovação da gestão.</p></div>}
               {filtered.map((supplier) => (
                 <article className="supplier-card" key={supplier.id}>
-                  <div className="supplier-top"><div className={`supplier-logo ${supplier.accent}`}>{supplier.initials}</div><span className="verified">{supplier.verificationStatus === "verified" ? "◆ Fornecedor verificado" : "Fornecedor aprovado"}</span></div>
+                  <div className="supplier-top"><div className={`supplier-logo ${supplier.accent}`}>{supplierLogoUrl(supplier.logoKey) ? <img src={supplierLogoUrl(supplier.logoKey) || ""} alt="" /> : supplier.initials}</div><span className="verified">{supplier.verificationStatus === "verified" ? "◆ Fornecedor verificado" : "Fornecedor aprovado"}</span></div>
                   <span className="category">{displayCategory(supplier.category)}</span>
                   <h2>{registered ? supplier.name : "Empresa protegida"}</h2>
                   <p>{supplier.description}</p>
@@ -382,7 +395,7 @@ export default function Home() {
           <section className="profile-page">
             <button className="back" onClick={() => setView("directory")}>← Voltar aos fornecedores</button>
             <div className="profile-hero">
-              <div className={`supplier-logo large ${selectedSupplier.accent}`}>{selectedSupplier.initials}</div>
+              <div className={`supplier-logo large ${selectedSupplier.accent}`}>{supplierLogoUrl(selectedSupplier.logoKey) ? <img src={supplierLogoUrl(selectedSupplier.logoKey) || ""} alt="" /> : selectedSupplier.initials}</div>
               <div><span className="verified">{selectedSupplier.verificationStatus === "verified" ? "◆ Fornecedor verificado" : "Fornecedor aprovado"}</span><h1>{selectedSupplier.name}</h1><p>{displayCategory(selectedSupplier.category)} · {selectedSupplier.city}, {selectedSupplier.state}</p>{selectedSupplier.verifiedAt && <small>Verificado em {new Date(selectedSupplier.verifiedAt).toLocaleDateString("pt-BR")}</small>}</div>
               <div className="profile-actions"><button className="event-create" onClick={() => { const url=`${window.location.origin}/fornecedor/${selectedSupplier.id}`; if(navigator.share) navigator.share({title:selectedSupplier.name,url}).catch(()=>{}); else navigator.clipboard.writeText(url).then(()=>{setToast("Link do perfil copiado.");window.setTimeout(()=>setToast(""),3000)}); }}>Compartilhar perfil</button>{userRole === "supplier" && <button className="event-create" onClick={() => setEventFormOpen(true)}>＋ Cadastrar evento</button>}</div>
             </div>
@@ -457,7 +470,7 @@ export default function Home() {
               <label>Telefone / WhatsApp<input name="phone" required inputMode="tel" placeholder="(00) 00000-0000" /></label>
               <div className="or"><span></span>Informe um dos dois<span></span></div>
               <div className="field-row"><label>Empresa<input name="company" required={registrationRole === "supplier"} placeholder="Nome da empresa" /></label><label>Instagram<input name="instagram" placeholder="@suaempresa" /></label></div>
-              {registrationRole === "supplier" && <><label>Categoria principal<select name="category" required><option value="">Selecione</option>{solutionCategories.map((item) => <option key={item.name}>{item.name}</option>)}</select></label><div className="field-row"><label>Cidade<input name="city" required placeholder="Cidade da sede" /></label><label>Estado<select name="state" required><option value="">UF</option>{["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"].map((state) => <option key={state}>{state}</option>)}</select></label></div><label>Apresentação da empresa<textarea name="description" rows={3} placeholder="Especialidades, diferenciais e região atendida" /></label></>}
+              {registrationRole === "supplier" && <><label>Categoria principal<select name="category" required><option value="">Selecione</option>{solutionCategories.map((item) => <option key={item.name}>{item.name}</option>)}</select></label><div className="field-row"><label>Cidade<input name="city" required placeholder="Cidade da sede" /></label><label>Estado<select name="state" required><option value="">UF</option>{["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"].map((state) => <option key={state}>{state}</option>)}</select></label></div><label>Apresentação da empresa<textarea name="description" rows={3} placeholder="Especialidades, diferenciais e região atendida" /></label><label>Logo da empresa <small>PNG, JPG ou WebP, até 3 MB</small><input name="logo" type="file" accept="image/png,image/jpeg,image/webp" /></label><label className="consent logo-consent"><input name="logoConsent" type="checkbox" required /> <span>Declaro que possuo autorização para utilizar e divulgar esta marca/logotipo no Hub Brasil e autorizo sua exibição no perfil público, diretório e mapa da plataforma.</span></label></>}
               <label className="consent"><input type="checkbox" required /> <span>Li e concordo com a <a href="/privacidade" target="_blank">Política de Privacidade</a> e os <a href="/termos" target="_blank">Termos de Uso</a>.</span></label>
               <button className="primary full" type="submit">{registrationRole === "supplier" ? "Criar perfil da empresa" : "Liberar meu acesso"} <span>→</span></button>
             </form>
