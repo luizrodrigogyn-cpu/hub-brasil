@@ -24,13 +24,31 @@ type HubEvent = { id: number; name: string; supplier: string; venue: string; cit
 type Product = { id: number; supplierId?: number | null; supplierName: string; supplierPhone?: string | null; name: string; category: string; technicalDetails: string; imageUrl?: string | null };
 type SectorNews = { id: number; title: string; summary: string; category: string; sourceName: string; sourceUrl: string; imageUrl?: string | null; publishedAt: string };
 
+const solutionCategories = [
+  { name: "Rastreadores", title: "Rastreadores veiculares", icon: "◎", description: "GPS, 2G, 4G e LTE para veículos, frotas e cargas." },
+  { name: "Plataformas de rastreamento veicular", title: "Plataformas de rastreamento", icon: "▤", description: "Software e monitoramento para operações conectadas." },
+  { name: "Conectividade M2M", title: "Chips M2M", icon: "⌁", description: "Conectividade para rastreadores e dispositivos." },
+  { name: "Videotelemetria", title: "Videotelemetria", icon: "◉", description: "Câmeras veiculares, ADAS e DSM em uma única solução." },
+  { name: "Tags e identificação", title: "Tags e identificação", icon: "◇", description: "RFID e identificação aplicada à operação veicular." },
+  { name: "Telemetria", title: "Telemetria", icon: "⌁", description: "Dados veiculares e de frota para decisões em tempo real." },
+  { name: "Sensores", title: "Sensores", icon: "◌", description: "Temperatura, combustível, porta, ignição e mais." },
+  { name: "Identificação de motorista", title: "Identificação de motorista", icon: "◍", description: "Biometria, tags, 1-Wire e iButton." },
+  { name: "CAN / OBD", title: "CAN / OBD", icon: "⌘", description: "Leitura de dados do veículo e do barramento CAN." },
+  { name: "LoRaWAN", title: "LoRaWAN", icon: "⌇", description: "Conectividade de baixa potência para aplicações específicas." },
+  { name: "Acessórios", title: "Acessórios", icon: "◇", description: "Complementos para instalação e operação de rastreamento." },
+] as const;
+
+function displayCategory(category: string) {
+  return category === "Câmeras veiculares" || category === "ADAS e DSM" ? "Videotelemetria" : category;
+}
+
 function mapPoint(state: string) {
   const points: Record<string, [number, number]> = { AC:[26,45],AM:[35,30],RR:[45,15],RO:[38,50],PA:[55,32],AP:[62,18],TO:[58,48],MA:[67,38],PI:[70,46],CE:[78,42],RN:[86,43],PB:[84,48],PE:[81,51],AL:[80,55],SE:[78,59],BA:[70,60],MT:[49,53],GO:[58,62],DF:[61,59],MS:[48,68],MG:[65,69],ES:[74,69],RJ:[70,76],SP:[59,76],PR:[55,83],SC:[56,89],RS:[51,95] };
   return points[state] || [55, 55];
 }
 
 export default function Home() {
-  const [view, setView] = useState<"map" | "directory" | "supplier" | "events" | "products" | "news" | "supplier-dashboard">("map");
+  const [view, setView] = useState<"map" | "solutions" | "directory" | "supplier" | "events" | "products" | "news" | "supplier-dashboard">("map");
   const [registered, setRegistered] = useState(false);
   const [registerOpen, setRegisterOpen] = useState(false);
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
@@ -64,6 +82,12 @@ export default function Home() {
 
   useEffect(() => {
     const timer = window.setTimeout(() => setWelcomeOpen(true), 900);
+    const requestedRole = new URLSearchParams(window.location.search).get("cadastro");
+    if (requestedRole === "fornecedor" || requestedRole === "cliente") {
+      setRegistrationRole(requestedRole === "fornecedor" ? "supplier" : "client");
+      setRegisterOpen(true);
+      window.history.replaceState({}, "", window.location.pathname);
+    }
     refreshProducts();
     fetch("/api/ratings").then((response) => response.json()).then((data) => setRatings(data.ratings || {})).catch(() => {});
     refreshSuppliers();
@@ -91,7 +115,7 @@ export default function Home() {
 
   const filtered = useMemo(() => suppliers.filter((supplier) => {
     const matchesQuery = `${supplier.name} ${supplier.city} ${supplier.state}`.toLowerCase().includes(query.toLowerCase());
-    const matchesCategory = category === "Todas as categorias" || supplier.category === category;
+    const matchesCategory = category === "Todas as categorias" || displayCategory(supplier.category) === category;
     const matchesState = stateFilter === "Todo o Brasil" || supplier.state === stateFilter;
     return matchesQuery && matchesCategory && matchesState;
   }), [query, category, stateFilter]);
@@ -173,6 +197,32 @@ export default function Home() {
     if (registered) fetch("/api/roadmap", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "track", kind: "profile_view", supplierId: supplier.id }) }).catch(() => {});
   }
 
+  function openRegistration(role: "client" | "supplier") {
+    setRegistrationRole(role);
+    setRegisterOpen(true);
+  }
+
+  async function copyRegistrationLink(role: "client" | "supplier") {
+    const url = `${window.location.origin}/?cadastro=${role === "supplier" ? "fornecedor" : "cliente"}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setToast(`Link de cadastro para ${role === "supplier" ? "fornecedor" : "cliente"} copiado.`);
+    } catch {
+      setToast("Não foi possível copiar o link automaticamente.");
+    }
+    window.setTimeout(() => setToast(""), 3500);
+  }
+
+  function openQuoteRequest() {
+    if (!registered) {
+      openRegistration("client");
+      setToast("Identifique-se para solicitar uma cotação aos fornecedores compatíveis.");
+      window.setTimeout(() => setToast(""), 3500);
+      return;
+    }
+    window.location.href = "/area-testes";
+  }
+
   function openEventForm() {
     if (userRole !== "supplier") {
       setRegistrationRole("supplier");
@@ -216,37 +266,41 @@ export default function Home() {
       <header className="topbar">
         <button className="brand" onClick={() => setView("map")} aria-label="Ir para o mapa do Hub Brasil">
           <span className="brand-mark"><span></span><span></span><span></span></span>
-          <span>Hub <b>Brasil</b></span>
+          <span className="brand-copy"><strong>Hub <b>Brasil</b></strong><small>TECNOLOGIA VEICULAR</small></span>
         </button>
         <nav className="desktop-nav" aria-label="Navegação principal">
-          <button className={view === "map" ? "active" : ""} onClick={() => setView("map")}>Mapa</button>
+          <button className={view === "map" ? "active" : ""} onClick={() => setView("map")}>Início</button>
           <button className={view === "directory" ? "active" : ""} onClick={() => setView("directory")}>Fornecedores</button>
+          <button className={view === "solutions" ? "active" : ""} onClick={() => setView("solutions")}>Soluções</button>
           <button className={view === "products" ? "active" : ""} onClick={() => setView("products")}>Produtos</button>
           <button className={view === "events" ? "active" : ""} onClick={() => setView("events")}>Eventos</button>
           <button className={view === "news" ? "active" : ""} onClick={() => setView("news")}>Radar do Setor</button>
+          <button onClick={openQuoteRequest}>Solicitar cotação</button>
         </nav>
         <div className="top-actions">
           {registered && <a className="admin-link" href="/area-testes">Área de testes</a>}
           <a className="admin-link" href="/admin">Ver cadastros</a>
           {registered ? <span className="access-chip"><i></i>Acesso liberado</span> : <button className="text-action" onClick={() => setRegisterOpen(true)}>Entrar</button>}
           {userRole === "supplier" && <button className="text-action" onClick={() => setView("supplier-dashboard")}>Minha empresa</button>}
-          <button className="primary small" onClick={() => { setSelectedSupplier(null); setRegisterOpen(true); }}>Quero acessar</button>
+          <button className="primary small" onClick={() => openRegistration("supplier")}>Para fornecedores</button>
         </div>
       </header>
 
       <main>
         {view === "map" && (
+          <>
           <section className="map-layout">
             <div className="map-copy">
-              <span className="eyebrow">Marketplace do rastreamento veicular</span>
-              <h1>Encontre quem move<br/>a tecnologia veicular<br/><em>no Brasil.</em></h1>
-              <p>Fornecedores validados, produtos especializados e conexões comerciais de confiança.</p>
+              <span className="hero-kicker">✦ O ecossistema de negócios do rastreamento veicular</span>
+              <h1>Encontre os melhores fornecedores de <em>rastreamento, telemetria e conectividade</em> em um só lugar.</h1>
+              <p>Conecte-se a fabricantes, integradores e fornecedores validados de todo o Brasil.</p>
               <p className="quality-promise"><span>✓</span> Aqui, o destaque do fornecedor é por qualidade!</p>
               <div className="search-box">
                 <span aria-hidden="true">⌕</span>
-                <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Busque por empresa, produto ou cidade" aria-label="Buscar" />
+                <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Busque por empresa, produto, categoria ou cidade" aria-label="Buscar" />
                 <button onClick={() => setView("directory")}>Buscar</button>
               </div>
+              <div className="suggestion-pills" aria-label="Sugestões de busca"><span>Sugestões:</span><button onClick={() => { setCategory("Rastreadores"); setView("directory"); }}>Rastreador 4G</button><button onClick={() => { setCategory("Plataformas de rastreamento veicular"); setView("directory"); }}>Plataforma de rastreamento</button><button onClick={() => { setCategory("Videotelemetria"); setView("directory"); }}>Videotelemetria</button><button onClick={() => { setCategory("Conectividade M2M"); setView("directory"); }}>Chip M2M</button></div>
               <p className="empty-note">Somente fornecedores e eventos aprovados pela gestão aparecem no mapa.</p>
             </div>
             <div className="map-panel" aria-label="Mapa ilustrativo de fornecedores no Brasil">
@@ -262,6 +316,21 @@ export default function Home() {
               <a className="map-source" href="https://commons.wikimedia.org/wiki/File:Brazil_states_blank.png" target="_blank" rel="noreferrer">Mapa: Wikimedia Commons · CC BY-SA</a>
             </div>
           </section>
+          <section className="home-overview">
+            <div className="overview-stats"><article><strong>{suppliers.length}+</strong><span>Fornecedores</span></article><article><strong>{products.length}+</strong><span>Produtos</span></article><article><strong>{solutionCategories.length}</strong><span>Soluções</span></article><article><strong>{events.length}</strong><span>Eventos</span></article></div>
+            <div className="home-section-heading"><div><span className="eyebrow">DESCUBRA A TECNOLOGIA CERTA</span><h2>Principais soluções</h2><p>Uma base organizada para encontrar tecnologia veicular com clareza.</p></div><button className="section-link" onClick={() => setView("solutions")}>Ver todas →</button></div>
+            <div className="solution-preview">{solutionCategories.slice(0, 4).map((item) => <button key={item.name} onClick={() => { setCategory(item.name); setView("directory"); }}><span>{item.icon}</span><strong>{item.title}</strong><small>{item.description}</small></button>)}</div>
+            <div className="referral-card"><div><span className="eyebrow">FORTALEÇA O ECOSSISTEMA</span><h2>Indique o Hub aos seus parceiros do setor.</h2><p>Compartilhe o cadastro correto para quem fornece soluções ou para quem deseja consultar produtos e fornecedores.</p></div><div className="referral-actions"><button className="primary" onClick={() => copyRegistrationLink("supplier")}>Copiar link para fornecedor</button><button className="secondary-action" onClick={() => copyRegistrationLink("client")}>Copiar link para cliente</button></div></div>
+          </section>
+          </>
+        )}
+
+        {view === "solutions" && (
+          <section className="solutions-page">
+            <div className="solutions-heading"><span className="eyebrow">CATEGORIAS DO HUB</span><h1>Soluções</h1><p>O ecossistema de rastreamento e telemetria organizado de forma simples para sua pesquisa.</p></div>
+            <div className="solutions-grid">{solutionCategories.map((item) => <button key={item.name} className="solution-card" onClick={() => { setCategory(item.name); setView("directory"); }}><span>{item.icon}</span><h2>{item.title}</h2><p>{item.description}</p><small>Ver fornecedores →</small></button>)}</div>
+            <div className="ecosystem-cta"><h2>Faça parte do ecossistema</h2><p>Cadastre sua empresa ou encontre o fornecedor ideal hoje mesmo.</p><div><button className="primary" onClick={() => openRegistration("supplier")}>Sou fornecedor →</button><button className="secondary-action" onClick={() => setView("directory")}>Buscar fornecedores</button></div></div>
+          </section>
         )}
 
         {view === "directory" && (
@@ -270,7 +339,7 @@ export default function Home() {
             <div className="filters">
               <label className="wide"><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar fornecedor ou cidade" /></label>
               <select value={category} onChange={(event) => setCategory(event.target.value)} aria-label="Filtrar por categoria">
-                <option>Todas as categorias</option><option>Rastreadores</option><option>Plataformas de rastreamento veicular</option><option>Conectividade M2M</option><option>Câmeras veiculares</option><option>Tags e identificação</option>
+                <option>Todas as categorias</option>{solutionCategories.map((item) => <option key={item.name}>{item.name}</option>)}
               </select>
               <select value={stateFilter} onChange={(event) => setStateFilter(event.target.value)} aria-label="Filtrar por estado"><option>Todo o Brasil</option>{Array.from(new Set(suppliers.map((item) => item.state))).sort().map((state) => <option key={state}>{state}</option>)}</select>
             </div>
@@ -279,7 +348,7 @@ export default function Home() {
               {filtered.map((supplier) => (
                 <article className="supplier-card" key={supplier.id}>
                   <div className="supplier-top"><div className={`supplier-logo ${supplier.accent}`}>{supplier.initials}</div><span className="verified">{supplier.verificationStatus === "verified" ? "◆ Fornecedor verificado" : "Fornecedor aprovado"}</span></div>
-                  <span className="category">{supplier.category}</span>
+                  <span className="category">{displayCategory(supplier.category)}</span>
                   <h2>{registered ? supplier.name : "Empresa protegida"}</h2>
                   <p>{supplier.description}</p>
                   {supplier.qualityScore !== undefined && <div className="quality-score"><strong>{supplier.qualityScore}</strong><span>Qualidade no Hub</span><small>{supplier.qualityReasons?.join(" · ")}</small></div>}
@@ -296,19 +365,19 @@ export default function Home() {
             <button className="back" onClick={() => setView("directory")}>← Voltar aos fornecedores</button>
             <div className="profile-hero">
               <div className={`supplier-logo large ${selectedSupplier.accent}`}>{selectedSupplier.initials}</div>
-              <div><span className="verified">{selectedSupplier.verificationStatus === "verified" ? "◆ Fornecedor verificado" : "Fornecedor aprovado"}</span><h1>{selectedSupplier.name}</h1><p>{selectedSupplier.category} · {selectedSupplier.city}, {selectedSupplier.state}</p>{selectedSupplier.verifiedAt && <small>Verificado em {new Date(selectedSupplier.verifiedAt).toLocaleDateString("pt-BR")}</small>}</div>
+              <div><span className="verified">{selectedSupplier.verificationStatus === "verified" ? "◆ Fornecedor verificado" : "Fornecedor aprovado"}</span><h1>{selectedSupplier.name}</h1><p>{displayCategory(selectedSupplier.category)} · {selectedSupplier.city}, {selectedSupplier.state}</p>{selectedSupplier.verifiedAt && <small>Verificado em {new Date(selectedSupplier.verifiedAt).toLocaleDateString("pt-BR")}</small>}</div>
               <div className="profile-actions"><button className="event-create" onClick={() => { const url=`${window.location.origin}/fornecedor/${selectedSupplier.id}`; if(navigator.share) navigator.share({title:selectedSupplier.name,url}).catch(()=>{}); else navigator.clipboard.writeText(url).then(()=>{setToast("Link do perfil copiado.");window.setTimeout(()=>setToast(""),3000)}); }}>Compartilhar perfil</button>{userRole === "supplier" && <button className="event-create" onClick={() => setEventFormOpen(true)}>＋ Cadastrar evento</button>}</div>
             </div>
             <div className="rating-panel"><div><strong>{ratings[selectedSupplier.name] ? ratings[selectedSupplier.name].average.toFixed(1) : "Sem avaliações"}</strong>{ratings[selectedSupplier.name] && <span>{"★".repeat(Math.round(ratings[selectedSupplier.name].average))}</span>}</div><p>Avalie este fornecedor</p><div className="star-picker">{[1,2,3,4,5].map((star) => <button key={star} onClick={() => rateSupplier(selectedSupplier.name, star)} aria-label={`${star} estrelas`}>★</button>)}</div></div>
             <div className="profile-columns">
-              <div><h2>Produtos publicados</h2>{products.filter((item) => item.supplierName === selectedSupplier.name).length === 0 ? <div className="events-empty"><strong>Nenhum produto publicado</strong><p>Os produtos aprovados deste fornecedor aparecerão aqui.</p></div> : <div className="product-grid">{products.filter((item) => item.supplierName === selectedSupplier.name).map((item) => <article className="product-card" key={item.id}><div className="product-visual">{item.imageUrl ? <img src={item.imageUrl} alt={item.name} /> : <div className="device"></div>}</div><span className="category">{item.category}</span><h3>{item.name}</h3><p>Especificações, aplicação e diferenciais</p><button onClick={() => openProduct(item)}>Ver informações →</button></article>)}</div>}</div>
+              <div><h2>Produtos publicados</h2>{products.filter((item) => item.supplierName === selectedSupplier.name).length === 0 ? <div className="events-empty"><strong>Nenhum produto publicado</strong><p>Os produtos aprovados deste fornecedor aparecerão aqui.</p></div> : <div className="product-grid">{products.filter((item) => item.supplierName === selectedSupplier.name).map((item) => <article className="product-card" key={item.id}><div className="product-visual">{item.imageUrl ? <img src={item.imageUrl} alt={item.name} /> : <div className="device"></div>}</div><span className="category">{displayCategory(item.category)}</span><h3>{item.name}</h3><p>Especificações, aplicação e diferenciais</p><button onClick={() => openProduct(item)}>Ver informações →</button></article>)}</div>}</div>
               <aside className="contact-panel"><h3>Contato comercial</h3><p>Entre em contato diretamente com este fornecedor aprovado.</p><dl><div><dt>Localização</dt><dd>{selectedSupplier.city}, {selectedSupplier.state}</dd></div>{selectedSupplier.phone && <div><dt>Telefone / WhatsApp</dt><dd>{selectedSupplier.phone}</dd></div>}{selectedSupplier.instagram && <div><dt>Instagram</dt><dd>{selectedSupplier.instagram}</dd></div>}</dl>{selectedSupplier.phone && <a href={`https://wa.me/55${selectedSupplier.phone.replace(/\D/g, "")}`} target="_blank" rel="noreferrer" onClick={() => fetch("/api/roadmap", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "track", kind: "whatsapp_click", supplierId: selectedSupplier.id }) }).catch(() => {})}>Conversar no WhatsApp</a>}</aside>
             </div>
           </section>
         )}
 
         {view === "events" && <section className="events-page"><div className="page-heading"><div><span className="eyebrow">AGENDA DO SETOR</span><h1>Próximos eventos</h1><p>Encontros, feiras e treinamentos promovidos por fornecedores.</p></div><button className="primary" onClick={() => setEventFormOpen(true)}>＋ Cadastrar evento</button></div>{events.length === 0 ? <div className="events-empty"><strong>Nenhum evento real publicado ainda</strong><p>Quando um evento for cadastrado e aprovado, ele aparecerá nesta agenda e no mapa.</p><button className="event-create" onClick={() => setEventFormOpen(true)}>Cadastrar o primeiro evento</button></div> : <div className="events-grid">{events.sort((a,b) => a.date.localeCompare(b.date)).map((item) => <article className="event-card" key={item.id}><div className="calendar-block"><strong>{item.displayDate.split(" ")[0]}</strong><span>{item.displayDate.split(" ")[1]}</span><small>{item.displayDate.split(" ")[2]}</small></div><div className="event-card-copy"><span className="eyebrow">EVENTO CADASTRADO</span><h2>{item.name}</h2><p>⌖ {item.venue} · {item.city}, {item.state}</p><small>Promovido por {item.supplier}</small><button className="event-interest" onClick={()=>markEventInterest(item.id)}>☆ Tenho interesse</button></div><a href={item.link} target="_blank" rel="noreferrer">Inscrever-se →</a></article>)}</div>}</section>}
-        {view === "products" && <section className="products-page"><div className="page-heading"><div><span className="eyebrow">CATÁLOGO DO SETOR</span><h1>Produtos</h1><p>Fotos, especificações, aplicações e diferenciais publicados pelos fornecedores.</p></div>{userRole === "supplier" && <button className="primary" onClick={() => setProductFormOpen(true)}>＋ Cadastrar produto</button>}</div><p className="commercial-notice">Preços, disponibilidade, frete e condições comerciais devem ser confirmados diretamente com o fornecedor.</p>{products.length === 0 ? <div className="events-empty"><strong>Nenhum produto cadastrado ainda</strong><p>Os cards aparecerão aqui conforme os fornecedores adicionarem seus produtos.</p>{userRole === "supplier" ? <button className="event-create" onClick={() => setProductFormOpen(true)}>Cadastrar o primeiro produto</button> : <button className="event-create" onClick={() => { setRegistrationRole("supplier"); setRegisterOpen(true); }}>Sou fornecedor</button>}</div> : <div className="catalog-grid">{products.map((product) => <article className="catalog-card" key={product.id} onClick={() => setSelectedProduct(product)}><div className="catalog-photo">{product.imageUrl ? <img src={product.imageUrl} alt={product.name} /> : <span>Sem foto</span>}</div><div className="catalog-copy"><span className="category">{product.category}</span><h2>{product.name}</h2><p>{product.supplierName}</p><button>Ver especificações e aplicações →</button></div></article>)}</div>}</section>}
+        {view === "products" && <section className="products-page"><div className="page-heading"><div><span className="eyebrow">CATÁLOGO DO SETOR</span><h1>Produtos</h1><p>Fotos, especificações, aplicações e diferenciais publicados pelos fornecedores.</p></div>{userRole === "supplier" && <button className="primary" onClick={() => setProductFormOpen(true)}>＋ Cadastrar produto</button>}</div><p className="commercial-notice">Preços, disponibilidade, frete e condições comerciais devem ser confirmados diretamente com o fornecedor.</p>{products.length === 0 ? <div className="events-empty"><strong>Nenhum produto cadastrado ainda</strong><p>Os cards aparecerão aqui conforme os fornecedores adicionarem seus produtos.</p>{userRole === "supplier" ? <button className="event-create" onClick={() => setProductFormOpen(true)}>Cadastrar o primeiro produto</button> : <button className="event-create" onClick={() => openRegistration("supplier")}>Sou fornecedor</button>}</div> : <div className="catalog-grid">{products.map((product) => <article className="catalog-card" key={product.id} onClick={() => openProduct(product)}><div className="catalog-photo">{product.imageUrl ? <img src={product.imageUrl} alt={product.name} /> : <span>Sem foto</span>}</div><div className="catalog-copy"><span className="category">{displayCategory(product.category)}</span><h2>{product.name}</h2><p>{product.supplierName}</p><button>Ver especificações e aplicações →</button></div></article>)}</div>}</section>}
 
         {view === "news" && <section className="news-page"><div className="news-hero"><div><span className="eyebrow">INFORMAÇÃO PARA QUEM MOVE O MERCADO</span><h1>Radar do Setor</h1><p>Notícias selecionadas sobre rastreamento veicular, telecomunicações, conectividade, tecnologia e mercado automotivo.</p></div><div className="news-radar-mark" aria-hidden="true"><span></span><i></i></div></div><div className="news-trust"><strong>Curadoria com fonte identificada</strong><span>O Hub publica somente resumos e direciona você para a matéria original. Todo conteúdo passa por aprovação.</span></div><div className="news-filters" aria-label="Filtrar notícias por categoria">{newsCategories.map((item) => <button key={item} className={newsCategory === item ? "active" : ""} onClick={() => setNewsCategory(item)}>{item}</button>)}</div>{filteredNews.length === 0 ? <div className="events-empty news-empty"><strong>O Radar está pronto para receber notícias reais</strong><p>As primeiras publicações aparecerão aqui após a conferência da fonte e aprovação da gestão.</p><a className="event-create" href="/admin">Acessar gestão do Radar</a></div> : <div className="news-grid">{filteredNews.map((item, index) => <article className={`news-card ${index === 0 ? "featured" : ""}`} key={item.id}>{item.imageUrl ? <div className="news-image"><img src={item.imageUrl} alt="" /></div> : <div className="news-image news-image-placeholder"><span>RADAR</span><i></i></div>}<div className="news-card-copy"><div className="news-meta"><span>{item.category}</span><time dateTime={item.publishedAt}>{new Date(`${item.publishedAt}T12:00:00`).toLocaleDateString("pt-BR")}</time></div><h2>{item.title}</h2><p>{item.summary}</p><div className="news-source"><small>Fonte: {item.sourceName}</small><a href={item.sourceUrl} target="_blank" rel="noreferrer">Ler notícia completa →</a></div></div></article>)}</div>}</section>}
 
@@ -328,9 +397,9 @@ export default function Home() {
 
       {eventFormOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setEventFormOpen(false); }}><section className="access-modal event-form" role="dialog" aria-modal="true" aria-labelledby="event-form-title"><button className="modal-close" onClick={() => setEventFormOpen(false)} aria-label="Fechar">×</button><span className="eyebrow">ÁREA DO FORNECEDOR</span><h2 id="event-form-title">Cadastrar novo evento</h2><p>Após a revisão, o evento aparecerá na agenda e como um ponto especial no mapa.</p><form onSubmit={createEvent}><label>Nome do evento<input name="name" required placeholder="Ex.: Encontro de Integradores" /></label><div className="field-row"><label>Data<input name="date" type="date" required /></label><label>Local<input name="venue" required placeholder="Centro de eventos" /></label></div><div className="field-row"><label>Cidade<input name="city" required placeholder="São Paulo" /></label><label>Estado<select name="state" required><option value="">Selecione</option><option>SP</option><option>PR</option><option>MG</option><option>RJ</option><option>GO</option><option>PE</option></select></label></div><label>Link para inscrição<input name="link" type="url" required placeholder="https://seusite.com/inscricao" /></label><label>Descrição<textarea name="description" rows={3} placeholder="Conte brevemente sobre o evento" /></label><button className="primary full" type="submit">Enviar evento para publicação <span>→</span></button></form></section></div>}
 
-      {selectedProduct && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedProduct(null); }}><section className="access-modal product-detail" role="dialog" aria-modal="true"><button className="modal-close" onClick={() => setSelectedProduct(null)} aria-label="Fechar">×</button><div className="detail-photo">{selectedProduct.imageUrl ? <img src={selectedProduct.imageUrl} alt={selectedProduct.name} /> : <span>Produto sem foto</span>}</div><span className="category">{selectedProduct.category}</span><h2>{selectedProduct.name}</h2><strong className="detail-supplier">{selectedProduct.supplierName}</strong><h3>Informações do produto</h3><p>{selectedProduct.technicalDetails}</p><p className="commercial-notice">Preços, disponibilidade, frete e condições comerciais devem ser confirmados diretamente com o fornecedor.</p>{selectedProduct.supplierPhone ? <a className="primary full quote-button" href={`https://wa.me/55${selectedProduct.supplierPhone.replace(/\D/g, "")}?text=${encodeURIComponent(`Olá! Vi o produto ${selectedProduct.name} no Hub Brasil e gostaria de solicitar uma cotação.`)}`} target="_blank" rel="noreferrer">Solicitar cotação pelo WhatsApp <span>→</span></a> : <button className="primary full" onClick={() => setSelectedProduct(null)}>Fechar <span>×</span></button>}</section></div>}
+      {selectedProduct && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedProduct(null); }}><section className="access-modal product-detail" role="dialog" aria-modal="true"><button className="modal-close" onClick={() => setSelectedProduct(null)} aria-label="Fechar">×</button><div className="detail-photo">{selectedProduct.imageUrl ? <img src={selectedProduct.imageUrl} alt={selectedProduct.name} /> : <span>Produto sem foto</span>}</div><span className="category">{displayCategory(selectedProduct.category)}</span><h2>{selectedProduct.name}</h2><strong className="detail-supplier">{selectedProduct.supplierName}</strong><h3>Informações do produto</h3><p>{selectedProduct.technicalDetails}</p><p className="commercial-notice">Preços, disponibilidade, frete e condições comerciais devem ser confirmados diretamente com o fornecedor.</p>{selectedProduct.supplierPhone ? <a className="primary full quote-button" href={`https://wa.me/55${selectedProduct.supplierPhone.replace(/\D/g, "")}?text=${encodeURIComponent(`Olá! Vi o produto ${selectedProduct.name} no Hub Brasil e gostaria de solicitar uma cotação.`)}`} target="_blank" rel="noreferrer">Solicitar cotação pelo WhatsApp <span>→</span></a> : <button className="primary full" onClick={() => setSelectedProduct(null)}>Fechar <span>×</span></button>}</section></div>}
 
-      {productFormOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setProductFormOpen(false); }}><section className="access-modal event-form" role="dialog" aria-modal="true"><button className="modal-close" onClick={() => setProductFormOpen(false)} aria-label="Fechar">×</button><span className="eyebrow">ÁREA DO FORNECEDOR</span><h2>Cadastrar produto</h2><p>Destaque as informações que ajudam o cliente a identificar a solução adequada.</p><form onSubmit={createProduct}><label>Foto do produto<input name="photo" type="file" accept="image/jpeg,image/png,image/webp" required /></label><label>Nome do produto<input name="name" required placeholder="Ex.: Rastreador 4G LTE" /></label><label>Categoria<select name="category" required><option value="">Selecione</option><option>Rastreadores</option><option>Plataformas de rastreamento veicular</option><option>Conectividade M2M</option><option>Câmeras veiculares</option><option>Tags e identificação</option><option>Acessórios</option></select></label><label>Especificações técnicas<textarea name="technicalDetails" rows={4} required placeholder="Tecnologia, alimentação, conectividade, homologações e demais especificações" /></label><label>Aplicação<textarea name="application" rows={3} required placeholder="Para quais veículos, operações ou necessidades este produto é indicado?" /></label><label>Diferenciais<textarea name="differentials" rows={3} required placeholder="Recursos, benefícios e diferenciais da solução" /></label><p className="commercial-notice">Preços, disponibilidade, frete e condições comerciais serão tratados diretamente com o cliente.</p><button className="primary full" type="submit">Enviar produto para aprovação <span>→</span></button></form></section></div>}
+      {productFormOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setProductFormOpen(false); }}><section className="access-modal event-form" role="dialog" aria-modal="true"><button className="modal-close" onClick={() => setProductFormOpen(false)} aria-label="Fechar">×</button><span className="eyebrow">ÁREA DO FORNECEDOR</span><h2>Cadastrar produto</h2><p>Destaque as informações que ajudam o cliente a identificar a solução adequada.</p><form onSubmit={createProduct}><label>Foto do produto<input name="photo" type="file" accept="image/jpeg,image/png,image/webp" required /></label><label>Nome do produto<input name="name" required placeholder="Ex.: Rastreador 4G LTE" /></label><label>Categoria<select name="category" required><option value="">Selecione</option>{solutionCategories.map((item) => <option key={item.name}>{item.name}</option>)}</select></label><label>Especificações técnicas<textarea name="technicalDetails" rows={4} required placeholder="Tecnologia, alimentação, conectividade, homologações e demais especificações" /></label><label>Aplicação<textarea name="application" rows={3} required placeholder="Para quais veículos, operações ou necessidades este produto é indicado?" /></label><label>Diferenciais<textarea name="differentials" rows={3} required placeholder="Recursos, benefícios e diferenciais da solução" /></label><p className="commercial-notice">Preços, disponibilidade, frete e condições comerciais serão tratados diretamente com o cliente.</p><button className="primary full" type="submit">Enviar produto para aprovação <span>→</span></button></form></section></div>}
 
       {welcomeOpen && !registered && !registerOpen && (
         <div className="welcome-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setWelcomeOpen(false); }}>
@@ -370,7 +439,7 @@ export default function Home() {
               <label>Telefone / WhatsApp<input name="phone" required inputMode="tel" placeholder="(00) 00000-0000" /></label>
               <div className="or"><span></span>Informe um dos dois<span></span></div>
               <div className="field-row"><label>Empresa<input name="company" required={registrationRole === "supplier"} placeholder="Nome da empresa" /></label><label>Instagram<input name="instagram" placeholder="@suaempresa" /></label></div>
-              {registrationRole === "supplier" && <><label>Categoria principal<select name="category" required><option value="">Selecione</option><option>Rastreadores</option><option>Plataformas de rastreamento veicular</option><option>Conectividade M2M</option><option>Câmeras veiculares</option><option>Tags e identificação</option><option>Acessórios</option></select></label><div className="field-row"><label>Cidade<input name="city" required placeholder="Cidade da sede" /></label><label>Estado<select name="state" required><option value="">UF</option>{["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"].map((state) => <option key={state}>{state}</option>)}</select></label></div><label>Apresentação da empresa<textarea name="description" rows={3} placeholder="Especialidades, diferenciais e região atendida" /></label></>}
+              {registrationRole === "supplier" && <><label>Categoria principal<select name="category" required><option value="">Selecione</option>{solutionCategories.map((item) => <option key={item.name}>{item.name}</option>)}</select></label><div className="field-row"><label>Cidade<input name="city" required placeholder="Cidade da sede" /></label><label>Estado<select name="state" required><option value="">UF</option>{["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"].map((state) => <option key={state}>{state}</option>)}</select></label></div><label>Apresentação da empresa<textarea name="description" rows={3} placeholder="Especialidades, diferenciais e região atendida" /></label></>}
               <label className="consent"><input type="checkbox" required /> <span>Li e concordo com a <a href="/privacidade" target="_blank">Política de Privacidade</a> e os <a href="/termos" target="_blank">Termos de Uso</a>.</span></label>
               <button className="primary full" type="submit">{registrationRole === "supplier" ? "Criar perfil da empresa" : "Liberar meu acesso"} <span>→</span></button>
             </form>

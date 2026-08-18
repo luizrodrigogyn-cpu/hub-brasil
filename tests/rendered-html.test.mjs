@@ -15,8 +15,11 @@ test("renderiza a experiência do Hub Brasil", async () => {
   assert.equal(response.status, 200);
   const html = await response.text();
   assert.match(html, /Hub Brasil/);
-  assert.match(html, /Encontre quem move/);
+  assert.match(html, /Encontre os melhores fornecedores/);
   assert.match(html, /Fornecedores/);
+  assert.match(html, /Videotelemetria/);
+  assert.match(html, /Indique o Hub aos seus parceiros do setor/);
+  assert.match(html, /Eventos/);
   assert.match(html, /Radar do Setor/);
   assert.doesNotMatch(html, /codex-preview/);
 });
