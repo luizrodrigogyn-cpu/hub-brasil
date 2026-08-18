@@ -38,6 +38,18 @@ const solutionCategories = [
   { name: "Acessórios", title: "Acessórios", icon: "◇", description: "Complementos para instalação e operação de rastreamento." },
 ] as const;
 
+const audienceGroups = [
+  "Empresas de rastreamento veicular",
+  "Associações de proteção veicular",
+  "Gestoras de frota e transportadoras",
+  "Fabricantes de rastreadores e câmeras",
+  "Empresas de IoT, M2M e LoRaWAN",
+  "Plataformas de rastreamento e telemetria",
+  "Fornecedores de conectividade e chips",
+  "Integradores e desenvolvedores",
+  "Empresas de instalação e serviços",
+] as const;
+
 function displayCategory(category: string) {
   return category === "Câmeras veiculares" || category === "ADAS e DSM" ? "Videotelemetria" : category;
 }
@@ -48,7 +60,7 @@ function mapPoint(state: string) {
 }
 
 export default function Home() {
-  const [view, setView] = useState<"map" | "solutions" | "directory" | "supplier" | "events" | "products" | "news" | "supplier-dashboard">("map");
+  const [view, setView] = useState<"map" | "solutions" | "directory" | "supplier" | "events" | "products" | "news" | "about" | "supplier-dashboard">("map");
   const [registered, setRegistered] = useState(false);
   const [registerOpen, setRegisterOpen] = useState(false);
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
@@ -83,8 +95,8 @@ export default function Home() {
   useEffect(() => {
     const timer = window.setTimeout(() => setWelcomeOpen(true), 900);
     const requestedRole = new URLSearchParams(window.location.search).get("cadastro");
-    if (requestedRole === "fornecedor" || requestedRole === "cliente") {
-      setRegistrationRole(requestedRole === "fornecedor" ? "supplier" : "client");
+    if (requestedRole === "fornecedor" || requestedRole === "cliente" || requestedRole === "acessar") {
+      if (requestedRole === "fornecedor" || requestedRole === "cliente") setRegistrationRole(requestedRole === "fornecedor" ? "supplier" : "client");
       setRegisterOpen(true);
       window.history.replaceState({}, "", window.location.pathname);
     }
@@ -202,11 +214,11 @@ export default function Home() {
     setRegisterOpen(true);
   }
 
-  async function copyRegistrationLink(role: "client" | "supplier") {
-    const url = `${window.location.origin}/?cadastro=${role === "supplier" ? "fornecedor" : "cliente"}`;
+  async function copyRegistrationLink() {
+    const url = `${window.location.origin}/?cadastro=acessar`;
     try {
       await navigator.clipboard.writeText(url);
-      setToast(`Link de cadastro para ${role === "supplier" ? "fornecedor" : "cliente"} copiado.`);
+      setToast("Link do Hub copiado. A pessoa poderá escolher como deseja se cadastrar.");
     } catch {
       setToast("Não foi possível copiar o link automaticamente.");
     }
@@ -275,6 +287,7 @@ export default function Home() {
           <button className={view === "products" ? "active" : ""} onClick={() => setView("products")}>Produtos</button>
           <button className={view === "events" ? "active" : ""} onClick={() => setView("events")}>Eventos</button>
           <button className={view === "news" ? "active" : ""} onClick={() => setView("news")}>Radar do Setor</button>
+          <button className={view === "about" ? "active" : ""} onClick={() => setView("about")}>Sobre o Hub</button>
           <button onClick={openQuoteRequest}>Solicitar cotação</button>
         </nav>
         <div className="top-actions">
@@ -320,7 +333,8 @@ export default function Home() {
             <div className="overview-stats"><article><strong>{suppliers.length}+</strong><span>Fornecedores</span></article><article><strong>{products.length}+</strong><span>Produtos</span></article><article><strong>{solutionCategories.length}</strong><span>Soluções</span></article><article><strong>{events.length}</strong><span>Eventos</span></article></div>
             <div className="home-section-heading"><div><span className="eyebrow">DESCUBRA A TECNOLOGIA CERTA</span><h2>Principais soluções</h2><p>Uma base organizada para encontrar tecnologia veicular com clareza.</p></div><button className="section-link" onClick={() => setView("solutions")}>Ver todas →</button></div>
             <div className="solution-preview">{solutionCategories.slice(0, 4).map((item) => <button key={item.name} onClick={() => { setCategory(item.name); setView("directory"); }}><span>{item.icon}</span><strong>{item.title}</strong><small>{item.description}</small></button>)}</div>
-            <div className="referral-card"><div><span className="eyebrow">FORTALEÇA O ECOSSISTEMA</span><h2>Indique o Hub aos seus parceiros do setor.</h2><p>Compartilhe o cadastro correto para quem fornece soluções ou para quem deseja consultar produtos e fornecedores.</p></div><div className="referral-actions"><button className="primary" onClick={() => copyRegistrationLink("supplier")}>Copiar link para fornecedor</button><button className="secondary-action" onClick={() => copyRegistrationLink("client")}>Copiar link para cliente</button></div></div>
+            <section className="audience-section" aria-labelledby="audience-heading"><span className="eyebrow">CONEXÃO PARA O SETOR</span><h2 id="audience-heading">Para quem é o Hub Brasil</h2><div className="audience-grid">{audienceGroups.map((item) => <span key={item}>ϟ {item}</span>)}</div></section>
+            <div className="referral-card"><div><span className="eyebrow">FORTALEÇA O ECOSSISTEMA</span><h2>Indique o Hub aos seus parceiros do setor.</h2><p>Compartilhe o Hub com quem fornece soluções ou procura produtos e fornecedores. Ao entrar, cada pessoa escolhe se deseja se cadastrar como fornecedor ou usuário.</p></div><div className="referral-actions"><button className="primary" onClick={copyRegistrationLink}>Copiar link do Hub</button></div></div>
           </section>
           </>
         )}
@@ -329,6 +343,15 @@ export default function Home() {
           <section className="solutions-page">
             <div className="solutions-heading"><span className="eyebrow">CATEGORIAS DO HUB</span><h1>Soluções</h1><p>O ecossistema de rastreamento e telemetria organizado de forma simples para sua pesquisa.</p></div>
             <div className="solutions-grid">{solutionCategories.map((item) => <button key={item.name} className="solution-card" onClick={() => { setCategory(item.name); setView("directory"); }}><span>{item.icon}</span><h2>{item.title}</h2><p>{item.description}</p><small>Ver fornecedores →</small></button>)}</div>
+            <div className="ecosystem-cta"><h2>Faça parte do ecossistema</h2><p>Cadastre sua empresa ou encontre o fornecedor ideal hoje mesmo.</p><div><button className="primary" onClick={() => openRegistration("supplier")}>Sou fornecedor →</button><button className="secondary-action" onClick={() => setView("directory")}>Buscar fornecedores</button></div></div>
+          </section>
+        )}
+
+        {view === "about" && (
+          <section className="about-page">
+            <div className="about-hero"><span className="eyebrow">SOBRE O HUB BRASIL</span><h1>O ecossistema que aproxima quem procura tecnologia de quem oferece soluções.</h1><p>O Hub Brasil nasceu para organizar o mercado de rastreamento veicular, telemetria e conectividade. Reunimos empresas, produtos e eventos em um ambiente gratuito, seguro e orientado por qualidade.</p></div>
+            <div className="about-values"><article><span>◎</span><h2>Nossa missão</h2><p>Facilitar o encontro entre empresas que precisam de tecnologia veicular e fornecedores preparados para atendê-las.</p></article><article><span>✓</span><h2>Qualidade e confiança</h2><p>Cadastros e publicações passam por aprovação. O destaque é conquistado por qualidade, atualização e boas interações — nunca por pagamento.</p></article><article><span>↗</span><h2>Conexões transparentes</h2><p>O Hub aproxima as partes, mas não participa de negociações, valores, ofertas ou pagamentos entre clientes e fornecedores.</p></article></div>
+            <section className="about-audience"><span className="eyebrow">PARA QUEM É O HUB BRASIL</span><h2>Feito para fortalecer todo o ecossistema.</h2><div className="audience-grid">{audienceGroups.map((item) => <span key={item}>ϟ {item}</span>)}</div></section>
             <div className="ecosystem-cta"><h2>Faça parte do ecossistema</h2><p>Cadastre sua empresa ou encontre o fornecedor ideal hoje mesmo.</p><div><button className="primary" onClick={() => openRegistration("supplier")}>Sou fornecedor →</button><button className="secondary-action" onClick={() => setView("directory")}>Buscar fornecedores</button></div></div>
           </section>
         )}
@@ -384,7 +407,7 @@ export default function Home() {
         {view === "supplier-dashboard" && <section className="supplier-dashboard"><div className="page-heading"><div><span className="eyebrow">PERFIL EMPRESA</span><h1>{supplierCompany || "Minha empresa"}</h1><p>Gerencie produtos, informações técnicas, fotos e eventos.</p></div></div>{!supplierApproved && <div className="approval-banner"><strong>Cadastro em análise</strong><span>O gestor precisa validar seu telefone e aprovar sua empresa antes da primeira publicação.</span></div>}<div className="management-grid"><button disabled={!supplierApproved} onClick={() => setProductFormOpen(true)}><span>▣</span><strong>Cadastrar produto</strong><small>{supplierApproved ? "Foto, categoria, especificações, aplicação e diferenciais" : "Disponível após aprovação"}</small></button><button disabled={!supplierApproved} onClick={() => setEventFormOpen(true)}><span>★</span><strong>Cadastrar evento</strong><small>{supplierApproved ? "Local, data e link de inscrição" : "Disponível após aprovação"}</small></button><button onClick={() => setView("products")}><span>⌕</span><strong>Ver produtos publicados</strong><small>Acompanhe o catálogo aprovado</small></button></div></section>}
       </main>
 
-      <footer className="site-footer"><span>© 2026 Hub Brasil</span><div><a href="/privacidade">Privacidade</a><a href="/termos">Termos de Uso</a><a href="/admin">Gestão</a></div></footer>
+      <footer className="site-footer"><div className="footer-main"><div className="footer-brand"><button className="brand" onClick={() => setView("map")}><span className="brand-mark"><span></span><span></span><span></span></span><span className="brand-copy"><strong>Hub <b>Brasil</b></strong><small>TECNOLOGIA VEICULAR</small></span></button><p>O ecossistema de negócios do mercado de rastreamento, telemetria e IoT no Brasil.</p><span className="instagram-label" aria-label="Instagram do Hub Brasil">◎ Instagram</span></div><div><strong>Plataforma</strong><button onClick={() => setView("directory")}>Fornecedores</button><button onClick={() => setView("solutions")}>Soluções</button><button onClick={() => setView("events")}>Eventos</button><button onClick={openQuoteRequest}>Solicitar cotação</button></div><div><strong>Para empresas</strong><button onClick={() => openRegistration("supplier")}>Cadastrar empresa</button><button onClick={() => setView("about")}>Sobre o Hub</button><button onClick={() => setRegisterOpen(true)}>Entrar</button></div><div><strong>Contato</strong><a href="mailto:suporte@niviontech.com.br">suporte@niviontech.com.br</a><span>Brasil</span></div></div><div className="footer-bottom"><span>© 2026 Hub Brasil. Todos os direitos reservados.</span><div><a href="/termos">Termos de uso</a><a href="/privacidade">Privacidade</a><a href="/admin">Gestão</a></div></div></footer>
 
       <nav className="mobile-nav" aria-label="Navegação móvel">
         <button className={view === "map" ? "active" : ""} onClick={() => setView("map")}><span>⌖</span>Mapa</button>
