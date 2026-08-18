@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://hub-brasil-marketplace.rodrigomel.chatgpt.site"),
+  metadataBase: new URL("https://hub.niviontech.com.br"),
   title: "Hub Brasil — Tecnologia para rastreamento veicular",
   description: "Encontre fornecedores validados, produtos especializados e conexões comerciais para o mercado de rastreamento veicular.",
   icons: {

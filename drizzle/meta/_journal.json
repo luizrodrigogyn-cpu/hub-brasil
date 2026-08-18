@@ -50,6 +50,34 @@
       "when": 1786650600000,
       "tag": "0006_seed_verified_events",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1786740022494,
+      "tag": "0007_wet_mauler",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1786740533652,
+      "tag": "0008_serious_newton_destine",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1786740954248,
+      "tag": "0009_curious_captain_britain",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1786999310483,
+      "tag": "0010_organic_matthew_murdock",
+      "breakpoints": true
     }
   ]
 }

@@ -1,0 +1,160 @@
+import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
+import { getDb } from "../../../db";
+import { activityEvents, alertPreferences, contentReports, deletionRequests, favorites, leads, products, quoteRecipients, quoteRequests, supplierEvents } from "../../../db/schema";
+import { getApiUser } from "../../admin-auth";
+
+const allowedFavoriteTypes = new Set(["supplier", "product", "event"]);
+
+function list(value: unknown) {
+  return Array.isArray(value) ? value.map(String).map((item) => item.trim()).filter(Boolean).slice(0, 30) : [];
+}
+
+export async function GET() {
+  const user = await getApiUser();
+  if (!user) return Response.json({ error: "Faça login para acessar a área de testes.", signIn: "/signin-with-chatgpt?return_to=/area-testes" }, { status: 401 });
+  const db = getDb();
+  const [profile] = await db.select().from(leads).where(eq(leads.authUserId, user.userId));
+  if (!profile) return Response.json({ error: "Conclua seu cadastro no Hub antes de acessar os testes." }, { status: 403 });
+
+  const [saved, alerts, clientQuotes] = await Promise.all([
+    db.select().from(favorites).where(eq(favorites.userId, user.userId)).orderBy(desc(favorites.createdAt)),
+    db.select().from(alertPreferences).where(eq(alertPreferences.userId, user.userId)),
+    db.select().from(quoteRequests).where(eq(quoteRequests.clientUserId, user.userId)).orderBy(desc(quoteRequests.createdAt)).limit(30),
+  ]);
+  const contactHistory = await db.select({ id: activityEvents.id, supplierId: activityEvents.supplierId, productId: activityEvents.productId, kind: activityEvents.kind, createdAt: activityEvents.createdAt }).from(activityEvents).where(eq(activityEvents.actorUserId, user.userId)).orderBy(desc(activityEvents.createdAt)).limit(80);
+  const profileChecks = [profile.name, profile.phone, profile.company || profile.instagram, profile.category, profile.city, profile.state, profile.description, profile.phoneVerifiedAt, profile.serviceStates || profile.servesNationwide, profile.services];
+  const profileCompleteness = Math.round((profileChecks.filter(Boolean).length / profileChecks.length) * 100);
+
+  let supplierMetrics = null;
+  let supplierQuotes: unknown[] = [];
+  if (profile.role === "supplier") {
+    const since90 = new Date(Date.now() - 90 * 86400000).toISOString();
+    const metrics = await db.select({ kind: activityEvents.kind, total: sql<number>`count(*)` })
+      .from(activityEvents).where(and(eq(activityEvents.supplierId, profile.id), gte(activityEvents.createdAt, since90))).groupBy(activityEvents.kind);
+    supplierMetrics = Object.fromEntries(metrics.map((item) => [item.kind, Number(item.total)]));
+    supplierQuotes = await db.select({ id: quoteRequests.id, protocol: quoteRequests.protocol, category: quoteRequests.category, application: quoteRequests.application, quantity: quoteRequests.quantity, city: quoteRequests.city, state: quoteRequests.state, deadline: quoteRequests.deadline, notes: quoteRequests.notes, status: quoteRecipients.status, createdAt: quoteRequests.createdAt })
+      .from(quoteRecipients).innerJoin(quoteRequests, eq(quoteRecipients.quoteId, quoteRequests.id)).where(eq(quoteRecipients.supplierId, profile.id)).orderBy(desc(quoteRequests.createdAt)).limit(30);
+  }
+
+  const supplierIds = saved.filter((item) => item.entityType === "supplier").map((item) => item.entityId);
+  const productIds = saved.filter((item) => item.entityType === "product").map((item) => item.entityId);
+  const eventIds = saved.filter((item) => item.entityType === "event").map((item) => item.entityId);
+  const [savedSuppliers, savedProducts, savedEvents] = await Promise.all([
+    supplierIds.length ? db.select({ id: leads.id, name: leads.company, category: leads.category, city: leads.city, state: leads.state }).from(leads).where(inArray(leads.id, supplierIds)) : [],
+    productIds.length ? db.select({ id: products.id, name: products.name, supplierName: products.supplierName, category: products.category }).from(products).where(inArray(products.id, productIds)) : [],
+    eventIds.length ? db.select({ id: supplierEvents.id, name: supplierEvents.name, city: supplierEvents.city, state: supplierEvents.state, eventDate: supplierEvents.eventDate }).from(supplierEvents).where(inArray(supplierEvents.id, eventIds)) : [],
+  ]);
+
+  return Response.json({
+    profile: { id: profile.id, name: profile.name, company: profile.company, role: profile.role, status: profile.status, verificationStatus: profile.verificationStatus, verifiedAt: profile.verifiedAt, phoneVerifiedAt: profile.phoneVerifiedAt, completeness: profileCompleteness, serviceStates: JSON.parse(profile.serviceStates || "[]"), services: JSON.parse(profile.services || "[]"), serviceMode: profile.serviceMode, servesNationwide: profile.servesNationwide },
+    favorites: { suppliers: savedSuppliers, products: savedProducts, events: savedEvents },
+    alerts: alerts[0] ? { ...alerts[0], categories: JSON.parse(alerts[0].categories || "[]"), states: JSON.parse(alerts[0].states || "[]"), contentTypes: JSON.parse(alerts[0].contentTypes || "[]") } : null,
+    clientQuotes,
+    supplierQuotes,
+    supplierMetrics,
+    contactHistory,
+  });
+}
+
+export async function POST(request: Request) {
+  const user = await getApiUser();
+  if (!user) return Response.json({ error: "Faça login para continuar.", signIn: "/signin-with-chatgpt?return_to=/area-testes" }, { status: 401 });
+  const db = getDb();
+  const [profile] = await db.select().from(leads).where(eq(leads.authUserId, user.userId));
+  if (!profile || profile.status !== "approved") return Response.json({ error: "Seu cadastro precisa estar aprovado." }, { status: 403 });
+  const body = await request.json() as Record<string, unknown>;
+  const action = String(body.action || "");
+
+  if (action === "favorite") {
+    const entityType = String(body.entityType || "");
+    const entityId = Number(body.entityId);
+    if (!allowedFavoriteTypes.has(entityType) || !Number.isInteger(entityId) || entityId < 1) return Response.json({ error: "Favorito inválido." }, { status: 400 });
+    await db.insert(favorites).values({ userId: user.userId, entityType, entityId }).onConflictDoNothing();
+    if (entityType === "supplier") await db.insert(activityEvents).values({ actorUserId: user.userId, supplierId: entityId, kind: "favorite" });
+    return Response.json({ ok: true });
+  }
+
+  if (action === "unfavorite") {
+    await db.delete(favorites).where(and(eq(favorites.userId, user.userId), eq(favorites.entityType, String(body.entityType)), eq(favorites.entityId, Number(body.entityId))));
+    return Response.json({ ok: true });
+  }
+
+  if (action === "alerts") {
+    const values = { userId: user.userId, categories: JSON.stringify(list(body.categories)), states: JSON.stringify(list(body.states)), contentTypes: JSON.stringify(list(body.contentTypes)), frequency: body.frequency === "off" ? "off" : "weekly", active: body.frequency !== "off", unsubscribeToken: crypto.randomUUID(), updatedAt: new Date().toISOString() };
+    await db.insert(alertPreferences).values(values).onConflictDoUpdate({ target: alertPreferences.userId, set: values });
+    return Response.json({ ok: true });
+  }
+
+  if (action === "supplier_profile") {
+    if (profile.role !== "supplier") return Response.json({ error: "Apenas fornecedores podem editar a área de atuação." }, { status: 403 });
+    const serviceStates = list(body.serviceStates);
+    const services = list(body.services);
+    const serviceMode = ["presential", "remote", "both"].includes(String(body.serviceMode)) ? String(body.serviceMode) : "both";
+    await db.update(leads).set({ serviceStates: JSON.stringify(serviceStates), services: JSON.stringify(services), serviceMode, servesNationwide: Boolean(body.servesNationwide), updatedAt: new Date().toISOString() }).where(eq(leads.id, profile.id));
+    return Response.json({ ok: true });
+  }
+
+  if (action === "report") {
+    const entityType = String(body.entityType || "");
+    const entityId = Number(body.entityId);
+    const reason = String(body.reason || "").trim();
+    if (!allowedFavoriteTypes.has(entityType) || !Number.isInteger(entityId) || !reason) return Response.json({ error: "Informe o conteúdo e o motivo da denúncia." }, { status: 400 });
+    await db.insert(contentReports).values({ reporterUserId: user.userId, entityType, entityId, reason: reason.slice(0, 120), details: String(body.details || "").trim().slice(0, 1500) || null });
+    return Response.json({ ok: true }, { status: 201 });
+  }
+
+  if (action === "request_deletion") {
+    const [existing] = await db.select().from(deletionRequests).where(and(eq(deletionRequests.userId, user.userId), eq(deletionRequests.status, "pending")));
+    if (!existing) await db.insert(deletionRequests).values({ userId:user.userId, email:user.email, reason:String(body.reason||"").trim().slice(0,800)||null });
+    return Response.json({ ok:true, message:"Solicitação registrada para análise segura." }, { status:201 });
+  }
+
+  if (action === "quote") {
+    if (profile.role !== "client") return Response.json({ error: "A cotação deve ser criada por um perfil de cliente." }, { status: 403 });
+    const supplierIds = list(body.supplierIds).map(Number).filter((id) => Number.isInteger(id) && id > 0).slice(0, 5);
+    const category = String(body.category || "").trim();
+    const application = String(body.application || "").trim();
+    const city = String(body.city || "").trim();
+    const state = String(body.state || "").trim();
+    if (!category || !application || !city || !state || !supplierIds.length) return Response.json({ error: "Preencha a necessidade e escolha ao menos um fornecedor." }, { status: 400 });
+    const oneHourAgo = new Date(Date.now() - 3600000).toISOString();
+    const [{ total }] = await db.select({ total: sql<number>`count(*)` }).from(quoteRequests).where(and(eq(quoteRequests.clientUserId, user.userId), gte(quoteRequests.createdAt, oneHourAgo)));
+    if (Number(total) >= 3) return Response.json({ error: "Limite temporário atingido. Aguarde antes de enviar outra cotação." }, { status: 429 });
+    const approved = await db.select({ id: leads.id }).from(leads).where(and(inArray(leads.id, supplierIds), eq(leads.role, "supplier"), eq(leads.status, "approved")));
+    if (!approved.length) return Response.json({ error: "Nenhum fornecedor selecionado está disponível." }, { status: 400 });
+    const protocol = `HB-${new Date().getFullYear()}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+    const consentSnapshot = JSON.stringify({ version: "2026-08-14", shared: ["nome", "telefone", "empresa_ou_instagram", "necessidade"], supplierIds: approved.map((item) => item.id), acceptedAt: new Date().toISOString() });
+    const [quote] = await db.insert(quoteRequests).values({ protocol, clientUserId: user.userId, category, application, quantity: Math.max(1, Math.min(100000, Number(body.quantity) || 1)), city, state, deadline: String(body.deadline || "").trim() || null, notes: String(body.notes || "").trim().slice(0, 2000) || null, consentSnapshot }).returning();
+    await db.batch(approved.map((supplier) => db.insert(quoteRecipients).values({ quoteId: quote.id, supplierId: supplier.id })).concat(approved.map((supplier) => db.insert(activityEvents).values({ actorUserId: user.userId, supplierId: supplier.id, kind: "quote_request" }))));
+    return Response.json({ ok: true, protocol }, { status: 201 });
+  }
+
+  if (action === "track") {
+    const kind = String(body.kind || "");
+    if (!["profile_view", "product_view", "whatsapp_click"].includes(kind)) return Response.json({ error: "Evento inválido." }, { status: 400 });
+    await db.insert(activityEvents).values({ actorUserId: user.userId, supplierId: Number(body.supplierId) || null, productId: Number(body.productId) || null, eventId: Number(body.eventId) || null, kind });
+    return Response.json({ ok: true });
+  }
+
+  if (action === "quote_response") {
+    if (profile.role !== "supplier") return Response.json({ error: "Apenas o fornecedor destinatário pode atualizar esta cotação." }, { status: 403 });
+    const quoteId = Number(body.quoteId);
+    const responseStatus = body.responseStatus === "declined" ? "declined" : "responded";
+    const [recipient] = await db.select().from(quoteRecipients).where(and(eq(quoteRecipients.quoteId, quoteId), eq(quoteRecipients.supplierId, profile.id)));
+    if (!recipient) return Response.json({ error: "Cotação não encontrada para este fornecedor." }, { status: 404 });
+    await db.update(quoteRecipients).set({ status: responseStatus, respondedAt: new Date().toISOString() }).where(eq(quoteRecipients.id, recipient.id));
+    await db.insert(activityEvents).values({ actorUserId: user.userId, supplierId: profile.id, kind: responseStatus === "responded" ? "quote_responded" : "quote_declined" });
+    return Response.json({ ok: true });
+  }
+
+  if (action === "close_quote") {
+    if (profile.role !== "client") return Response.json({ error: "Apenas o cliente pode encerrar a cotação." }, { status: 403 });
+    const quoteId = Number(body.quoteId);
+    const [quote] = await db.select().from(quoteRequests).where(and(eq(quoteRequests.id, quoteId), eq(quoteRequests.clientUserId, user.userId)));
+    if (!quote) return Response.json({ error: "Cotação não encontrada." }, { status: 404 });
+    await db.update(quoteRequests).set({ status: "closed", closedAt: new Date().toISOString() }).where(eq(quoteRequests.id, quoteId));
+    return Response.json({ ok: true });
+  }
+
+  return Response.json({ error: "Ação desconhecida." }, { status: 400 });
+}

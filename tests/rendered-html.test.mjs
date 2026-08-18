@@ -17,5 +17,6 @@ test("renderiza a experiência do Hub Brasil", async () => {
   assert.match(html, /Hub Brasil/);
   assert.match(html, /Encontre quem move/);
   assert.match(html, /Fornecedores/);
+  assert.match(html, /Radar do Setor/);
   assert.doesNotMatch(html, /codex-preview/);
 });
