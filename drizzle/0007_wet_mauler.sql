@@ -86,4 +86,12 @@ ALTER TABLE `leads` ADD `service_states` text;--> statement-breakpoint
 ALTER TABLE `leads` ADD `services` text;--> statement-breakpoint
 ALTER TABLE `leads` ADD `service_mode` text;--> statement-breakpoint
 ALTER TABLE `leads` ADD `serves_nationwide` integer DEFAULT false NOT NULL;--> statement-breakpoint
-ALTER TABLE `leads` ADD `updated_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL;
+ALTER TABLE `leads` ADD `updated_at` text DEFAULT '' NOT NULL;--> statement-breakpoint
+UPDATE `leads` SET `updated_at` = COALESCE(`created_at`, CURRENT_TIMESTAMP) WHERE `updated_at` = '';--> statement-breakpoint
+CREATE TRIGGER `set_leads_updated_at_on_insert`
+AFTER INSERT ON `leads`
+FOR EACH ROW
+WHEN NEW.`updated_at` = ''
+BEGIN
+	UPDATE `leads` SET `updated_at` = CURRENT_TIMESTAMP WHERE `id` = NEW.`id`;
+END;
