@@ -1,17 +1,20 @@
-import { and, desc, eq, or } from "drizzle-orm";
+import { and, desc, eq, or, sql } from "drizzle-orm";
 import { env } from "cloudflare:workers";
 import { getDb } from "../../../db";
-import { leads, products } from "../../../db/schema";
+import { highlightActivations, leads, products } from "../../../db/schema";
 import { getApiUser } from "../../admin-auth";
 
 export async function GET() {
   try {
     const user = await getApiUser();
     const [viewer] = user ? await getDb().select({ id: leads.id }).from(leads).where(and(eq(leads.authUserId, user.userId), eq(leads.status, "approved"))) : [];
-    const rows = await getDb().select({ id: products.id, supplierName: products.supplierName, name: products.name, category: products.category, technicalDetails: products.technicalDetails, averagePrice: products.averagePrice, imageKey: products.imageKey }).from(products).where(eq(products.status, "approved")).orderBy(desc(products.createdAt));
+    const db = getDb();
+    const rows = await db.select({ id: products.id, supplierName: products.supplierName, name: products.name, category: products.category, technicalDetails: products.technicalDetails, averagePrice: products.averagePrice, imageKey: products.imageKey }).from(products).where(eq(products.status, "approved")).orderBy(desc(products.createdAt));
+    const highlights = await db.select({ productId: highlightActivations.productId }).from(highlightActivations).where(and(eq(highlightActivations.placement,"product"),eq(highlightActivations.status,"active"),sql`${highlightActivations.endsAt} > ${new Date().toISOString()}`));
+    const highlighted = new Set(highlights.map((item)=>item.productId));
     const visibleProducts = await Promise.all(rows.map(async (item) => {
       const [supplier] = viewer ? await getDb().select({ id: leads.id, phone: leads.phone }).from(leads).where(and(or(eq(leads.company, item.supplierName), eq(leads.name, item.supplierName)), eq(leads.role, "supplier"), eq(leads.status, "approved"))) : [];
-      return { id: item.id, supplierId: viewer ? supplier?.id || null : null, supplierName: viewer ? item.supplierName : "Fornecedor protegido", supplierPhone: viewer ? supplier?.phone || null : null, name: item.name, category: item.category, technicalDetails: viewer ? item.technicalDetails : "", imageUrl: item.imageKey ? `/api/product-images?key=${encodeURIComponent(item.imageKey)}` : null };
+      return { id: item.id, supplierId: viewer ? supplier?.id || null : null, supplierName: viewer ? item.supplierName : "Fornecedor protegido", supplierPhone: viewer ? supplier?.phone || null : null, name: item.name, category: item.category, technicalDetails: viewer ? item.technicalDetails : "", highlighted: highlighted.has(item.id), imageUrl: item.imageKey ? `/api/product-images?key=${encodeURIComponent(item.imageKey)}` : null };
     }));
     return Response.json({ products: visibleProducts });
   } catch { return Response.json({ products: [] }); }

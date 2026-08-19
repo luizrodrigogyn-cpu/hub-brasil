@@ -1,8 +1,9 @@
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { getDb } from "../../../../db";
-import { contentReports, deletionRequests, leads, marketNeeds, moderationAudit, products, sectorNews, supplierEvents, supplierUpdates, technicalArticles } from "../../../../db/schema";
+import { contentReports, creditLedger, creditWallets, deletionRequests, highlightActivations, leads, marketNeeds, moderationAudit, products, sectorNews, supplierEvents, supplierUpdates, technicalArticles } from "../../../../db/schema";
 import { getChatGPTUser } from "../../../chatgpt-auth";
 import { isAdminEmail } from "../../../admin-auth";
+import { assignFounderMember, awardCredit, ensureReferralCode, qualifyReferralIfReady, recomputeHubScore } from "../../../hub-credits";
 
 async function authorized() { const user = await getChatGPTUser(); return user && isAdminEmail(user.email); }
 
@@ -21,7 +22,8 @@ export async function GET() {
     db.select().from(deletionRequests).orderBy(desc(deletionRequests.requestedAt)),
     db.select().from(moderationAudit).orderBy(desc(moderationAudit.createdAt)).limit(50),
   ]);
-  return Response.json({ suppliers, products: productRows, events, needs, updates, articles, news, reports, deletions, audit });
+  const [wallets, credits, highlights] = await Promise.all([db.select().from(creditWallets), db.select().from(creditLedger).orderBy(desc(creditLedger.createdAt)).limit(100), db.select().from(highlightActivations).orderBy(desc(highlightActivations.createdAt)).limit(100)]);
+  return Response.json({ suppliers, products: productRows, events, needs, updates, articles, news, reports, deletions, audit, wallets, credits, highlights });
 }
 
 export async function POST(request: Request) {
@@ -31,15 +33,16 @@ export async function POST(request: Request) {
   if (!body.entity || !body.action || (!["create_article", "create_news"].includes(body.action) && !body.id)) return Response.json({ error: "Ação inválida." }, { status: 400 });
   const db = getDb();
   if (body.entity === "supplier") {
-    if (body.action === "verify_phone") await db.update(leads).set({ phoneVerifiedAt: new Date().toISOString() }).where(eq(leads.id, body.id));
-    else if (body.action === "grant_verified") { const [supplier] = await db.select().from(leads).where(eq(leads.id, body.id)); if (!supplier?.phoneVerifiedAt || supplier.status !== "approved") return Response.json({ error: "Aprove e valide o telefone antes de conceder o selo." }, { status: 400 }); await db.update(leads).set({ verificationStatus: "verified", verifiedAt: new Date().toISOString() }).where(eq(leads.id, body.id)); }
+    if (body.action === "verify_phone") { await db.update(leads).set({ phoneVerifiedAt: new Date().toISOString() }).where(eq(leads.id, body.id)); await recomputeHubScore(db, body.id!, "telefone_validado"); }
+    else if (body.action === "confirm_cnpj") await db.update(leads).set({ cnpjValidationStatus: "manually_confirmed" }).where(eq(leads.id, body.id));
+    else if (body.action === "grant_verified") { const [supplier] = await db.select().from(leads).where(eq(leads.id, body.id)); if (!supplier?.phoneVerifiedAt || supplier.status !== "approved") return Response.json({ error: "Aprove e valide o telefone antes de conceder o selo." }, { status: 400 }); await db.update(leads).set({ verificationStatus: "verified", verifiedAt: new Date().toISOString() }).where(eq(leads.id, body.id)); await recomputeHubScore(db,body.id!,"selo_verificado"); }
     else if (body.action === "suspend_verified") await db.update(leads).set({ verificationStatus: "suspended", verifiedAt: null }).where(eq(leads.id, body.id));
-    else if (body.action === "approve") { const [supplier] = await db.select().from(leads).where(eq(leads.id, body.id)); if (!supplier?.phoneVerifiedAt) return Response.json({ error: "Valide o telefone antes de aprovar." }, { status: 400 }); await db.update(leads).set({ status: "approved" }).where(eq(leads.id, body.id)); }
+    else if (body.action === "approve") { const [supplier] = await db.select().from(leads).where(eq(leads.id, body.id)); if (!supplier?.phoneVerifiedAt) return Response.json({ error: "Valide o telefone antes de aprovar." }, { status: 400 }); await db.update(leads).set({ status: "approved" }).where(eq(leads.id, body.id)); await ensureReferralCode(db,body.id!); await awardCredit(db,{supplierId:body.id!,ruleKey:"approved_verified",sourceType:"supplier",sourceId:body.id!,idempotencyKey:`approved-verified:${body.id}`}); await assignFounderMember(db,body.id!); await recomputeHubScore(db,body.id!,"fornecedor_aprovado"); await qualifyReferralIfReady(db,body.id!); }
     else if (body.action === "reject") await db.update(leads).set({ status: "rejected", verificationStatus: "unverified", verifiedAt: null }).where(eq(leads.id, body.id));
     else if (body.action === "edit_company") await db.update(leads).set({ company: String(body.value || "").trim() }).where(eq(leads.id, body.id));
     else if (body.action === "delete") { const [supplier] = await db.select().from(leads).where(eq(leads.id, body.id)); if (supplier?.authUserId) { await db.delete(products).where(eq(products.ownerUserId, supplier.authUserId)); await db.delete(supplierEvents).where(eq(supplierEvents.ownerUserId, supplier.authUserId)); } await db.delete(leads).where(eq(leads.id, body.id)); }
   } else if (body.entity === "product") {
-    if (body.action === "approve") { const [product] = await db.select().from(products).where(eq(products.id, body.id)); const [supplier] = product?.ownerUserId ? await db.select().from(leads).where(eq(leads.authUserId, product.ownerUserId)) : []; if (!supplier || supplier.status !== "approved" || !supplier.phoneVerifiedAt) return Response.json({ error: "O fornecedor ainda não está aprovado." }, { status: 400 }); await db.update(products).set({ status: "approved" }).where(eq(products.id, body.id)); }
+    if (body.action === "approve") { const [product] = await db.select().from(products).where(eq(products.id, body.id)); const [supplier] = product?.ownerUserId ? await db.select().from(leads).where(eq(leads.authUserId, product.ownerUserId)) : []; if (!supplier || supplier.status !== "approved" || !supplier.phoneVerifiedAt) return Response.json({ error: "O fornecedor ainda não está aprovado." }, { status: 400 }); await db.update(products).set({ status: "approved" }).where(eq(products.id, body.id)); await awardCredit(db,{supplierId:supplier.id,ruleKey:"product_approved",sourceType:"product",sourceId:body.id!,idempotencyKey:`product-approved:${body.id}`}); await recomputeHubScore(db,supplier.id,"produto_aprovado"); await qualifyReferralIfReady(db,supplier.id); }
     else if (body.action === "reject") await db.update(products).set({ status: "rejected" }).where(eq(products.id, body.id));
     else if (body.action === "edit_name") await db.update(products).set({ name: String(body.value || "").trim() }).where(eq(products.id, body.id));
     else if (body.action === "delete") await db.delete(products).where(eq(products.id, body.id));
@@ -57,7 +60,7 @@ export async function POST(request: Request) {
     else if (body.action === "reject") await db.update(marketNeeds).set({ status: "rejected" }).where(eq(marketNeeds.id, body.id));
     else if (body.action === "delete") await db.delete(marketNeeds).where(eq(marketNeeds.id, body.id));
   } else if (body.entity === "update") {
-    if (body.action === "approve") await db.update(supplierUpdates).set({ status: "approved", publishedAt: new Date().toISOString() }).where(eq(supplierUpdates.id, body.id));
+    if (body.action === "approve") { const [update] = await db.select().from(supplierUpdates).where(eq(supplierUpdates.id,body.id)); await db.update(supplierUpdates).set({ status: "approved", publishedAt: new Date().toISOString() }).where(eq(supplierUpdates.id, body.id)); if(update){await awardCredit(db,{supplierId:update.supplierId,ruleKey:"update_approved",sourceType:"update",sourceId:body.id!,idempotencyKey:`update-approved:${body.id}`});await qualifyReferralIfReady(db,update.supplierId);} }
     else if (body.action === "reject") await db.update(supplierUpdates).set({ status: "rejected" }).where(eq(supplierUpdates.id, body.id));
     else if (body.action === "delete") await db.delete(supplierUpdates).where(eq(supplierUpdates.id, body.id));
   } else if (body.entity === "article") {
@@ -83,6 +86,13 @@ export async function POST(request: Request) {
     else if (body.action === "reject") await db.update(sectorNews).set({ status: "rejected" }).where(eq(sectorNews.id, body.id));
     else if (body.action === "edit_name") await db.update(sectorNews).set({ title: String(body.value || "").trim() }).where(eq(sectorNews.id, body.id));
     else if (body.action === "delete") await db.delete(sectorNews).where(eq(sectorNews.id, body.id));
+  } else if (body.entity === "credit") {
+    if (body.action === "adjust") {
+      const supplierId = Number(body.id), amount = Number(body.value);
+      if (!Number.isInteger(amount) || !amount) return Response.json({ error: "Informe um ajuste inteiro diferente de zero." }, { status: 400 });
+      await db.insert(creditLedger).values({ supplierId, amount, direction: amount > 0 ? "credit" : "debit", ruleKey: "admin_adjustment", sourceType: "admin", idempotencyKey: `admin-adjust:${supplierId}:${crypto.randomUUID()}`, note: "Ajuste administrativo" });
+      await db.insert(creditWallets).values({ supplierId, availableBalance: amount, totalEarned: Math.max(0, amount), totalUsed: Math.max(0, -amount) }).onConflictDoUpdate({ target: creditWallets.supplierId, set: { availableBalance: sql`${creditWallets.availableBalance} + ${amount}`, totalEarned: sql`${creditWallets.totalEarned} + ${Math.max(0, amount)}`, totalUsed: sql`${creditWallets.totalUsed} + ${Math.max(0, -amount)}`, updatedAt: new Date().toISOString() } });
+    } else if (body.action === "cancel_highlight") await db.update(highlightActivations).set({ status: "cancelled", cancelledAt: new Date().toISOString(), cancelledBy: admin.email, cancelReason: String(body.value || "Cancelado pela gestão") }).where(eq(highlightActivations.id, body.id));
   } else if (body.entity === "deletion") {
     if (body.action === "complete" || body.action === "approve") await db.update(deletionRequests).set({status:"completed",completedAt:new Date().toISOString()}).where(eq(deletionRequests.id,body.id));
     else if (body.action === "reject") await db.update(deletionRequests).set({status:"rejected"}).where(eq(deletionRequests.id,body.id));

@@ -1,7 +1,8 @@
 import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import { getDb } from "../../../db";
-import { activityEvents, alertPreferences, contentReports, deletionRequests, favorites, leads, products, quoteRecipients, quoteRequests, supplierEvents } from "../../../db/schema";
+import { activityEvents, alertPreferences, contentReports, creditLedger, creditWallets, deletionRequests, favorites, highlightActivations, leads, products, quoteRecipients, quoteRequests, referrals, supplierEvents } from "../../../db/schema";
 import { getApiUser } from "../../admin-auth";
+import { activeHighlights, awardCredit, profileCompleteness, qualifyReferralIfReady, recomputeHubScore, ruleFor } from "../../hub-credits";
 
 const allowedFavoriteTypes = new Set(["supplier", "product", "event"]);
 
@@ -22,8 +23,7 @@ export async function GET() {
     db.select().from(quoteRequests).where(eq(quoteRequests.clientUserId, user.userId)).orderBy(desc(quoteRequests.createdAt)).limit(30),
   ]);
   const contactHistory = await db.select({ id: activityEvents.id, supplierId: activityEvents.supplierId, productId: activityEvents.productId, kind: activityEvents.kind, createdAt: activityEvents.createdAt }).from(activityEvents).where(eq(activityEvents.actorUserId, user.userId)).orderBy(desc(activityEvents.createdAt)).limit(80);
-  const profileChecks = [profile.name, profile.phone, profile.company || profile.instagram, profile.category, profile.city, profile.state, profile.description, profile.phoneVerifiedAt, profile.serviceStates || profile.servesNationwide, profile.services];
-  const profileCompleteness = Math.round((profileChecks.filter(Boolean).length / profileChecks.length) * 100);
+  const completeness = profileCompleteness(profile as unknown as Record<string, unknown>);
 
   let supplierMetrics = null;
   let supplierQuotes: unknown[] = [];
@@ -45,14 +45,19 @@ export async function GET() {
     eventIds.length ? db.select({ id: supplierEvents.id, name: supplierEvents.name, city: supplierEvents.city, state: supplierEvents.state, eventDate: supplierEvents.eventDate }).from(supplierEvents).where(inArray(supplierEvents.id, eventIds)) : [],
   ]);
 
+  const [wallet] = profile.role === "supplier" ? await db.select().from(creditWallets).where(eq(creditWallets.supplierId, profile.id)) : [];
+  const ledger = profile.role === "supplier" ? await db.select().from(creditLedger).where(eq(creditLedger.supplierId, profile.id)).orderBy(desc(creditLedger.createdAt)).limit(30) : [];
+  const referralRows = profile.role === "supplier" ? await db.select().from(referrals).where(eq(referrals.referrerSupplierId, profile.id)) : [];
+  const highlights = profile.role === "supplier" ? await activeHighlights(db, profile.id) : [];
   return Response.json({
-    profile: { id: profile.id, name: profile.name, company: profile.company, role: profile.role, status: profile.status, verificationStatus: profile.verificationStatus, verifiedAt: profile.verifiedAt, phoneVerifiedAt: profile.phoneVerifiedAt, completeness: profileCompleteness, serviceStates: JSON.parse(profile.serviceStates || "[]"), services: JSON.parse(profile.services || "[]"), serviceMode: profile.serviceMode, servesNationwide: profile.servesNationwide },
+    profile: { id: profile.id, name: profile.name, company: profile.company, role: profile.role, status: profile.status, verificationStatus: profile.verificationStatus, verifiedAt: profile.verifiedAt, phoneVerifiedAt: profile.phoneVerifiedAt, completeness, hubScore: profile.hubScore, founderMemberAt: profile.founderMemberAt, referralCode: profile.referralCode, serviceStates: JSON.parse(profile.serviceStates || "[]"), services: JSON.parse(profile.services || "[]"), serviceMode: profile.serviceMode, servesNationwide: profile.servesNationwide },
     favorites: { suppliers: savedSuppliers, products: savedProducts, events: savedEvents },
     alerts: alerts[0] ? { ...alerts[0], categories: JSON.parse(alerts[0].categories || "[]"), states: JSON.parse(alerts[0].states || "[]"), contentTypes: JSON.parse(alerts[0].contentTypes || "[]") } : null,
     clientQuotes,
     supplierQuotes,
     supplierMetrics,
     contactHistory,
+    credits: profile.role === "supplier" ? { wallet: wallet || { availableBalance: 0, totalEarned: 0, totalUsed: 0 }, ledger, highlights, referrals: { invited: referralRows.length, registered: referralRows.length, complete: referralRows.filter((item) => ["qualified"].includes(item.status)).length, qualified: referralRows.filter((item) => item.status === "qualified").length } } : null,
   });
 }
 
@@ -91,6 +96,10 @@ export async function POST(request: Request) {
     const services = list(body.services);
     const serviceMode = ["presential", "remote", "both"].includes(String(body.serviceMode)) ? String(body.serviceMode) : "both";
     await db.update(leads).set({ serviceStates: JSON.stringify(serviceStates), services: JSON.stringify(services), serviceMode, servesNationwide: Boolean(body.servesNationwide), updatedAt: new Date().toISOString() }).where(eq(leads.id, profile.id));
+    const [updated] = await db.select().from(leads).where(eq(leads.id, profile.id));
+    if (updated && profileCompleteness(updated as unknown as Record<string, unknown>) >= 80) await awardCredit(db,{supplierId:profile.id,ruleKey:"profile_complete",sourceType:"supplier_profile",sourceId:profile.id,idempotencyKey:`profile-complete:${profile.id}`});
+    await recomputeHubScore(db, profile.id, "perfil_atualizado");
+    await qualifyReferralIfReady(db, profile.id);
     return Response.json({ ok: true });
   }
 
@@ -144,7 +153,27 @@ export async function POST(request: Request) {
     if (!recipient) return Response.json({ error: "Cotação não encontrada para este fornecedor." }, { status: 404 });
     await db.update(quoteRecipients).set({ status: responseStatus, respondedAt: new Date().toISOString() }).where(eq(quoteRecipients.id, recipient.id));
     await db.insert(activityEvents).values({ actorUserId: user.userId, supplierId: profile.id, kind: responseStatus === "responded" ? "quote_responded" : "quote_declined" });
+    if (responseStatus === "responded") { await awardCredit(db,{supplierId:profile.id,ruleKey:"quote_responded",sourceType:"quote_recipient",sourceId:recipient.id,idempotencyKey:`quote-responded:${recipient.id}`}); await recomputeHubScore(db,profile.id,"cotacao_respondida"); await qualifyReferralIfReady(db,profile.id); }
     return Response.json({ ok: true });
+  }
+
+  if (action === "activate_highlight") {
+    if (profile.role !== "supplier" || profile.status !== "approved" || profile.programStatus !== "eligible") return Response.json({ error: "Sua empresa não está elegível para destaques." }, { status: 403 });
+    const placement = String(body.placement || "");
+    const ruleKey = placement === "map" ? "highlight_map" : placement === "search" ? "highlight_search" : placement === "product" ? "highlight_product" : "";
+    const rule = ruleKey ? await ruleFor(db, ruleKey) : null;
+    if (!rule || !rule.active || rule.kind !== "spend" || profile.hubScore < 40) return Response.json({ error: "Destaque indisponível. É necessário Hub Score mínimo de 40 e regra ativa." }, { status: 400 });
+    const [wallet] = await db.select().from(creditWallets).where(eq(creditWallets.supplierId, profile.id));
+    if (!wallet || wallet.availableBalance < rule.amount) return Response.json({ error: "Saldo de Hub Créditos insuficiente." }, { status: 400 });
+    const active = await activeHighlights(db, profile.id);
+    if (active.some((item: { placement: string }) => item.placement === placement)) return Response.json({ error: "Você já possui este destaque ativo." }, { status: 409 });
+    const productId = Number(body.productId) || null;
+    if (placement === "product") { const [product] = await db.select().from(products).where(and(eq(products.id, productId || 0), eq(products.ownerUserId, user.userId), eq(products.status, "approved"))); if (!product) return Response.json({ error: "Selecione um produto aprovado da sua empresa." }, { status: 400 }); }
+    const now = new Date(); const ends = new Date(now.getTime() + 7 * 86400000);
+    const [highlight] = await db.insert(highlightActivations).values({ supplierId: profile.id, productId, placement, state: profile.state, startsAt: now.toISOString(), endsAt: ends.toISOString(), creditCost: rule.amount }).returning();
+    await db.insert(creditLedger).values({ supplierId: profile.id, amount: -rule.amount, direction: "debit", ruleKey, sourceType: "highlight", sourceId: highlight.id, idempotencyKey: `highlight:${highlight.id}`, note: rule.label });
+    await db.update(creditWallets).set({ availableBalance: sql`${creditWallets.availableBalance} - ${rule.amount}`, totalUsed: sql`${creditWallets.totalUsed} + ${rule.amount}`, updatedAt: now.toISOString() }).where(eq(creditWallets.supplierId, profile.id));
+    return Response.json({ ok: true, highlight });
   }
 
   if (action === "close_quote") {

@@ -18,6 +18,14 @@ export const leads = sqliteTable("leads", {
   description: text("description"),
   logoKey: text("logo_key"),
   logoConsentAt: text("logo_consent_at"),
+  cnpj: text("cnpj"),
+  cnpjNormalized: text("cnpj_normalized"),
+  cnpjValidationStatus: text("cnpj_validation_status").notNull().default("not_informed"),
+  hubScore: integer("hub_score").notNull().default(0),
+  hubScoreUpdatedAt: text("hub_score_updated_at"),
+  founderMemberAt: text("founder_member_at"),
+  referralCode: text("referral_code"),
+  programStatus: text("program_status").notNull().default("eligible"),
   consentAt: text("consent_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   consentVersion: text("consent_version").notNull().default("2026-08-14"),
   contactConsent: integer("contact_consent", { mode: "boolean" }).notNull().default(true),
@@ -29,7 +37,101 @@ export const leads = sqliteTable("leads", {
   servesNationwide: integer("serves_nationwide", { mode: "boolean" }).notNull().default(false),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-}, (table) => ({ authUserIdIdx: uniqueIndex("idx_leads_auth_user_id").on(table.authUserId) }));
+}, (table) => ({
+  authUserIdIdx: uniqueIndex("idx_leads_auth_user_id").on(table.authUserId),
+  cnpjIdx: uniqueIndex("idx_leads_cnpj_normalized").on(table.cnpjNormalized),
+  referralCodeIdx: uniqueIndex("idx_leads_referral_code").on(table.referralCode),
+  supplierStateIdx: index("idx_leads_supplier_state").on(table.role, table.status, table.state),
+}));
+
+export const hubScoreSnapshots = sqliteTable("hub_score_snapshots", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  supplierId: integer("supplier_id").notNull().references(() => leads.id),
+  score: integer("score").notNull(),
+  breakdown: text("breakdown").notNull(),
+  reason: text("reason").notNull(),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => ({ supplierCreatedIdx: index("idx_score_supplier_created").on(table.supplierId, table.createdAt) }));
+
+export const creditRules = sqliteTable("credit_rules", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  ruleKey: text("rule_key").notNull(),
+  label: text("label").notNull(),
+  amount: integer("amount").notNull(),
+  active: integer("active", { mode: "boolean" }).notNull().default(true),
+  kind: text("kind").notNull().default("earn"),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => ({ ruleKeyIdx: uniqueIndex("idx_credit_rules_key").on(table.ruleKey) }));
+
+export const hubSettings = sqliteTable("hub_settings", {
+  settingKey: text("setting_key").primaryKey(),
+  value: text("value").notNull(),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const creditWallets = sqliteTable("credit_wallets", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  supplierId: integer("supplier_id").notNull().references(() => leads.id),
+  availableBalance: integer("available_balance").notNull().default(0),
+  totalEarned: integer("total_earned").notNull().default(0),
+  totalUsed: integer("total_used").notNull().default(0),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => ({ supplierIdx: uniqueIndex("idx_credit_wallets_supplier").on(table.supplierId) }));
+
+export const creditLedger = sqliteTable("credit_ledger", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  supplierId: integer("supplier_id").notNull().references(() => leads.id),
+  amount: integer("amount").notNull(),
+  direction: text("direction").notNull(),
+  ruleKey: text("rule_key").notNull(),
+  sourceType: text("source_type").notNull(),
+  sourceId: integer("source_id"),
+  idempotencyKey: text("idempotency_key").notNull(),
+  status: text("status").notNull().default("available"),
+  note: text("note"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  reversedAt: text("reversed_at"),
+  reversedBy: text("reversed_by"),
+  reversalReason: text("reversal_reason"),
+}, (table) => ({
+  idempotencyIdx: uniqueIndex("idx_credit_ledger_idempotency").on(table.idempotencyKey),
+  supplierCreatedIdx: index("idx_credit_ledger_supplier_created").on(table.supplierId, table.createdAt),
+}));
+
+export const referrals = sqliteTable("referrals", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  referrerSupplierId: integer("referrer_supplier_id").notNull().references(() => leads.id),
+  referredSupplierId: integer("referred_supplier_id").notNull().references(() => leads.id),
+  referralCode: text("referral_code").notNull(),
+  status: text("status").notNull().default("registered"),
+  firstUsefulActionAt: text("first_useful_action_at"),
+  qualifiedAt: text("qualified_at"),
+  reviewedAt: text("reviewed_at"),
+  reviewNote: text("review_note"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => ({
+  referredIdx: uniqueIndex("idx_referrals_referred_supplier").on(table.referredSupplierId),
+  referrerStatusIdx: index("idx_referrals_referrer_status").on(table.referrerSupplierId, table.status),
+}));
+
+export const highlightActivations = sqliteTable("highlight_activations", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  supplierId: integer("supplier_id").notNull().references(() => leads.id),
+  productId: integer("product_id"),
+  placement: text("placement").notNull(),
+  state: text("state"),
+  startsAt: text("starts_at").notNull(),
+  endsAt: text("ends_at").notNull(),
+  creditCost: integer("credit_cost").notNull(),
+  status: text("status").notNull().default("active"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  cancelledAt: text("cancelled_at"),
+  cancelledBy: text("cancelled_by"),
+  cancelReason: text("cancel_reason"),
+}, (table) => ({
+  supplierStatusEndsIdx: index("idx_highlights_supplier_status_ends").on(table.supplierId, table.status, table.endsAt),
+  placementStatusIdx: index("idx_highlights_placement_status").on(table.placement, table.status, table.endsAt),
+}));
 
 export const leadEvents = sqliteTable("lead_events", {
   id: integer("id").primaryKey({ autoIncrement: true }),

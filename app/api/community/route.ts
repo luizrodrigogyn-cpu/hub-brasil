@@ -2,6 +2,7 @@ import { and, desc, eq, gt } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { eventInterests, leads, marketNeeds, needInterests, supplierUpdates, technicalArticles } from "../../../db/schema";
 import { getApiUser } from "../../admin-auth";
+import { awardCredit, qualifyReferralIfReady } from "../../hub-credits";
 
 export async function GET() {
   const user = await getApiUser();
@@ -40,6 +41,8 @@ export async function POST(request: Request) {
     if (profile.role !== "supplier" || profile.verificationStatus !== "verified") return Response.json({ error: "Somente fornecedores verificados podem manifestar interesse." }, { status: 403 });
     const needId = Number(body.needId); if (!Number.isInteger(needId)) return Response.json({ error: "Demanda inválida." }, { status: 400 });
     await db.insert(needInterests).values({ needId, supplierId: profile.id, message: String(body.message || "").trim().slice(0, 800) || null }).onConflictDoUpdate({ target: [needInterests.needId, needInterests.supplierId], set: { message: String(body.message || "").trim().slice(0, 800) || null, status: "interested" } });
+    const [interest] = await db.select().from(needInterests).where(and(eq(needInterests.needId,needId),eq(needInterests.supplierId,profile.id)));
+    if (interest) { await awardCredit(db,{supplierId:profile.id,ruleKey:"need_interest",sourceType:"need_interest",sourceId:interest.id,idempotencyKey:`need-interest:${interest.id}`}); await qualifyReferralIfReady(db,profile.id); }
     return Response.json({ ok: true }, { status: 201 });
   }
   if (action === "create_update") {
