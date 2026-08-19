@@ -7,6 +7,7 @@ type Supplier = {
   name: string;
   initials: string;
   category: string;
+  categories?: string[];
   city: string;
   state: string;
   description: string;
@@ -138,7 +139,7 @@ export default function Home() {
 
   const filtered = useMemo(() => suppliers.filter((supplier) => {
     const matchesQuery = `${supplier.name} ${supplier.city} ${supplier.state}`.toLowerCase().includes(query.toLowerCase());
-    const matchesCategory = category === "Todas as categorias" || displayCategory(supplier.category) === category;
+    const matchesCategory = category === "Todas as categorias" || (supplier.categories || [supplier.category]).some((item) => displayCategory(item) === category);
     const matchesState = stateFilter === "Todo o Brasil" || supplier.state === stateFilter;
     return matchesQuery && matchesCategory && matchesState;
   }), [query, category, stateFilter]);
@@ -175,6 +176,7 @@ export default function Home() {
     const form = new FormData(event.currentTarget);
     const logo = form.get("logo");
     const payload = Object.fromEntries([...form.entries()].filter(([key]) => key !== "logo")) as Record<string, FormDataEntryValue>;
+    payload.categories = JSON.stringify(form.getAll("categories"));
     if (referralCode) payload.referralCode = referralCode;
     try {
       const response = await fetch("/api/leads", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
@@ -478,7 +480,7 @@ export default function Home() {
               <label>Telefone / WhatsApp<input name="phone" required inputMode="tel" placeholder="(00) 00000-0000" /></label>
               <div className="or"><span></span>Informe um dos dois<span></span></div>
               <div className="field-row"><label>Empresa<input name="company" required={registrationRole === "supplier"} placeholder="Nome da empresa" /></label><label>Instagram<input name="instagram" placeholder="@suaempresa" /></label></div>
-              {registrationRole === "supplier" && <><label>CNPJ<input name="cnpj" required inputMode="numeric" placeholder="00.000.000/0000-00" /><small>Validamos apenas os dígitos; a confirmação empresarial é feita pela gestão.</small></label>{referralCode && <p className="commercial-notice">Você foi indicado por uma empresa parceira do Hub Brasil.</p>}<label>Categoria principal<select name="category" required><option value="">Selecione</option>{solutionCategories.map((item) => <option key={item.name}>{item.name}</option>)}</select></label><div className="field-row"><label>Cidade<input name="city" required placeholder="Cidade da sede" /></label><label>Estado<select name="state" required><option value="">UF</option>{["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"].map((state) => <option key={state}>{state}</option>)}</select></label></div><label>Apresentação da empresa<textarea name="description" rows={3} placeholder="Especialidades, diferenciais e região atendida" /></label><label>Logo da empresa <small>PNG, JPG ou WebP, até 3 MB</small><input name="logo" type="file" accept="image/png,image/jpeg,image/webp" /></label><label className="consent logo-consent"><input name="logoConsent" type="checkbox" required /> <span>Declaro que possuo autorização para utilizar e divulgar esta marca/logotipo no Hub Brasil e autorizo sua exibição no perfil público, diretório e mapa da plataforma.</span></label></>}
+              {registrationRole === "supplier" && <><label>CNPJ<input name="cnpj" required inputMode="numeric" placeholder="00.000.000/0000-00" /><small>Validamos apenas os dígitos; a confirmação empresarial é feita pela gestão.</small></label>{referralCode && <p className="commercial-notice">Você foi indicado por uma empresa parceira do Hub Brasil.</p>}<label>Categoria principal<select name="category" required><option value="">Selecione</option>{solutionCategories.map((item) => <option key={item.name}>{item.name}</option>)}</select></label><fieldset className="solution-selector"><legend>Soluções oferecidas <small>Selecione uma ou mais</small></legend>{solutionCategories.map((item) => <label className="check" key={item.name}><input name="categories" type="checkbox" value={item.name} /> {item.title}</label>)}</fieldset><div className="field-row"><label>Cidade<input name="city" required placeholder="Cidade da sede" /></label><label>Estado<select name="state" required><option value="">UF</option>{["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"].map((state) => <option key={state}>{state}</option>)}</select></label></div><label>Apresentação da empresa<textarea name="description" rows={3} placeholder="Especialidades, diferenciais e região atendida" /></label><label>Logo da empresa <small>PNG, JPG ou WebP, até 3 MB</small><input name="logo" type="file" accept="image/png,image/jpeg,image/webp" /></label><label className="consent logo-consent"><input name="logoConsent" type="checkbox" required /> <span>Declaro que possuo autorização para utilizar e divulgar esta marca/logotipo no Hub Brasil e autorizo sua exibição no perfil público, diretório e mapa da plataforma.</span></label></>}
               <label className="consent"><input type="checkbox" required /> <span>Li e concordo com a <a href="/privacidade" target="_blank">Política de Privacidade</a> e os <a href="/termos" target="_blank">Termos de Uso</a>.</span></label>
               <button className="primary full" type="submit">{registrationRole === "supplier" ? "Criar perfil da empresa" : "Liberar meu acesso"} <span>→</span></button>
             </form>

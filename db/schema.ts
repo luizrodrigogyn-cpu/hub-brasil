@@ -13,6 +13,7 @@ export const leads = sqliteTable("leads", {
   status: text("status").notNull().default("pending"),
   phoneVerifiedAt: text("phone_verified_at"),
   category: text("category"),
+  categories: text("categories"),
   city: text("city"),
   state: text("state"),
   description: text("description"),
