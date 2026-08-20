@@ -12,7 +12,7 @@ function list(value: unknown) {
 
 export async function GET() {
   const user = await getApiUser();
-  if (!user) return Response.json({ error: "Faça login para acessar a área de testes.", signIn: "/signin-with-chatgpt?return_to=/area-testes" }, { status: 401 });
+  if (!user) return Response.json({ error: "Faça login para acessar a área de testes.", signIn: "/sign-in?return_to=/area-testes" }, { status: 401 });
   const db = getDb();
   const [profile] = await db.select().from(leads).where(eq(leads.authUserId, user.userId));
   if (!profile) return Response.json({ error: "Conclua seu cadastro no Hub antes de acessar os testes." }, { status: 403 });
@@ -63,7 +63,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   const user = await getApiUser();
-  if (!user) return Response.json({ error: "Faça login para continuar.", signIn: "/signin-with-chatgpt?return_to=/area-testes" }, { status: 401 });
+  if (!user) return Response.json({ error: "Faça login para continuar.", signIn: "/sign-in?return_to=/area-testes" }, { status: 401 });
   const db = getDb();
   const [profile] = await db.select().from(leads).where(eq(leads.authUserId, user.userId));
   if (!profile || profile.status !== "approved") return Response.json({ error: "Seu cadastro precisa estar aprovado." }, { status: 403 });

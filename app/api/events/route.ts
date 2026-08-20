@@ -11,7 +11,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const user = await getApiUser();
-    if (!user) return Response.json({ error: "Faça login para publicar.", signIn: "/signin-with-chatgpt?return_to=/" }, { status: 401 });
+    if (!user) return Response.json({ error: "Faça login para publicar.", signIn: "/sign-in?return_to=/" }, { status: 401 });
     const [supplier] = await getDb().select().from(leads).where(and(eq(leads.authUserId, user.userId), eq(leads.role, "supplier")));
     if (!supplier || supplier.status !== "approved" || !supplier.phoneVerifiedAt) return Response.json({ error: "Seu fornecedor precisa ter telefone validado e cadastro aprovado pelo gestor." }, { status: 403 });
     const body = await request.json() as Record<string, string>;

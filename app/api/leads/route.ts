@@ -7,7 +7,7 @@ import { eq } from "drizzle-orm";
 export async function POST(request: Request) {
   try {
     const user = await getApiUser();
-    if (!user) return Response.json({ error: "Faça login para continuar.", signIn: "/signin-with-chatgpt?return_to=/" }, { status: 401 });
+    if (!user) return Response.json({ error: "Faça login para continuar.", signIn: "/sign-in?return_to=/" }, { status: 401 });
     const body = await request.json() as Record<string, string>;
     const name = body.name?.trim();
     const phone = body.phone?.trim();

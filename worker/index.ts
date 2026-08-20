@@ -7,6 +7,9 @@ interface Env {
   DB: D1Database;
   PRODUCT_IMAGES: R2Bucket;
   ADMIN_EMAILS: string;
+  CLERK_PUBLISHABLE_KEY: string;
+  CLERK_SECRET_KEY: string;
+  CLERK_AUTHORIZED_PARTIES: string;
   IMAGES: {
     input(stream: ReadableStream): {
       transform(options: Record<string, unknown>): {

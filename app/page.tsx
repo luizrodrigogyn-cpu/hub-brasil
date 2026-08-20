@@ -315,7 +315,7 @@ export default function Home() {
         <div className="top-actions">
           {registered && <a className="admin-link" href="/area-testes">Área de testes</a>}
           <a className="admin-link" href="/admin">Ver cadastros</a>
-          {registered ? <span className="access-chip"><i></i>Acesso liberado</span> : <button className="text-action" onClick={() => setRegisterOpen(true)}>Entrar</button>}
+          {registered ? <span className="access-chip"><i></i>Acesso liberado</span> : <a className="text-action" href="/sign-in?return_to=/">Entrar</a>}
           {userRole === "supplier" && <button className="text-action" onClick={() => setView("supplier-dashboard")}>Minha empresa</button>}
           <button className="primary small" onClick={() => openRegistration("supplier")}>Para fornecedores</button>
         </div>
@@ -457,7 +457,7 @@ export default function Home() {
                 <li><i>✓</i> Conheça produtos e novas tecnologias</li>
                 <li><i>✓</i> Faça conexões comerciais de confiança</li>
               </ul>
-              <button className="primary welcome-cta" onClick={() => { setWelcomeOpen(false); setSelectedSupplier(null); setRegisterOpen(true); }}>Quero acessar <span>→</span></button>
+              <a className="primary welcome-cta" href="/sign-in?return_to=/">Quero acessar <span>→</span></a>
               <button className="welcome-later" onClick={() => setWelcomeOpen(false)}>Explorar primeiro</button>
               <small>Cadastro rápido. Informe apenas seu nome, telefone e empresa ou Instagram.</small>
             </div>
