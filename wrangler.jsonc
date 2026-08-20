@@ -4,6 +4,7 @@
   "main": "./worker/index.ts",
   "compatibility_date": "2026-08-20",
   "compatibility_flags": ["nodejs_compat"],
+  // Clerk values are supplied by the Cloudflare build deployment command.
   "assets": {
     "directory": "./dist/client",
     "binding": "ASSETS"
