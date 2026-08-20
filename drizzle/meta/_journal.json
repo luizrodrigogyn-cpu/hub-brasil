@@ -1,0 +1,104 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1786638953576,
+      "tag": "0000_overconfident_pet_avengers",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1786642488350,
+      "tag": "0001_woozy_newton_destine",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1786643966696,
+      "tag": "0002_normal_owl",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1786647811934,
+      "tag": "0003_white_roxanne_simpson",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1786649138556,
+      "tag": "0004_dazzling_malice",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1786649346568,
+      "tag": "0005_wealthy_mongoose",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1786650600000,
+      "tag": "0006_seed_verified_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1786740022494,
+      "tag": "0007_wet_mauler",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1786740533652,
+      "tag": "0008_serious_newton_destine",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1786740954248,
+      "tag": "0009_curious_captain_britain",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1786999310483,
+      "tag": "0010_organic_matthew_murdock",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1787082707913,
+      "tag": "0011_curvy_wildside",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1787150745438,
+      "tag": "0012_ambitious_sheva_callister",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1787152353531,
+      "tag": "0013_greedy_misty_knight",
+      "breakpoints": true
+    }
+  ]
+}
