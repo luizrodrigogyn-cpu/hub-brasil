@@ -9,6 +9,8 @@ interface Env {
   ADMIN_EMAILS: string;
   CLERK_PUBLISHABLE_KEY: string;
   CLERK_SECRET_KEY: string;
+  CLERK_DEVELOPMENT_PUBLISHABLE_KEY: string;
+  CLERK_DEVELOPMENT_SECRET_KEY: string;
   CLERK_AUTHORIZED_PARTIES: string;
   IMAGES: {
     input(stream: ReadableStream): {
@@ -24,17 +26,28 @@ interface ExecutionContext {
   passThroughOnException(): void;
 }
 
+function isPreviewHost(hostname: string) {
+  return hostname.endsWith(".workers.dev");
+}
+
 const worker = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 
-    // The Clerk publishable key is intentionally public. Serving it from the
-    // Worker ensures the client receives the active runtime value, while the
-    // Clerk secret remains available only to server-side code.
+    // A production Clerk key is intentionally scoped to hub.niviontech.com.br.
+    // The workers.dev deployment uses Clerk's separate development instance so
+    // it remains a safe, fully working test environment before DNS is ready.
     if (url.pathname === "/hb-init") {
-      const publishableKey = String(env.CLERK_PUBLISHABLE_KEY || "");
+      const publishableKey = String(
+        isPreviewHost(url.hostname)
+          ? env.CLERK_DEVELOPMENT_PUBLISHABLE_KEY || ""
+          : env.CLERK_PUBLISHABLE_KEY || "",
+      );
       if (!publishableKey.startsWith("pk_")) {
-        return Response.json({ error: "Autenticação indisponível" }, { status: 503, headers: { "cache-control": "no-store" } });
+        return Response.json(
+          { error: "Autenticação indisponível" },
+          { status: 503, headers: { "cache-control": "no-store" } },
+        );
       }
       return Response.json({ publishableKey }, { headers: { "cache-control": "no-store" } });
     }
