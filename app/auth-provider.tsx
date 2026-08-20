@@ -14,7 +14,7 @@ export default function AuthProvider({ children, publishableKey }: { children: R
   useEffect(() => {
     if (key) return;
     let active = true;
-    fetch("/api/auth/config", { cache: "no-store" })
+    fetch("/hub-client-config", { cache: "no-store" })
       .then((response) => response.ok ? response.json() : null)
       .then((payload: { publishableKey?: string } | null) => {
         if (active && usableKey(payload?.publishableKey)) setKey(payload!.publishableKey!);
