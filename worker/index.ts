@@ -31,7 +31,7 @@ const worker = {
     // The Clerk publishable key is intentionally public. Serving it from the
     // Worker ensures the client receives the active runtime value, while the
     // Clerk secret remains available only to server-side code.
-    if (url.pathname === "/hub-client-config") {
+    if (url.pathname === "/hb-init") {
       const publishableKey = String(env.CLERK_PUBLISHABLE_KEY || "");
       if (!publishableKey.startsWith("pk_")) {
         return Response.json({ error: "Autenticação indisponível" }, { status: 503, headers: { "cache-control": "no-store" } });
