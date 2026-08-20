@@ -7,7 +7,10 @@
   // Clerk values are supplied by the Cloudflare build deployment command.
   "assets": {
     "directory": "./dist/client",
-    "binding": "ASSETS"
+    "binding": "ASSETS",
+    // This lightweight route must be handled by the Worker before the
+    // single-page-app fallback, so Clerk can initialize in the browser.
+    "run_worker_first": ["/hub-client-config"]
   },
   "d1_databases": [
     {
