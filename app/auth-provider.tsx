@@ -1,5 +1,6 @@
 "use client";
 
+import { ptBR } from "@clerk/localizations/pt-BR";
 import { ClerkProvider } from "@clerk/react";
 import { useEffect, useState } from "react";
 
@@ -28,5 +29,5 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     </div>;
   }
 
-  return <ClerkProvider publishableKey={key}>{children}</ClerkProvider>;
+  return <ClerkProvider publishableKey={key} localization={ptBR}>{children}</ClerkProvider>;
 }
