@@ -24,15 +24,20 @@ interface ExecutionContext {
   passThroughOnException(): void;
 }
 
-// Image security config. SVG sources with .svg extension auto-skip the
-// optimization endpoint on the client side (served directly, no proxy).
-// To route SVGs through the optimizer (with security headers), set
-// dangerouslyAllowSVG: true in next.config.js and uncomment below:
-// const imageConfig: ImageConfig = { dangerouslyAllowSVG: true };
-
 const worker = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
+
+    // The Clerk publishable key is intentionally public. Serving it from the
+    // Worker ensures the client receives the active runtime value, while the
+    // Clerk secret remains available only to server-side code.
+    if (url.pathname === "/api/auth/config") {
+      const publishableKey = String(env.CLERK_PUBLISHABLE_KEY || "");
+      if (!publishableKey.startsWith("pk_")) {
+        return Response.json({ error: "Autenticação indisponível" }, { status: 503, headers: { "cache-control": "no-store" } });
+      }
+      return Response.json({ publishableKey }, { headers: { "cache-control": "no-store" } });
+    }
 
     if (url.pathname === "/_vinext/image") {
       const allowedWidths = [...DEFAULT_DEVICE_SIZES, ...DEFAULT_IMAGE_SIZES];
