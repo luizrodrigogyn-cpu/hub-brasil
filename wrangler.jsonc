@@ -10,7 +10,7 @@
     "binding": "ASSETS",
     // This lightweight route must be handled by the Worker before the
     // single-page-app fallback, so Clerk can initialize in the browser.
-    "run_worker_first": ["/hub-client-config"]
+    "run_worker_first": ["/hb-init"]
   },
   "d1_databases": [
     {
