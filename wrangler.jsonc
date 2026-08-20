@@ -20,9 +20,5 @@
       "binding": "PRODUCT_IMAGES",
       "bucket_name": "hub-brasil-product-images"
     }
-  ],
-  "vars": {
-    "CLERK_PUBLISHABLE_KEY": "SET_IN_CLOUDFLARE_DASHBOARD",
-    "CLERK_AUTHORIZED_PARTIES": "https://hub.niviontech.com.br"
-  }
+  ]
 }
