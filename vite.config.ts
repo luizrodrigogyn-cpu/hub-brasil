@@ -4,24 +4,6 @@ import { defineConfig } from "vite";
 // macOS Seatbelt blocks FSEvents, so Codex previews need polling for HMR.
 const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
 
-const localBindingConfig = {
-  main: "./worker/index.ts",
-  compatibility_flags: ["nodejs_compat"],
-  d1_databases: [
-    {
-      binding: "DB",
-      database_name: "hub-brasil-db",
-      database_id: "eb7006e4-4c90-4bb6-ae79-14e78fbf30a1",
-    },
-  ],
-  r2_buckets: [
-    {
-      binding: "PRODUCT_IMAGES",
-      bucket_name: "hub-brasil-product-images",
-    },
-  ],
-};
-
 export default defineConfig(async () => {
   // Keep Wrangler and Miniflare state project-local. These are non-secret tool
   // settings; application environment belongs in ignored `.env*` files.
@@ -40,7 +22,6 @@ export default defineConfig(async () => {
       vinext(),
       cloudflare({
         viteEnvironment: { name: "rsc", childEnvironments: ["ssr"] },
-        config: localBindingConfig,
       }),
     ],
   };
