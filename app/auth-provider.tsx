@@ -7,12 +7,11 @@ function usableKey(value?: string | null) {
   return Boolean(value && value.startsWith("pk_"));
 }
 
-export default function AuthProvider({ children, publishableKey }: { children: React.ReactNode; publishableKey?: string }) {
-  const [key, setKey] = useState(() => usableKey(publishableKey) ? publishableKey : null);
-  const [ready, setReady] = useState(() => usableKey(publishableKey));
+export default function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [key, setKey] = useState<string | null>(null);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    if (key) return;
     let active = true;
     fetch("/hb-init", { cache: "no-store" })
       .then((response) => response.ok ? response.json() : null)
@@ -21,7 +20,7 @@ export default function AuthProvider({ children, publishableKey }: { children: R
       })
       .finally(() => { if (active) setReady(true); });
     return () => { active = false; };
-  }, [key]);
+  }, []);
 
   if (!key) {
     return <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: "#071326", color: "#eaf2ff", fontFamily: "system-ui, sans-serif" }}>
