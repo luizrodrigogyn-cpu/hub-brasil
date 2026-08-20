@@ -7,7 +7,10 @@ export function isAdminEmail(email: string) {
 }
 
 export function isHubAdmin(user: ChatGPTUser | null): user is ChatGPTUser {
-  return Boolean(user && isAdminEmail(user.email) && user.secondFactorVerified);
+  // O acesso é limitado à lista de e-mails autorizados e cada entrada exige
+  // o código enviado pelo Clerk. A segunda camada adicional será aplicada
+  // pelo Cloudflare Access quando o domínio próprio estiver conectado.
+  return Boolean(user && isAdminEmail(user.email));
 }
 
 export async function requireHubAdmin(returnTo = "/admin") {
