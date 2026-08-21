@@ -93,6 +93,7 @@ export default function Home() {
   const [news, setNews] = useState<SectorNews[]>([]);
   const [newsCategory, setNewsCategory] = useState("Todos");
   const [referralCode, setReferralCode] = useState("");
+  const [previewMode, setPreviewMode] = useState<"client" | "supplier" | null>(null);
 
   async function refreshSuppliers() {
     try { const response = await fetch("/api/suppliers"); const data = await response.json(); setSuppliers((data.suppliers || []).map((item: Supplier) => ({ ...item, initials: item.name.split(/\s+/).slice(0,2).map((part) => part[0]).join("").toUpperCase(), description: item.description || "Fornecedor aprovado no Hub Brasil.", accent: "blue" }))); } catch {}
@@ -104,8 +105,21 @@ export default function Home() {
 
   useEffect(() => {
     const timer = window.setTimeout(() => setWelcomeOpen(true), 900);
-    const requestedRole = new URLSearchParams(window.location.search).get("cadastro");
-    const referredBy = new URLSearchParams(window.location.search).get("indicado");
+    const search = new URLSearchParams(window.location.search);
+    const requestedRole = search.get("cadastro");
+    const referredBy = search.get("indicado");
+    const requestedPreview = search.get("visao");
+    if (requestedPreview === "usuario" || requestedPreview === "fornecedor") {
+      const role = requestedPreview === "fornecedor" ? "supplier" : "client";
+      setPreviewMode(role);
+      setRegistered(true);
+      setUserRole(role);
+      setWelcomeOpen(false);
+      if (role === "supplier") {
+        setSupplierCompany("Visualização do fornecedor");
+        setView("supplier-dashboard");
+      }
+    }
     if (referredBy) setReferralCode(referredBy.toUpperCase().slice(0, 80));
     if (requestedRole === "fornecedor" || requestedRole === "cliente" || requestedRole === "acessar") {
       if (requestedRole === "fornecedor" || requestedRole === "cliente") setRegistrationRole(requestedRole === "fornecedor" ? "supplier" : "client");
@@ -117,7 +131,21 @@ export default function Home() {
     refreshSuppliers();
     fetch("/api/news").then((response) => response.json()).then((data) => setNews(data.news || [])).catch(() => {});
     fetch("/api/events").then((response) => response.json()).then((data) => setEvents((data.events || []).map((item: Record<string, string | number>) => { const [x,y] = mapPoint(String(item.state)); const date = new Date(`${item.eventDate}T12:00:00`); return { id: Number(item.id), name: String(item.name), supplier: String(item.supplierName || "Fornecedor aprovado"), venue: String(item.venue), city: String(item.city), state: String(item.state), date: String(item.eventDate), displayDate: date.toLocaleDateString("pt-BR", { day:"2-digit", month:"short", year:"numeric" }).toUpperCase().replace(".", ""), link: String(item.registrationUrl), x, y }; }))).catch(() => {});
-    fetch("/api/me").then((response) => response.json()).then((data) => { if (data.profile) { setRegistered(true); setUserRole(data.profile.role); setSupplierCompany(data.profile.company || ""); setSupplierApproved(data.profile.status === "approved" && Boolean(data.profile.phoneVerifiedAt)); setWelcomeOpen(false); refreshSuppliers(); refreshProducts(); } }).catch(() => {});
+    fetch("/api/me").then((response) => response.json()).then((data) => {
+      if (data.isAdmin && !requestedPreview) {
+        window.location.replace("/admin");
+        return;
+      }
+      if (data.profile) {
+        setRegistered(true);
+        setUserRole(data.profile.role);
+        setSupplierCompany(data.profile.company || "");
+        setSupplierApproved(data.profile.status === "approved" && Boolean(data.profile.phoneVerifiedAt));
+        setWelcomeOpen(false);
+        refreshSuppliers();
+        refreshProducts();
+      }
+    }).catch(() => {});
     return () => window.clearTimeout(timer);
   }, []);
 
@@ -258,6 +286,11 @@ export default function Home() {
   }
 
   function openEventForm() {
+    if (previewMode) {
+      setToast("Modo de visualização: cadastros estão desativados.");
+      window.setTimeout(() => setToast(""), 3000);
+      return;
+    }
     if (userRole !== "supplier") {
       setRegistrationRole("supplier");
       setRegisterOpen(true);
@@ -422,7 +455,7 @@ export default function Home() {
 
         {view === "news" && <section className="news-page"><div className="news-hero"><div><span className="eyebrow">INFORMAÇÃO PARA QUEM MOVE O MERCADO</span><h1>Radar do Setor</h1><p>Notícias selecionadas sobre rastreamento veicular, telecomunicações, conectividade, tecnologia e mercado automotivo.</p></div><div className="news-radar-mark" aria-hidden="true"><span></span><i></i></div></div><div className="news-trust"><strong>Curadoria com fonte identificada</strong><span>O Hub publica somente resumos e direciona você para a matéria original. Todo conteúdo passa por aprovação.</span></div><div className="news-filters" aria-label="Filtrar notícias por categoria">{newsCategories.map((item) => <button key={item} className={newsCategory === item ? "active" : ""} onClick={() => setNewsCategory(item)}>{item}</button>)}</div>{filteredNews.length === 0 ? <div className="events-empty news-empty"><strong>O Radar está pronto para receber notícias reais</strong><p>As primeiras publicações aparecerão aqui após a conferência da fonte e aprovação da gestão.</p><a className="event-create" href="/admin">Acessar gestão do Radar</a></div> : <div className="news-grid">{filteredNews.map((item, index) => <article className={`news-card ${index === 0 ? "featured" : ""}`} key={item.id}>{item.imageUrl ? <div className="news-image"><img src={item.imageUrl} alt="" /></div> : <div className="news-image news-image-placeholder"><span>RADAR</span><i></i></div>}<div className="news-card-copy"><div className="news-meta"><span>{item.category}</span><time dateTime={item.publishedAt}>{new Date(`${item.publishedAt}T12:00:00`).toLocaleDateString("pt-BR")}</time></div><h2>{item.title}</h2><p>{item.summary}</p><div className="news-source"><small>Fonte: {item.sourceName}</small><a href={item.sourceUrl} target="_blank" rel="noreferrer">Ler notícia completa →</a></div></div></article>)}</div>}</section>}
 
-        {view === "supplier-dashboard" && <section className="supplier-dashboard"><div className="page-heading"><div><span className="eyebrow">PERFIL EMPRESA</span><h1>{supplierCompany || "Minha empresa"}</h1><p>Gerencie produtos, informações técnicas, fotos e eventos.</p></div></div>{!supplierApproved && <div className="approval-banner"><strong>Cadastro em análise</strong><span>O gestor precisa validar seu telefone e aprovar sua empresa antes da primeira publicação.</span></div>}<div className="management-grid"><button disabled={!supplierApproved} onClick={() => setProductFormOpen(true)}><span>▣</span><strong>Cadastrar produto</strong><small>{supplierApproved ? "Foto, categoria, especificações, aplicação e diferenciais" : "Disponível após aprovação"}</small></button><button disabled={!supplierApproved} onClick={() => setEventFormOpen(true)}><span>★</span><strong>Cadastrar evento</strong><small>{supplierApproved ? "Local, data e link de inscrição" : "Disponível após aprovação"}</small></button><button onClick={() => setView("products")}><span>⌕</span><strong>Ver produtos publicados</strong><small>Acompanhe o catálogo aprovado</small></button></div></section>}
+        {view === "supplier-dashboard" && <section className="supplier-dashboard"><div className="page-heading"><div><span className="eyebrow">PERFIL EMPRESA</span><h1>{supplierCompany || "Minha empresa"}</h1><p>Gerencie produtos, informações técnicas, fotos e eventos.</p></div></div>{previewMode === "supplier" ? <div className="approval-banner"><strong>Modo de visualização</strong><span>Você está vendo a experiência do fornecedor. Cadastros estão desativados nesta visualização.</span></div> : !supplierApproved && <div className="approval-banner"><strong>Cadastro em análise</strong><span>O gestor precisa validar seu telefone e aprovar sua empresa antes da primeira publicação.</span></div>}<div className="management-grid"><button disabled={!supplierApproved || Boolean(previewMode)} onClick={() => setProductFormOpen(true)}><span>▣</span><strong>Cadastrar produto</strong><small>{previewMode ? "Disponível para fornecedores aprovados" : supplierApproved ? "Foto, categoria, especificações, aplicação e diferenciais" : "Disponível após aprovação"}</small></button><button disabled={!supplierApproved || Boolean(previewMode)} onClick={() => setEventFormOpen(true)}><span>★</span><strong>Cadastrar evento</strong><small>{previewMode ? "Disponível para fornecedores aprovados" : supplierApproved ? "Local, data e link de inscrição" : "Disponível após aprovação"}</small></button><button onClick={() => setView("products")}><span>⌕</span><strong>Ver produtos publicados</strong><small>Acompanhe o catálogo aprovado</small></button></div></section>}
       </main>
 
       <footer className="site-footer"><div className="footer-main"><div className="footer-brand"><button className="brand" onClick={() => setView("map")}><span className="brand-mark"><span></span><span></span><span></span></span><span className="brand-copy"><strong>Hub <b>Brasil</b></strong><small>TECNOLOGIA VEICULAR</small></span></button><p>O ecossistema de negócios do mercado de rastreamento, telemetria e IoT no Brasil.</p></div><div><strong>Plataforma</strong><button onClick={() => setView("directory")}>Fornecedores</button><button onClick={() => setView("solutions")}>Soluções</button><button onClick={() => setView("events")}>Eventos</button><button onClick={openQuoteRequest}>Solicitar cotação</button></div><div><strong>Para empresas</strong><button onClick={() => openRegistration("supplier")}>Cadastrar empresa</button><button onClick={() => setView("about")}>Sobre o Hub</button><button onClick={() => setRegisterOpen(true)}>Entrar</button></div><div><strong>Contato</strong><a href="mailto:suporte@niviontech.com.br">suporte@niviontech.com.br</a><span>Brasil</span></div></div><div className="footer-bottom"><span>© 2026 Hub Brasil. Todos os direitos reservados.</span><div><a href="/termos">Termos de uso</a><a href="/privacidade">Privacidade</a><a href="/admin">Gestão</a></div></div></footer>
