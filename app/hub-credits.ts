@@ -38,19 +38,62 @@ export async function ensureCreditRules(db: any) {
   for (const [ruleKey, label, amount, kind] of DEFAULT_CREDIT_RULES) {
     await db.insert(creditRules).values({ ruleKey, label, amount, kind }).onConflictDoNothing();
   }
-  await db.insert(hubSettings).values({ settingKey: "founder_member_limit", value: "500" }).onConflictDoNothing();
+  await db.insert(hubSettings).values({ settingKey: "founder_member_limit", value: "15" }).onConflictDoUpdate({
+    target: hubSettings.settingKey,
+    set: { value: "15", updatedAt: new Date().toISOString() },
+  });
 }
 
 export async function assignFounderMember(db: any, supplierId: number) {
   await ensureCreditRules(db);
   const [supplier] = await db.select().from(leads).where(eq(leads.id, supplierId));
   if (!supplier || supplier.founderMemberAt || supplier.status !== "approved" || !supplier.phoneVerifiedAt) return false;
-  const [setting] = await db.select().from(hubSettings).where(eq(hubSettings.settingKey, "founder_member_limit"));
-  const limit = Math.max(1, Number(setting?.value || 500));
-  const [{ total }] = await db.select({ total: sql<number>`count(*)` }).from(leads).where(sql`${leads.founderMemberAt} is not null`);
-  if (Number(total) >= limit) return false;
-  await db.update(leads).set({ founderMemberAt: new Date().toISOString() }).where(eq(leads.id, supplierId));
-  return true;
+  const claimedAt = new Date().toISOString();
+
+  try {
+    // D1 batches are committed atomically. The slot is only claimed when the
+    // supplier is still eligible, and the supplier receives the seal only if
+    // that exact slot was claimed in this batch.
+    const [claim] = await db.batch([
+      db.run(sql`
+        UPDATE founder_member_slots
+        SET supplier_id = ${supplierId}, claimed_at = ${claimedAt}
+        WHERE slot_number = (
+          SELECT slot_number
+          FROM founder_member_slots
+          WHERE supplier_id IS NULL
+          ORDER BY slot_number ASC
+          LIMIT 1
+        )
+        AND supplier_id IS NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM founder_member_slots WHERE supplier_id = ${supplierId}
+        )
+        AND EXISTS (
+          SELECT 1 FROM leads
+          WHERE id = ${supplierId}
+            AND role = 'supplier'
+            AND status = 'approved'
+            AND phone_verified_at IS NOT NULL
+            AND founder_member_at IS NULL
+        )
+      `),
+      db.run(sql`
+        UPDATE leads
+        SET founder_member_at = ${claimedAt}
+        WHERE id = ${supplierId}
+          AND founder_member_at IS NULL
+          AND EXISTS (
+            SELECT 1 FROM founder_member_slots WHERE supplier_id = ${supplierId}
+          )
+      `),
+    ]);
+    return Number((claim as { meta?: { changes?: number } }).meta?.changes || 0) === 1;
+  } catch {
+    // During a rolling deployment, the application must remain available until
+    // the database migration that creates the slots has been applied.
+    return false;
+  }
 }
 
 export async function ensureReferralCode(db: any, supplierId: number) {

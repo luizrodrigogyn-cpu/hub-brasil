@@ -143,13 +143,4 @@ body{font-family:var(--font-geist-sans),Arial,sans-serif;font-size:16px;line-hei
 /* Mantém os cinco indicadores do painel alinhados sem apertar a leitura. */
 .supplier-dashboard .metric-grid{grid-template-columns:repeat(auto-fit,minmax(160px,1fr))}
 
-@media(max-width:560px){.metric-grid{gap:10px}.metric-grid article{min-height:112px;padding:16px}.metric-grid strong{font-size:28px}.messages-layout{min-height:520px}.message-thread{padding:20px}.thread-list article{max-width:90%}}
-.solution-selector{border:1px solid #31547e;border-radius:9px;padding:12px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.solution-selector legend{padding:0 5px;color:#dce9fa;font-weight:700;font-size:13px}.solution-selector legend small{color:#8ca3c2;font-weight:400}.solution-selector .check{font-size:12px;display:flex;align-items:center;gap:6px;color:#c8d8ec}
-.mobile-menu-toggle,.mobile-navigation{display:none}.mobile-menu-toggle{border:1px solid #cbd9ef;border-radius:9px;background:#fff;color:#17233a;padding:10px 12px;font:700 14px/1 inherit}.mobile-menu-toggle span{margin-left:5px;font-size:16px}.mobile-navigation{position:absolute;top:calc(100% + 8px);left:16px;right:16px;z-index:40;padding:10px;border:1px solid #d5e1f2;border-radius:14px;background:#fff;box-shadow:0 20px 42px rgba(10,30,65,.2)}.mobile-navigation button,.mobile-navigation a{display:block;width:100%;padding:13px 14px;border:0;border-radius:8px;background:transparent;color:#17233a;text-align:left;text-decoration:none;font:600 15px/1.2 inherit}.mobile-navigation button:hover,.mobile-navigation a:hover{background:#edf4ff;color:#1f62ec}
-@media(max-width:860px){.topbar{position:relative}.desktop-nav{display:none}.mobile-menu-toggle{display:inline-flex;align-items:center;margin-left:auto}.mobile-navigation{display:grid}.top-actions{display:flex}.top-actions .primary{display:none}.top-actions .admin-link{display:none}.top-actions .access-chip{display:none}}
-@media(max-width:560px){.topbar{padding:0 14px}.brand-copy small{font-size:8px}.brand-copy strong{font-size:18px}.top-actions{margin-left:8px}.top-actions .text-action{font-size:14px}.mobile-menu-toggle{padding:9px 10px;font-size:13px}}
-
-/* Mantém os cinco indicadores do painel alinhados sem apertar a leitura. */
-.supplier-dashboard .metric-grid{grid-template-columns:repeat(auto-fit,minmax(160px,1fr))}
-
 .auth-bootstrap{min-height:100vh;display:grid;place-items:center;background:#071326;color:#dce8ff;font-size:1rem}
