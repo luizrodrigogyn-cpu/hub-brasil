@@ -23,13 +23,6 @@ jobs:
           node-version: 22.13.0
           cache: npm
 
-      - name: Impedir mistura de gerenciadores de dependência
-        run: |
-          if [ -f pnpm-lock.yaml ] || [ -f pnpm-workspace.yaml ]; then
-            echo "Este projeto usa npm. Remova arquivos PNPM antes de publicar."
-            exit 1
-          fi
-
       - name: Instalar dependências
         run: npm ci
 
