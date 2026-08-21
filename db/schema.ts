@@ -7,6 +7,7 @@ export const leads = sqliteTable("leads", {
   phone: text("phone").notNull(),
   company: text("company"),
   instagram: text("instagram"),
+  website: text("website"),
   role: text("role").notNull().default("client"),
   authUserId: text("auth_user_id"),
   email: text("email"),
@@ -211,6 +212,31 @@ export const activityEvents = sqliteTable("activity_events", {
 }, (table) => ({
   supplierKindCreatedIdx: index("idx_activity_supplier_kind_created").on(table.supplierId, table.kind, table.createdAt),
   actorCreatedIdx: index("idx_activity_actor_created").on(table.actorUserId, table.createdAt),
+}));
+
+// Conversas são privadas: somente o cliente e o fornecedor vinculados podem
+// consultar ou responder. Nenhum telefone é exposto por esta estrutura.
+export const conversations = sqliteTable("conversations", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  clientUserId: text("client_user_id").notNull(),
+  supplierId: integer("supplier_id").notNull().references(() => leads.id),
+  subject: text("subject").notNull(),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => ({
+  participantIdx: uniqueIndex("idx_conversations_client_supplier").on(table.clientUserId, table.supplierId),
+  supplierUpdatedIdx: index("idx_conversations_supplier_updated").on(table.supplierId, table.updatedAt),
+}));
+
+export const conversationMessages = sqliteTable("conversation_messages", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  conversationId: integer("conversation_id").notNull().references(() => conversations.id),
+  senderUserId: text("sender_user_id").notNull(),
+  body: text("body").notNull(),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  readAt: text("read_at"),
+}, (table) => ({
+  conversationCreatedIdx: index("idx_messages_conversation_created").on(table.conversationId, table.createdAt),
 }));
 
 export const alertPreferences = sqliteTable("alert_preferences", {
