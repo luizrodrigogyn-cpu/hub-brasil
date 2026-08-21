@@ -1,0 +1,50 @@
+name: Backup diário do D1
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "20 03 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    name: Exportar banco Hub Brasil
+    runs-on: ubuntu-latest
+    steps:
+      - name: Obter código
+        uses: actions/checkout@v4
+
+      - name: Usar Node.js 22.13.0
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.0
+          cache: npm
+
+      - name: Confirmar credenciais de backup
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$CLOUDFLARE_API_TOKEN"
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Exportar D1 remoto
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          mkdir -p backups
+          npx wrangler d1 export hub-brasil-db --remote --output="backups/hub-brasil-$(date -u +%F).sql" --skip-confirmation
+
+      - name: Guardar cópia por 90 dias
+        uses: actions/upload-artifact@v4
+        with:
+          name: hub-brasil-d1-${{ github.run_id }}
+          path: backups/*.sql
+          if-no-files-found: error
+          retention-days: 90

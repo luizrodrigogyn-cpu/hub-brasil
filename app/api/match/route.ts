@@ -4,7 +4,7 @@ import { leads } from "../../../db/schema";
 import { getApiUser } from "../../admin-auth";
 
 export async function POST(request:Request){
- const user=await getApiUser(); if(!user)return Response.json({error:"Faça login para usar o match.",signIn:"/signin-with-chatgpt?return_to=/area-testes"},{status:401});
+ const user=await getApiUser(); if(!user)return Response.json({error:"Faça login para usar o match.",signIn:"/sign-in?return_to=/area-testes"},{status:401});
  const [viewer]=await getDb().select({id:leads.id}).from(leads).where(and(eq(leads.authUserId,user.userId),eq(leads.status,"approved"))); if(!viewer)return Response.json({error:"Cadastro não aprovado."},{status:403});
  const body=await request.json() as {category?:string;state?:string;service?:string;mode?:string};
  const rows=await getDb().select().from(leads).where(and(eq(leads.role,"supplier"),eq(leads.status,"approved"),isNotNull(leads.phoneVerifiedAt)));

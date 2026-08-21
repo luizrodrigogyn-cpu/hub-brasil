@@ -16,7 +16,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const user = await getApiUser();
-    if (!user) return Response.json({ error: "Faça login para avaliar.", signIn: "/signin-with-chatgpt?return_to=/" }, { status: 401 });
+    if (!user) return Response.json({ error: "Faça login para avaliar.", signIn: "/sign-in?return_to=/" }, { status: 401 });
     const body = await request.json() as { supplierName?: string; stars?: number };
     if (!body.supplierName || !Number.isInteger(body.stars) || body.stars! < 1 || body.stars! > 5) return Response.json({ error: "Avaliação inválida." }, { status: 400 });
     const [client] = await getDb().select({ role: leads.role }).from(leads).where(and(eq(leads.authUserId, user.userId), eq(leads.status, "approved")));

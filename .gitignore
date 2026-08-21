@@ -38,3 +38,8 @@ yarn-error.log*
 /.wrangler/
 /outputs/
 /work/
+
+# Codex temporary publishing artifacts
+/.codex-publish-temp/
+/.pnpm-store/
+tsconfig.tsbuildinfo

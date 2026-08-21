@@ -1,3 +1,5 @@
+import { createClerkClient } from "@clerk/backend";
+import { env } from "cloudflare:workers";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
@@ -6,37 +8,40 @@ export type ChatGPTUser = {
   displayName: string;
   email: string;
   fullName: string | null;
+  secondFactorVerified: boolean;
 };
 
-const USER_ID_HEADER = "oai-authenticated-user-id";
-const USER_EMAIL_HEADER = "oai-authenticated-user-email";
-const USER_FULL_NAME_HEADER = "oai-authenticated-user-full-name";
-const USER_FULL_NAME_ENCODING_HEADER =
-  "oai-authenticated-user-full-name-encoding";
-const PERCENT_ENCODED_UTF8 = "percent-encoded-utf-8";
-const SIGN_IN_PATH = "/signin-with-chatgpt";
-const SIGN_OUT_PATH = "/signout-with-chatgpt";
+const SIGN_IN_PATH = "/sign-in";
+const SIGN_OUT_PATH = "/sign-out";
 const CALLBACK_PATH = "/callback";
 
 export async function getChatGPTUser(): Promise<ChatGPTUser | null> {
+  const bindings = env as unknown as Record<string, string | undefined>;
+  const secretKey = bindings.CLERK_SECRET_KEY;
+  const publishableKey = bindings.CLERK_PUBLISHABLE_KEY;
+  if (!secretKey || !publishableKey) return null;
   const requestHeaders = await headers();
-  const userId = requestHeaders.get(USER_ID_HEADER);
-  const email = requestHeaders.get(USER_EMAIL_HEADER);
-  if (!userId || !email) return null;
-
-  const encodedFullName = requestHeaders.get(USER_FULL_NAME_HEADER);
-  const fullName =
-    encodedFullName &&
-    requestHeaders.get(USER_FULL_NAME_ENCODING_HEADER) === PERCENT_ENCODED_UTF8
-      ? safeDecodeURIComponent(encodedFullName)
-      : null;
-
-  return {
-    userId,
-    displayName: fullName ?? email,
-    email,
-    fullName,
-  };
+  const host = requestHeaders.get("x-forwarded-host") || requestHeaders.get("host") || "hub.niviontech.com.br";
+  const protocol = requestHeaders.get("x-forwarded-proto") || "https";
+  const authorizedParties = String(bindings.CLERK_AUTHORIZED_PARTIES || "").split(",").map((value) => value.trim()).filter(Boolean);
+  try {
+    const clerk = createClerkClient({ secretKey, publishableKey });
+    const state = await clerk.authenticateRequest(
+      new Request(`${protocol}://${host}/`, { headers: new Headers(requestHeaders) }),
+      authorizedParties.length ? { authorizedParties } : undefined,
+    );
+    if (!state.isAuthenticated) return null;
+    const auth = state.toAuth();
+    if (!auth.userId) return null;
+    const clerkUser = await clerk.users.getUser(auth.userId);
+    const email = clerkUser.primaryEmailAddress?.emailAddress;
+    if (!email) return null;
+    const fullName = [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(" ") || null;
+    const factors = auth.factorVerificationAge;
+    return { userId: auth.userId, displayName: fullName || email, email, fullName, secondFactorVerified: Array.isArray(factors) && Number(factors[1]) >= 0 };
+  } catch {
+    return null;
+  }
 }
 
 export async function requireChatGPTUser(
@@ -77,14 +82,8 @@ function isReservedAuthPath(pathname: string): boolean {
   return (
     pathname === SIGN_IN_PATH ||
     pathname === SIGN_OUT_PATH ||
-    pathname === CALLBACK_PATH
+    pathname === CALLBACK_PATH ||
+    pathname === "/signin-with-chatgpt" ||
+    pathname === "/signout-with-chatgpt"
   );
-}
-
-function safeDecodeURIComponent(value: string): string | null {
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return null;
-  }
 }
