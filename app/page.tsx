@@ -14,6 +14,7 @@ type Supplier = {
   accent: string;
   phone?: string | null;
   instagram?: string | null;
+  website?: string | null;
   phonePreview?: string | null;
   verificationStatus?: string | null;
   verifiedAt?: string | null;
@@ -69,7 +70,7 @@ function mapPoint(state: string) {
 }
 
 export default function Home() {
-  const [view, setView] = useState<"map" | "solutions" | "directory" | "supplier" | "events" | "products" | "news" | "about" | "supplier-dashboard">("map");
+  const [view, setView] = useState<"map" | "solutions" | "directory" | "supplier" | "events" | "products" | "news" | "about" | "supplier-dashboard" | "messages">("map");
   const [registered, setRegistered] = useState(false);
   const [registerOpen, setRegisterOpen] = useState(false);
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
@@ -94,6 +95,16 @@ export default function Home() {
   const [newsCategory, setNewsCategory] = useState("Todos");
   const [referralCode, setReferralCode] = useState("");
   const [previewMode, setPreviewMode] = useState<"client" | "supplier" | null>(null);
+  const [dashboard, setDashboard] = useState<{ supplierMetrics?: Record<string, number>; supplierQuotes?: Array<{ id:number; protocol:string; category:string; application:string; status:string; createdAt:string }>; profile?: { city?:string|null; state?:string|null; phone?:string|null; instagram?:string|null; website?:string|null; description?:string|null; categories?:string[] } }>({});
+  const [editingCompany, setEditingCompany] = useState(false);
+  const [messageData, setMessageData] = useState<{ conversations: Array<{id:number;subject:string;updatedAt:string;supplierName?:string;clientName?:string;clientCompany?:string}>; messages?: Array<{id:number;senderUserId:string;body:string;createdAt:string}>; currentUserId?:string }>({ conversations: [] });
+  const [activeConversationId, setActiveConversationId] = useState<number | null>(null);
+  const [navigationOpen, setNavigationOpen] = useState(false);
+
+  function navigateTo(nextView: typeof view) {
+    setView(nextView);
+    setNavigationOpen(false);
+  }
 
   async function refreshSuppliers() {
     try { const response = await fetch("/api/suppliers"); const data = await response.json(); setSuppliers((data.suppliers || []).map((item: Supplier) => ({ ...item, initials: item.name.split(/\s+/).slice(0,2).map((part) => part[0]).join("").toUpperCase(), description: item.description || "Fornecedor aprovado no Hub Brasil.", accent: "blue" }))); } catch {}
@@ -144,6 +155,7 @@ export default function Home() {
         setWelcomeOpen(false);
         refreshSuppliers();
         refreshProducts();
+        if (data.profile.role === "supplier") fetch("/api/roadmap").then((response) => response.ok ? response.json() : null).then((result) => result && setDashboard(result)).catch(() => {});
       }
     }).catch(() => {});
     return () => window.clearTimeout(timer);
@@ -264,6 +276,27 @@ export default function Home() {
     setRegisterOpen(true);
   }
 
+  async function loadMessages(conversationId?: number) {
+    try { const response = await fetch(`/api/messages${conversationId ? `?conversationId=${conversationId}` : ""}`); const data = await response.json(); if (!response.ok) { setToast(data.error || "Não foi possível abrir mensagens."); return; } setMessageData(data); if (conversationId) setActiveConversationId(conversationId); } catch { setToast("Não foi possível abrir mensagens."); }
+  }
+
+  async function sendMessage(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); const form = new FormData(event.currentTarget); const message = String(form.get("message") || "");
+    const payload = activeConversationId ? { conversationId: activeConversationId, message } : selectedSupplier ? { supplierId: selectedSupplier.id, subject: `Contato com ${selectedSupplier.name}`, message } : null;
+    if (!payload) return;
+    const response = await fetch("/api/messages", { method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify(payload) }); const data = await response.json();
+    if (!response.ok) { setToast(data.error || "Não foi possível enviar a mensagem."); return; }
+    event.currentTarget.reset(); await loadMessages(data.conversationId); setToast("Mensagem enviada."); window.setTimeout(()=>setToast(""),3000);
+  }
+
+  async function saveCompany(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); const form = new FormData(event.currentTarget);
+    const payload = { company: form.get("company"), phone: form.get("phone"), instagram: form.get("instagram"), website: form.get("website"), city: form.get("city"), state: form.get("state"), description: form.get("description"), categories: form.getAll("categories") };
+    const response = await fetch("/api/leads", { method:"PATCH", headers:{"content-type":"application/json"}, body:JSON.stringify(payload) }); const data = await response.json();
+    if (!response.ok) { setToast(data.error || "Não foi possível atualizar a empresa."); return; }
+    setSupplierCompany(String(payload.company || "")); setEditingCompany(false); await refreshSuppliers(); fetch("/api/roadmap").then(r=>r.json()).then(setDashboard).catch(()=>{}); setToast("Informações da empresa atualizadas."); window.setTimeout(()=>setToast(""),3000);
+  }
+
   async function copyRegistrationLink() {
     const url = `${window.location.origin}/?cadastro=acessar`;
     try {
@@ -331,7 +364,7 @@ export default function Home() {
   return (
     <div className="app-shell">
       <header className="topbar">
-        <button className="brand" onClick={() => setView("map")} aria-label="Ir para o mapa do Hub Brasil">
+        <button className="brand" onClick={() => navigateTo("map")} aria-label="Ir para o mapa do Hub Brasil">
           <span className="brand-mark"><span></span><span></span><span></span></span>
           <span className="brand-copy"><strong>Hub <b>Brasil</b></strong><small>TECNOLOGIA VEICULAR</small></span>
         </button>
@@ -345,6 +378,19 @@ export default function Home() {
           <button className={view === "about" ? "active" : ""} onClick={() => setView("about")}>Sobre o Hub</button>
           <button onClick={openQuoteRequest}>Solicitar cotação</button>
         </nav>
+        <button className="mobile-menu-toggle" type="button" aria-expanded={navigationOpen} aria-controls="mobile-navigation" onClick={() => setNavigationOpen((open) => !open)}>Menu <span>☰</span></button>
+        {navigationOpen && <nav id="mobile-navigation" className="mobile-navigation" aria-label="Navegação principal móvel">
+          <button onClick={() => navigateTo("map")}>Início</button>
+          <button onClick={() => navigateTo("directory")}>Fornecedores</button>
+          <button onClick={() => navigateTo("solutions")}>Soluções</button>
+          <button onClick={() => navigateTo("products")}>Produtos</button>
+          <button onClick={() => navigateTo("events")}>Eventos</button>
+          <button onClick={() => navigateTo("news")}>Radar do Setor</button>
+          <button onClick={() => navigateTo("about")}>Sobre o Hub</button>
+          <button onClick={() => { openQuoteRequest(); setNavigationOpen(false); }}>Solicitar cotação</button>
+          {userRole === "supplier" && <button onClick={() => navigateTo("supplier-dashboard")}>Minha empresa</button>}
+          {!registered && <a href="/sign-in?return_to=/">Entrar</a>}
+        </nav>}
         <div className="top-actions">
           {registered && <a className="admin-link" href="/area-testes">Área de testes</a>}
           <a className="admin-link" href="/admin">Ver cadastros</a>
@@ -445,7 +491,7 @@ export default function Home() {
             <div className="rating-panel"><div><strong>{ratings[selectedSupplier.name] ? ratings[selectedSupplier.name].average.toFixed(1) : "Sem avaliações"}</strong>{ratings[selectedSupplier.name] && <span>{"★".repeat(Math.round(ratings[selectedSupplier.name].average))}</span>}</div><p>Avalie este fornecedor</p><div className="star-picker">{[1,2,3,4,5].map((star) => <button key={star} onClick={() => rateSupplier(selectedSupplier.name, star)} aria-label={`${star} estrelas`}>★</button>)}</div></div>
             <div className="profile-columns">
               <div><h2>Produtos publicados</h2>{products.filter((item) => item.supplierName === selectedSupplier.name).length === 0 ? <div className="events-empty"><strong>Nenhum produto publicado</strong><p>Os produtos aprovados deste fornecedor aparecerão aqui.</p></div> : <div className="product-grid">{products.filter((item) => item.supplierName === selectedSupplier.name).map((item) => <article className="product-card" key={item.id}><div className="product-visual">{item.imageUrl ? <img src={item.imageUrl} alt={item.name} /> : <div className="device"></div>}</div><span className="category">{displayCategory(item.category)}</span><h3>{item.name}</h3><p>Especificações, aplicação e diferenciais</p><button onClick={() => openProduct(item)}>Ver informações →</button></article>)}</div>}</div>
-              <aside className="contact-panel"><h3>Contato comercial</h3><p>Entre em contato diretamente com este fornecedor aprovado.</p><dl><div><dt>Localização</dt><dd>{selectedSupplier.city}, {selectedSupplier.state}</dd></div>{selectedSupplier.phone && <div><dt>Telefone / WhatsApp</dt><dd>{selectedSupplier.phone}</dd></div>}{selectedSupplier.instagram && <div><dt>Instagram</dt><dd>{selectedSupplier.instagram}</dd></div>}</dl>{selectedSupplier.phone && <a href={`https://wa.me/55${selectedSupplier.phone.replace(/\D/g, "")}`} target="_blank" rel="noreferrer" onClick={() => fetch("/api/roadmap", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "track", kind: "whatsapp_click", supplierId: selectedSupplier.id }) }).catch(() => {})}>Conversar no WhatsApp</a>}</aside>
+              <aside className="contact-panel"><h3>Contato comercial</h3><p>Fale diretamente com este fornecedor aprovado, sem expor seus dados publicamente.</p><dl><div><dt>Localização</dt><dd>{selectedSupplier.city}, {selectedSupplier.state}</dd></div>{selectedSupplier.phone && <div><dt>Telefone / WhatsApp</dt><dd>{selectedSupplier.phone}</dd></div>}{selectedSupplier.instagram && <div><dt>Instagram</dt><dd>{selectedSupplier.instagram}</dd></div>}</dl><div className="contact-actions"><button onClick={() => { if (!registered) { openRegistration("client"); return; } if (userRole !== "client") { setToast("Mensagens diretas são iniciadas por perfis de usuário."); return; } setActiveConversationId(null); setMessageData({ conversations: [] }); setView("messages"); }}>Enviar mensagem pelo Hub</button>{selectedSupplier.phone && <a href={`https://wa.me/55${selectedSupplier.phone.replace(/\D/g, "")}`} target="_blank" rel="noreferrer" onClick={() => fetch("/api/roadmap", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "track", kind: "whatsapp_click", supplierId: selectedSupplier.id }) }).catch(() => {})}>Conversar no WhatsApp</a>}{selectedSupplier.website && <a href={selectedSupplier.website} target="_blank" rel="noreferrer" onClick={() => fetch("/api/roadmap", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "track", kind: "website_click", supplierId: selectedSupplier.id }) }).catch(() => {})}>Visitar site</a>}</div></aside>
             </div>
           </section>
         )}
@@ -455,7 +501,9 @@ export default function Home() {
 
         {view === "news" && <section className="news-page"><div className="news-hero"><div><span className="eyebrow">INFORMAÇÃO PARA QUEM MOVE O MERCADO</span><h1>Radar do Setor</h1><p>Notícias selecionadas sobre rastreamento veicular, telecomunicações, conectividade, tecnologia e mercado automotivo.</p></div><div className="news-radar-mark" aria-hidden="true"><span></span><i></i></div></div><div className="news-trust"><strong>Curadoria com fonte identificada</strong><span>O Hub publica somente resumos e direciona você para a matéria original. Todo conteúdo passa por aprovação.</span></div><div className="news-filters" aria-label="Filtrar notícias por categoria">{newsCategories.map((item) => <button key={item} className={newsCategory === item ? "active" : ""} onClick={() => setNewsCategory(item)}>{item}</button>)}</div>{filteredNews.length === 0 ? <div className="events-empty news-empty"><strong>O Radar está pronto para receber notícias reais</strong><p>As primeiras publicações aparecerão aqui após a conferência da fonte e aprovação da gestão.</p><a className="event-create" href="/admin">Acessar gestão do Radar</a></div> : <div className="news-grid">{filteredNews.map((item, index) => <article className={`news-card ${index === 0 ? "featured" : ""}`} key={item.id}>{item.imageUrl ? <div className="news-image"><img src={item.imageUrl} alt="" /></div> : <div className="news-image news-image-placeholder"><span>RADAR</span><i></i></div>}<div className="news-card-copy"><div className="news-meta"><span>{item.category}</span><time dateTime={item.publishedAt}>{new Date(`${item.publishedAt}T12:00:00`).toLocaleDateString("pt-BR")}</time></div><h2>{item.title}</h2><p>{item.summary}</p><div className="news-source"><small>Fonte: {item.sourceName}</small><a href={item.sourceUrl} target="_blank" rel="noreferrer">Ler notícia completa →</a></div></div></article>)}</div>}</section>}
 
-        {view === "supplier-dashboard" && <section className="supplier-dashboard"><div className="page-heading"><div><span className="eyebrow">PERFIL EMPRESA</span><h1>{supplierCompany || "Minha empresa"}</h1><p>Gerencie produtos, informações técnicas, fotos e eventos.</p></div></div>{previewMode === "supplier" ? <div className="approval-banner"><strong>Modo de visualização</strong><span>Você está vendo a experiência do fornecedor. Cadastros estão desativados nesta visualização.</span></div> : !supplierApproved && <div className="approval-banner"><strong>Cadastro em análise</strong><span>O gestor precisa validar seu telefone e aprovar sua empresa antes da primeira publicação.</span></div>}<div className="management-grid"><button disabled={!supplierApproved || Boolean(previewMode)} onClick={() => setProductFormOpen(true)}><span>▣</span><strong>Cadastrar produto</strong><small>{previewMode ? "Disponível para fornecedores aprovados" : supplierApproved ? "Foto, categoria, especificações, aplicação e diferenciais" : "Disponível após aprovação"}</small></button><button disabled={!supplierApproved || Boolean(previewMode)} onClick={() => setEventFormOpen(true)}><span>★</span><strong>Cadastrar evento</strong><small>{previewMode ? "Disponível para fornecedores aprovados" : supplierApproved ? "Local, data e link de inscrição" : "Disponível após aprovação"}</small></button><button onClick={() => setView("products")}><span>⌕</span><strong>Ver produtos publicados</strong><small>Acompanhe o catálogo aprovado</small></button></div></section>}
+        {view === "supplier-dashboard" && <section className="supplier-dashboard"><div className="page-heading"><div><span className="eyebrow">PAINEL DA EMPRESA</span><h1>{supplierCompany || "Minha empresa"}</h1><p>Publique soluções, acompanhe oportunidades e mantenha seu perfil atualizado.</p></div><div className="dashboard-actions"><button className="event-create" onClick={() => setEditingCompany(true)}>Editar empresa</button><button className="event-create" onClick={() => { setView("messages"); loadMessages(); }}>Mensagens</button></div></div>{previewMode === "supplier" ? <div className="approval-banner"><strong>Modo de visualização</strong><span>Você está vendo a experiência do fornecedor. Cadastros estão desativados nesta visualização.</span></div> : !supplierApproved && <div className="approval-banner"><strong>Cadastro em análise</strong><span>O gestor precisa validar seu telefone e aprovar sua empresa antes da primeira publicação.</span></div>}<div className="metric-grid"><article><span>◉</span><strong>{dashboard.supplierMetrics?.profile_view || 0}</strong><small>Visualizações do perfil</small></article><article><span>◌</span><strong>{dashboard.supplierMetrics?.whatsapp_click || 0}</strong><small>Cliques no WhatsApp</small></article><article><span>↗</span><strong>{dashboard.supplierMetrics?.website_click || 0}</strong><small>Cliques no site</small></article><article><span>✦</span><strong>{dashboard.supplierMetrics?.quote_request || 0}</strong><small>Solicitações recebidas</small></article><article><span>☆</span><strong>{dashboard.supplierMetrics?.favorite || 0}</strong><small>Favoritos recebidos</small></article></div><div className="management-grid"><button disabled={!supplierApproved || Boolean(previewMode)} onClick={() => setProductFormOpen(true)}><span>▣</span><strong>Cadastrar produto</strong><small>{previewMode ? "Disponível para fornecedores aprovados" : supplierApproved ? "Foto, categoria, especificações, aplicação e diferenciais" : "Disponível após aprovação"}</small></button><button disabled={!supplierApproved || Boolean(previewMode)} onClick={() => setEventFormOpen(true)}><span>★</span><strong>Cadastrar evento</strong><small>{previewMode ? "Disponível para fornecedores aprovados" : supplierApproved ? "Local, data e link de inscrição" : "Disponível após aprovação"}</small></button><button onClick={() => setView("products")}><span>⌕</span><strong>Ver produtos publicados</strong><small>Acompanhe seus cards e especificações no catálogo.</small></button></div>{(dashboard.supplierQuotes || []).length > 0 && <section className="dashboard-requests"><h2>Oportunidades recentes</h2>{dashboard.supplierQuotes?.map((quote) => <article key={quote.id}><strong>{quote.protocol}</strong><span>{quote.category} · {quote.application}</span><small>{quote.status === "responded" ? "Respondida" : "Aguardando resposta"}</small></article>)}</section>}</section>}
+
+        {view === "messages" && <section className="messages-page"><div className="page-heading"><div><span className="eyebrow">MENSAGENS PRIVADAS</span><h1>Conversas no Hub</h1><p>O contato é compartilhado apenas quando você decide conversar.</p></div><button className="event-create" onClick={() => { setView(userRole === "supplier" ? "supplier-dashboard" : "directory"); }}>Voltar</button></div><div className="messages-layout"><aside><h2>Conversas</h2>{messageData.conversations.length === 0 ? <p>Nenhuma conversa iniciada ainda.</p> : messageData.conversations.map((conversation) => <button key={conversation.id} className={activeConversationId === conversation.id ? "active" : ""} onClick={() => loadMessages(conversation.id)}><strong>{conversation.supplierName || conversation.clientCompany || conversation.clientName || "Contato"}</strong><span>{conversation.subject}</span></button>)}</aside><section className="message-thread">{selectedSupplier && !activeConversationId && userRole === "client" ? <><h2>Nova mensagem para {selectedSupplier.name}</h2><p>Apresente sua necessidade. A empresa receberá a conversa em seu painel.</p><form onSubmit={sendMessage}><textarea name="message" required rows={6} placeholder="Olá, gostaria de saber mais sobre..." /><button className="primary">Enviar mensagem →</button></form></> : activeConversationId ? <><h2>{messageData.conversations.find((item) => item.id === activeConversationId)?.subject || "Conversa"}</h2><div className="thread-list">{messageData.messages?.map((message) => <article key={message.id} className={message.senderUserId === messageData.currentUserId ? "mine" : ""}><p>{message.body}</p><small>{new Date(message.createdAt).toLocaleString("pt-BR")}</small></article>)}</div><form onSubmit={sendMessage}><textarea name="message" required rows={3} placeholder="Escreva sua resposta" /><button className="primary">Enviar →</button></form></> : <div className="events-empty"><strong>Selecione uma conversa</strong><p>Quando um cliente entrar em contato, ela aparecerá aqui.</p></div>}</section></div></section>}
       </main>
 
       <footer className="site-footer"><div className="footer-main"><div className="footer-brand"><button className="brand" onClick={() => setView("map")}><span className="brand-mark"><span></span><span></span><span></span></span><span className="brand-copy"><strong>Hub <b>Brasil</b></strong><small>TECNOLOGIA VEICULAR</small></span></button><p>O ecossistema de negócios do mercado de rastreamento, telemetria e IoT no Brasil.</p></div><div><strong>Plataforma</strong><button onClick={() => setView("directory")}>Fornecedores</button><button onClick={() => setView("solutions")}>Soluções</button><button onClick={() => setView("events")}>Eventos</button><button onClick={openQuoteRequest}>Solicitar cotação</button></div><div><strong>Para empresas</strong><button onClick={() => openRegistration("supplier")}>Cadastrar empresa</button><button onClick={() => setView("about")}>Sobre o Hub</button><button onClick={() => setRegisterOpen(true)}>Entrar</button></div><div><strong>Contato</strong><a href="mailto:suporte@niviontech.com.br">suporte@niviontech.com.br</a><span>Brasil</span></div></div><div className="footer-bottom"><span>© 2026 Hub Brasil. Todos os direitos reservados.</span><div><a href="/termos">Termos de uso</a><a href="/privacidade">Privacidade</a><a href="/admin">Gestão</a></div></div></footer>
@@ -468,6 +516,8 @@ export default function Home() {
         <button className={view === "news" ? "active" : ""} onClick={() => setView("news")}><span>◉</span>Radar</button>
         <button onClick={() => setRegisterOpen(true)}><span>◎</span>Conta</button>
       </nav>
+
+      {editingCompany && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setEditingCompany(false); }}><section className="access-modal event-form company-editor" role="dialog" aria-modal="true"><button className="modal-close" onClick={() => setEditingCompany(false)} aria-label="Fechar">×</button><span className="eyebrow">MINHA EMPRESA</span><h2>Editar informações da empresa</h2><p>Esses dados compõem seu perfil público após a aprovação da gestão.</p><form onSubmit={saveCompany}><label>Nome da empresa<input name="company" defaultValue={supplierCompany} required /></label><div className="field-row"><label>Telefone / WhatsApp<input name="phone" defaultValue={dashboard.profile?.phone || ""} required /></label><label>Instagram<input name="instagram" defaultValue={dashboard.profile?.instagram || ""} /></label></div><label>Site da empresa <small>Opcional</small><input name="website" type="url" defaultValue={dashboard.profile?.website || ""} placeholder="https://www.suaempresa.com.br" /></label><div className="field-row"><label>Cidade<input name="city" defaultValue={dashboard.profile?.city || ""} required /></label><label>Estado<input name="state" maxLength={2} defaultValue={dashboard.profile?.state || ""} required /></label></div><fieldset className="solution-selector"><legend>Soluções oferecidas <small>Escolha uma ou mais.</small></legend>{solutionCategories.map((item) => <label className="check" key={item.name}><input name="categories" type="checkbox" value={item.name} defaultChecked={(dashboard.profile?.categories || []).includes(item.name)} />{item.title}</label>)}</fieldset><label>Sobre a empresa<textarea name="description" rows={4} defaultValue={dashboard.profile?.description || ""} placeholder="Especialidades, diferenciais e informações relevantes" /></label><button className="primary full" type="submit">Salvar informações →</button></form></section></div>}
 
       {eventFormOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setEventFormOpen(false); }}><section className="access-modal event-form" role="dialog" aria-modal="true" aria-labelledby="event-form-title"><button className="modal-close" onClick={() => setEventFormOpen(false)} aria-label="Fechar">×</button><span className="eyebrow">ÁREA DO FORNECEDOR</span><h2 id="event-form-title">Cadastrar novo evento</h2><p>Após a revisão, o evento aparecerá na agenda e como um ponto especial no mapa.</p><form onSubmit={createEvent}><label>Nome do evento<input name="name" required placeholder="Ex.: Encontro de Integradores" /></label><div className="field-row"><label>Data<input name="date" type="date" required /></label><label>Local<input name="venue" required placeholder="Centro de eventos" /></label></div><div className="field-row"><label>Cidade<input name="city" required placeholder="São Paulo" /></label><label>Estado<select name="state" required><option value="">Selecione</option><option>SP</option><option>PR</option><option>MG</option><option>RJ</option><option>GO</option><option>PE</option></select></label></div><label>Link para inscrição<input name="link" type="url" required placeholder="https://seusite.com/inscricao" /></label><label>Descrição<textarea name="description" rows={3} placeholder="Conte brevemente sobre o evento" /></label><button className="primary full" type="submit">Enviar evento para publicação <span>→</span></button></form></section></div>}
 

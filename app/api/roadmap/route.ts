@@ -50,7 +50,7 @@ export async function GET() {
   const referralRows = profile.role === "supplier" ? await db.select().from(referrals).where(eq(referrals.referrerSupplierId, profile.id)) : [];
   const highlights = profile.role === "supplier" ? await activeHighlights(db, profile.id) : [];
   return Response.json({
-    profile: { id: profile.id, name: profile.name, company: profile.company, role: profile.role, status: profile.status, verificationStatus: profile.verificationStatus, verifiedAt: profile.verifiedAt, phoneVerifiedAt: profile.phoneVerifiedAt, completeness, hubScore: profile.hubScore, founderMemberAt: profile.founderMemberAt, referralCode: profile.referralCode, serviceStates: JSON.parse(profile.serviceStates || "[]"), services: JSON.parse(profile.services || "[]"), serviceMode: profile.serviceMode, servesNationwide: profile.servesNationwide },
+    profile: { id: profile.id, name: profile.name, company: profile.company, role: profile.role, status: profile.status, verificationStatus: profile.verificationStatus, verifiedAt: profile.verifiedAt, phoneVerifiedAt: profile.phoneVerifiedAt, completeness, hubScore: profile.hubScore, founderMemberAt: profile.founderMemberAt, referralCode: profile.referralCode, phone: profile.phone, instagram: profile.instagram, website: profile.website, city: profile.city, state: profile.state, description: profile.description, categories: JSON.parse(profile.categories || "[]"), serviceStates: JSON.parse(profile.serviceStates || "[]"), services: JSON.parse(profile.services || "[]"), serviceMode: profile.serviceMode, servesNationwide: profile.servesNationwide },
     favorites: { suppliers: savedSuppliers, products: savedProducts, events: savedEvents },
     alerts: alerts[0] ? { ...alerts[0], categories: JSON.parse(alerts[0].categories || "[]"), states: JSON.parse(alerts[0].states || "[]"), contentTypes: JSON.parse(alerts[0].contentTypes || "[]") } : null,
     clientQuotes,
@@ -140,7 +140,7 @@ export async function POST(request: Request) {
 
   if (action === "track") {
     const kind = String(body.kind || "");
-    if (!["profile_view", "product_view", "whatsapp_click"].includes(kind)) return Response.json({ error: "Evento inválido." }, { status: 400 });
+    if (!["profile_view", "product_view", "whatsapp_click", "website_click"].includes(kind)) return Response.json({ error: "Evento inválido." }, { status: 400 });
     await db.insert(activityEvents).values({ actorUserId: user.userId, supplierId: Number(body.supplierId) || null, productId: Number(body.productId) || null, eventId: Number(body.eventId) || null, kind });
     return Response.json({ ok: true });
   }

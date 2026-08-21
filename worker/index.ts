@@ -9,8 +9,6 @@ interface Env {
   ADMIN_EMAILS: string;
   CLERK_PUBLISHABLE_KEY: string;
   CLERK_SECRET_KEY: string;
-  CLERK_DEVELOPMENT_PUBLISHABLE_KEY: string;
-  CLERK_DEVELOPMENT_SECRET_KEY: string;
   CLERK_AUTHORIZED_PARTIES: string;
   IMAGES: {
     input(stream: ReadableStream): {
@@ -26,31 +24,15 @@ interface ExecutionContext {
   passThroughOnException(): void;
 }
 
-function isPreviewHost(hostname: string) {
-  return hostname.endsWith(".workers.dev");
-}
+// Image security config. SVG sources with .svg extension auto-skip the
+// optimization endpoint on the client side (served directly, no proxy).
+// To route SVGs through the optimizer (with security headers), set
+// dangerouslyAllowSVG: true in next.config.js and uncomment below:
+// const imageConfig: ImageConfig = { dangerouslyAllowSVG: true };
 
 const worker = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
-
-    // A production Clerk key is intentionally scoped to hub.niviontech.com.br.
-    // The workers.dev deployment uses Clerk's separate development instance so
-    // it remains a safe, fully working test environment before DNS is ready.
-    if (url.pathname === "/hb-init") {
-      const publishableKey = String(
-        isPreviewHost(url.hostname)
-          ? env.CLERK_DEVELOPMENT_PUBLISHABLE_KEY || ""
-          : env.CLERK_PUBLISHABLE_KEY || "",
-      );
-      if (!publishableKey.startsWith("pk_")) {
-        return Response.json(
-          { error: "Autenticação indisponível" },
-          { status: 503, headers: { "cache-control": "no-store" } },
-        );
-      }
-      return Response.json({ publishableKey }, { headers: { "cache-control": "no-store" } });
-    }
 
     if (url.pathname === "/_vinext/image") {
       const allowedWidths = [...DEFAULT_DEVICE_SIZES, ...DEFAULT_IMAGE_SIZES];
