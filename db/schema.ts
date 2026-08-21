@@ -71,6 +71,16 @@ export const hubSettings = sqliteTable("hub_settings", {
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
+/**
+ * Fifteen fixed, auditable slots for the Membro Fundador program. A supplier
+ * can occupy only one slot and a slot can belong to only one supplier.
+ */
+export const founderMemberSlots = sqliteTable("founder_member_slots", {
+  slotNumber: integer("slot_number").primaryKey(),
+  supplierId: integer("supplier_id").references(() => leads.id).unique(),
+  claimedAt: text("claimed_at"),
+});
+
 export const creditWallets = sqliteTable("credit_wallets", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   supplierId: integer("supplier_id").notNull().references(() => leads.id),
@@ -187,6 +197,7 @@ export const moderationAudit = sqliteTable("moderation_audit", {
   entity: text("entity").notNull(),
   entityId: integer("entity_id").notNull(),
   action: text("action").notNull(),
+  metadata: text("metadata"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 }, (table) => ({ createdIdx: index("idx_audit_created_at").on(table.createdAt) }));
 
