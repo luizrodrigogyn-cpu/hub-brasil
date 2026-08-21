@@ -34,6 +34,16 @@ const worker = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 
+    // The Clerk publishable key is designed to be public.  Serving it from the
+    // Worker avoids relying on a server-component environment binding, which
+    // is not consistently available during Vinext client hydration.
+    if (url.pathname === "/hb-init") {
+      return Response.json(
+        { clerkPublishableKey: env.CLERK_PUBLISHABLE_KEY || "" },
+        { headers: { "Cache-Control": "no-store" } },
+      );
+    }
+
     if (url.pathname === "/_vinext/image") {
       const allowedWidths = [...DEFAULT_DEVICE_SIZES, ...DEFAULT_IMAGE_SIZES];
       return handleImageOptimization(request, {
