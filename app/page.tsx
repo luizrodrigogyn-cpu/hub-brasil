@@ -378,19 +378,21 @@ export default function Home() {
           <button className={view === "about" ? "active" : ""} onClick={() => setView("about")}>Sobre o Hub</button>
           <button onClick={openQuoteRequest}>Solicitar cotação</button>
         </nav>
-        <button className="mobile-menu-toggle" type="button" aria-expanded={navigationOpen} aria-controls="mobile-navigation" onClick={() => setNavigationOpen((open) => !open)}>Menu <span>☰</span></button>
-        {navigationOpen && <nav id="mobile-navigation" className="mobile-navigation" aria-label="Navegação principal móvel">
-          <button onClick={() => navigateTo("map")}>Início</button>
-          <button onClick={() => navigateTo("directory")}>Fornecedores</button>
-          <button onClick={() => navigateTo("solutions")}>Soluções</button>
-          <button onClick={() => navigateTo("products")}>Produtos</button>
-          <button onClick={() => navigateTo("events")}>Eventos</button>
-          <button onClick={() => navigateTo("news")}>Radar do Setor</button>
-          <button onClick={() => navigateTo("about")}>Sobre o Hub</button>
-          <button onClick={() => { openQuoteRequest(); setNavigationOpen(false); }}>Solicitar cotação</button>
-          {userRole === "supplier" && <button onClick={() => navigateTo("supplier-dashboard")}>Minha empresa</button>}
-          {!registered && <a href="/sign-in?return_to=/">Entrar</a>}
-        </nav>}
+        <div className="navigation-menu">
+          <button className="mobile-menu-toggle" type="button" aria-expanded={navigationOpen} aria-controls="mobile-navigation" onClick={() => setNavigationOpen((open) => !open)}>Menu <span>☰</span></button>
+          {navigationOpen && <nav id="mobile-navigation" className="mobile-navigation" aria-label="Navegação principal móvel">
+            <button onClick={() => navigateTo("map")}>Início</button>
+            <button onClick={() => navigateTo("directory")}>Fornecedores</button>
+            <button onClick={() => navigateTo("solutions")}>Soluções</button>
+            <button onClick={() => navigateTo("products")}>Produtos</button>
+            <button onClick={() => navigateTo("events")}>Eventos</button>
+            <button onClick={() => navigateTo("news")}>Radar do Setor</button>
+            <button onClick={() => navigateTo("about")}>Sobre o Hub</button>
+            <button onClick={() => { openQuoteRequest(); setNavigationOpen(false); }}>Solicitar cotação</button>
+            {userRole === "supplier" && <button onClick={() => navigateTo("supplier-dashboard")}>Minha empresa</button>}
+            {!registered && <a href="/sign-in?return_to=/">Entrar</a>}
+          </nav>}
+        </div>
         <div className="top-actions">
           {registered && <a className="admin-link" href="/area-testes">Área de testes</a>}
           <a className="admin-link" href="/admin">Ver cadastros</a>
