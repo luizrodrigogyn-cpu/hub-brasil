@@ -17,6 +17,7 @@ type Supplier = {
   instagram?: string | null;
   website?: string | null;
   phonePreview?: string | null;
+  contactRevealed?: boolean;
   verificationStatus?: string | null;
   verifiedAt?: string | null;
   qualityScore?: number;
@@ -84,12 +85,6 @@ function mapPoint(state: string) {
   return points[state] || [55, 55];
 }
 
-function maskPhone(value?: string | null) {
-  const digits = String(value || "").replace(/\D/g, "");
-  if (!digits) return "Contato protegido";
-  return `(${digits.slice(0, 2)}) ${digits.slice(2, 3)}••••-••••`;
-}
-
 export default function Home() {
   const [view, setView] = useState<"map" | "solutions" | "directory" | "supplier" | "events" | "products" | "news" | "about" | "supplier-dashboard" | "messages">("map");
   const [registered, setRegistered] = useState(false);
@@ -124,7 +119,6 @@ export default function Home() {
   const [quoteFlowOpen, setQuoteFlowOpen] = useState(false);
   const [quoteDraft, setQuoteDraft] = useState<QuoteDraft>({ category: "", application: "", quantity: "1", city: "", state: "", deadline: "", notes: "", supplierIds: [], contactConsent: false });
   const [pendingContactSupplier, setPendingContactSupplier] = useState<Supplier | null>(null);
-  const [contactUnlocked, setContactUnlocked] = useState<Record<number, boolean>>({});
   const navigationMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -142,7 +136,7 @@ export default function Home() {
   }
 
   async function refreshSuppliers() {
-    try { const response = await fetch("/api/suppliers"); const data = await response.json(); setSuppliers((data.suppliers || []).map((item: Supplier) => ({ ...item, initials: item.name.split(/\s+/).slice(0,2).map((part) => part[0]).join("").toUpperCase(), description: item.description || "Fornecedor aprovado no Hub Brasil.", accent: "blue" }))); } catch {}
+    try { const response = await fetch("/api/suppliers"); const data = await response.json(); const mapped = (data.suppliers || []).map((item: Supplier) => ({ ...item, initials: item.name.split(/\s+/).slice(0,2).map((part) => part[0]).join("").toUpperCase(), description: item.description || "Fornecedor aprovado no Hub Brasil.", accent: "blue" })); setSuppliers(mapped); return mapped as Supplier[]; } catch { return null; }
   }
 
   async function refreshProducts() {
@@ -236,7 +230,7 @@ export default function Home() {
 
   const newsCategories = useMemo(() => ["Todos", ...Array.from(new Set(news.map((item) => item.category)))], [news]);
   const filteredNews = useMemo(() => newsCategory === "Todos" ? news : news.filter((item) => item.category === newsCategory), [news, newsCategory]);
-  const isContactUnlocked = (supplier: Supplier) => Boolean(contactUnlocked[supplier.id]);
+  const isContactUnlocked = (supplier: Supplier) => Boolean(supplier.contactRevealed);
 
   function requestAccess(supplier?: Supplier) {
     if (supplier) setSelectedSupplier(supplier);
@@ -291,16 +285,22 @@ export default function Home() {
 
   async function confirmContactForSupplier() {
     if (!pendingContactSupplier) return;
-    setContactUnlocked((current) => ({ ...current, [pendingContactSupplier.id]: true }));
+    const supplier = pendingContactSupplier;
+    setPendingContactSupplier(null);
     try {
-      await fetch("/api/roadmap", {
+      const response = await fetch("/api/roadmap", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "track", kind: "contact_revealed", supplierId: pendingContactSupplier.id }),
+        body: JSON.stringify({ action: "track", kind: "contact_revealed", supplierId: supplier.id }),
       });
-    } catch {}
-    setPendingContactSupplier(null);
-    setToast("Contato liberado. Agora o WhatsApp e telefone aparecem no perfil.");
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) { setToast(data.error || "Não foi possível liberar o contato."); return; }
+      const refreshedList = await refreshSuppliers();
+      const refreshed = refreshedList?.find((item) => item.id === supplier.id);
+      if (!refreshed?.contactRevealed) { setToast("Não foi possível confirmar a liberação. Tente novamente."); return; }
+      setSelectedSupplier(refreshed);
+      setToast("Contato liberado. Agora o WhatsApp e telefone aparecem no perfil.");
+    } catch { setToast("Não foi possível liberar o contato."); }
     window.setTimeout(() => setToast(""), 3000);
   }
 
@@ -636,7 +636,7 @@ export default function Home() {
             <div className="rating-panel"><div><strong>{ratings[selectedSupplier.name] ? ratings[selectedSupplier.name].average.toFixed(1) : "Sem avaliações"}</strong>{ratings[selectedSupplier.name] && <span>{"★".repeat(Math.round(ratings[selectedSupplier.name].average))}</span>}</div><p>Avalie este fornecedor</p><div className="star-picker">{[1,2,3,4,5].map((star) => <button key={star} onClick={() => rateSupplier(selectedSupplier.name, star)} aria-label={`${star} estrelas`}>★</button>)}</div></div>
             <div className="profile-columns">
               <div><h2>Produtos publicados</h2>{products.filter((item) => item.supplierName === selectedSupplier.name).length === 0 ? <div className="events-empty"><strong>Nenhum produto publicado</strong><p>Os produtos aprovados deste fornecedor aparecerão aqui.</p></div> : <div className="product-grid">{products.filter((item) => item.supplierName === selectedSupplier.name).map((item) => <article className="product-card" key={item.id}><div className="product-visual">{item.imageUrl ? <img src={item.imageUrl} alt={item.name} /> : <div className="device"></div>}</div><span className="category">{displayCategory(item.category)}</span><h3>{item.name}</h3><p>Especificações, aplicação e diferenciais</p><button onClick={() => openProduct(item)}>Ver informações →</button></article>)}</div>}</div>
-              <aside className="contact-panel"><h3>Contato comercial</h3><p>Conecte-se com segurança e só compartilhe contato quando você decidir.</p><dl><div><dt>Localização</dt><dd>{selectedSupplier.city}, {selectedSupplier.state}</dd></div><div><dt>Telefone / WhatsApp</dt><dd>{isContactUnlocked(selectedSupplier) ? selectedSupplier.phone || "Contato protegido" : maskPhone(selectedSupplier.phone)}</dd></div>{selectedSupplier.instagram && <div><dt>Instagram</dt><dd>{selectedSupplier.instagram}</dd></div>}{selectedSupplier.website && <div><dt>Site</dt><dd>{selectedSupplier.website}</dd></div>}</dl><div className="contact-actions"><button onClick={openContactForSupplier.bind(null, selectedSupplier)}>{isContactUnlocked(selectedSupplier) ? "Contato liberado" : "Liberar contato para conexão"}</button><button onClick={() => { if (!registered) { openRegistration("client"); return; } if (userRole !== "client") { setToast("Mensagens diretas são iniciadas por perfis de usuário."); return; } setActiveConversationId(null); setMessageData({ conversations: [] }); setView("messages"); }}>Enviar mensagem pelo Hub</button>{isContactUnlocked(selectedSupplier) && selectedSupplier.phone && <a href={`https://wa.me/55${selectedSupplier.phone.replace(/\D/g, "")}`} target="_blank" rel="noreferrer" onClick={() => fetch("/api/roadmap", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "track", kind: "whatsapp_click", supplierId: selectedSupplier.id }) }).catch(() => {})}>Conversar no WhatsApp</a>}{selectedSupplier.website && <a href={selectedSupplier.website} target="_blank" rel="noreferrer" onClick={() => fetch("/api/roadmap", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "track", kind: "website_click", supplierId: selectedSupplier.id }) }).catch(() => {})}>Visitar site</a>}</div><button className="event-create" onClick={openQuoteRequest.bind(null, selectedSupplier)}>Solicitar cotação estruturada</button></aside>
+              <aside className="contact-panel"><h3>Contato comercial</h3><p>Conecte-se com segurança e só compartilhe contato quando você decidir.</p><dl><div><dt>Localização</dt><dd>{selectedSupplier.city}, {selectedSupplier.state}</dd></div><div><dt>Telefone / WhatsApp</dt><dd>{selectedSupplier.phone || selectedSupplier.phonePreview || "Contato protegido"}</dd></div>{selectedSupplier.instagram && <div><dt>Instagram</dt><dd>{selectedSupplier.instagram}</dd></div>}{selectedSupplier.website && <div><dt>Site</dt><dd>{selectedSupplier.website}</dd></div>}</dl><div className="contact-actions"><button onClick={openContactForSupplier.bind(null, selectedSupplier)}>{isContactUnlocked(selectedSupplier) ? "Contato liberado" : "Liberar contato para conexão"}</button><button onClick={() => { if (!registered) { openRegistration("client"); return; } if (userRole !== "client") { setToast("Mensagens diretas são iniciadas por perfis de usuário."); return; } setActiveConversationId(null); setMessageData({ conversations: [] }); setView("messages"); }}>Enviar mensagem pelo Hub</button>{isContactUnlocked(selectedSupplier) && selectedSupplier.phone && <a href={`https://wa.me/55${selectedSupplier.phone.replace(/\D/g, "")}`} target="_blank" rel="noreferrer" onClick={() => fetch("/api/roadmap", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "track", kind: "whatsapp_click", supplierId: selectedSupplier.id }) }).catch(() => {})}>Conversar no WhatsApp</a>}{selectedSupplier.website && <a href={selectedSupplier.website} target="_blank" rel="noreferrer" onClick={() => fetch("/api/roadmap", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "track", kind: "website_click", supplierId: selectedSupplier.id }) }).catch(() => {})}>Visitar site</a>}</div><button className="event-create" onClick={openQuoteRequest.bind(null, selectedSupplier)}>Solicitar cotação estruturada</button></aside>
             </div>
           </section>
         )}

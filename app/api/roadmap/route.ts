@@ -171,6 +171,16 @@ export async function POST(request: Request) {
     const eventId = Number(body.eventId);
     if (kind === "quote_request" && (!supplierId || supplierId <= 0)) return Response.json({ error: "Fornecedor obrigatório para esta ação." }, { status: 400 });
     if (kind === "contact_revealed" && (!supplierId || supplierId <= 0)) return Response.json({ error: "Fornecedor obrigatório para esta ação." }, { status: 400 });
+    if (kind === "contact_revealed") {
+      if (profile.role !== "client") return Response.json({ error: "Somente usuários podem revelar contatos." }, { status: 403 });
+      const [supplier] = await db.select({ id: leads.id, phoneVerifiedAt: leads.phoneVerifiedAt }).from(leads).where(and(eq(leads.id, supplierId), eq(leads.role, "supplier"), eq(leads.status, "approved"))).limit(1);
+      if (!supplier?.phoneVerifiedAt) return Response.json({ error: "Fornecedor indisponível." }, { status: 404 });
+      const [existing] = await db.select({ id: activityEvents.id }).from(activityEvents).where(and(eq(activityEvents.actorUserId, user.userId), eq(activityEvents.kind, "contact_revealed"), eq(activityEvents.supplierId, supplierId))).limit(1);
+      if (existing) return Response.json({ ok: true, alreadyRevealed: true });
+      const oneHourAgo = new Date(Date.now() - 3600000).toISOString();
+      const [{ total }] = await db.select({ total: sql<number>`count(distinct ${activityEvents.supplierId})` }).from(activityEvents).where(and(eq(activityEvents.actorUserId, user.userId), eq(activityEvents.kind, "contact_revealed"), gte(activityEvents.createdAt, oneHourAgo)));
+      if (Number(total) >= 20) return Response.json({ error: "Limite de contatos atingido. Tente novamente em uma hora." }, { status: 429 });
+    }
     if (kind === "product_view" && (!productId || productId <= 0 || !supplierId || supplierId <= 0)) return Response.json({ error: "Produto e fornecedor obrigatórios." }, { status: 400 });
     await db.insert(activityEvents).values({ actorUserId: user.userId, supplierId: Number.isInteger(supplierId) && supplierId > 0 ? supplierId : null, productId: Number.isInteger(productId) && productId > 0 ? productId : null, eventId: Number.isInteger(eventId) && eventId > 0 ? eventId : null, kind });
     return Response.json({ ok: true });
