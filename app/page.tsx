@@ -521,6 +521,7 @@ export default function Home() {
         <div className="navigation-menu" ref={navigationMenuRef}>
           <button className="mobile-menu-toggle" type="button" aria-expanded={navigationOpen} aria-controls="mobile-navigation" onClick={() => setNavigationOpen((open) => !open)}>Menu <span>☰</span></button>
           {navigationOpen && <nav id="mobile-navigation" className="mobile-navigation" aria-label="Navegação principal móvel">
+            {previewMode && <a className="preview-exit" href="/admin">↩ Voltar à Visão Gestor</a>}
             <button onClick={() => navigateTo("map")}>Início</button>
             <button onClick={() => navigateTo("directory")}>Fornecedores</button>
             <button onClick={() => navigateTo("solutions")}>Soluções</button>
@@ -534,6 +535,7 @@ export default function Home() {
           </nav>}
         </div>
         <div className="top-actions">
+          {previewMode && <a className="preview-exit" href="/admin">↩ Voltar à Visão Gestor</a>}
           {registered && <button className="admin-link" onClick={() => setView("supplier-dashboard")}>Painel da operação</button>}
           <a className="admin-link" href="/admin">Ver cadastros</a>
           {registered ? <span className="access-chip"><i></i>Acesso liberado</span> : <a className="text-action" href="/sign-in?return_to=/">Entrar</a>}

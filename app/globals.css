@@ -180,6 +180,11 @@ body{font-family:var(--font-geist-sans),Arial,sans-serif;font-size:16px;line-hei
 /* Mantém os cinco indicadores do painel alinhados sem apertar a leitura. */
 .supplier-dashboard .metric-grid{grid-template-columns:repeat(auto-fit,minmax(160px,1fr))}
 
+/* Mantém um caminho de volta visível quando a gestão simula outro perfil. */
+.preview-exit{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;color:#a2661a;background:#fff3de;border:1px solid #f0c785;border-radius:999px;padding:8px 14px;font-size:13px;font-weight:700;text-decoration:none;order:-1}
+.preview-exit:hover{background:#ffe6bb}
+.mobile-navigation .preview-exit{order:initial;justify-self:start;margin-bottom:6px;padding:12px 16px}
+
 .auth-bootstrap{min-height:100vh;display:grid;place-items:center;background:#071326;color:#dce8ff;font-size:1rem}
 
 /* Mantém o menu complementar compacto e ancorado ao botão do cabeçalho. */
