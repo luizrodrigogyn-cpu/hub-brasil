@@ -247,6 +247,14 @@ body{font-family:var(--font-geist-sans),Arial,sans-serif;font-size:16px;line-hei
 @media (max-width:560px){.boot-logo-name{font-size:26px}.boot-radar{width:64%}.boot-lines{left:20px;right:20px;font-size:9px}.boot-skip{right:20px}}
 @media (prefers-reduced-motion:reduce){.boot-grid,.boot-lines div,.boot-radar,.boot-logo{animation:none;opacity:1}.boot-sweep{animation:none}}
 
+/* Bifurcação clara no Hero: buscar fornecedor × sou fornecedor. */
+.hero-ctas{display:flex;flex-wrap:wrap;gap:12px;margin-top:26px}
+.hero-ctas .primary{display:inline-flex;align-items:center;gap:8px}
+.hero-ctas .secondary-action{display:inline-flex;align-items:center;gap:8px;border-color:rgba(255,255,255,.28);color:#fff}
+.hero-ctas .secondary-action:hover{border-color:#5b93ff;color:#9cc4ff}
+@media(max-width:1050px){.hero-ctas{justify-content:center}}
+@media(max-width:560px){.hero-ctas{flex-direction:column}.hero-ctas button{width:100%;justify-content:center}}
+
 /* Ficha técnica opcional no cadastro de produto (comparador) e badges de exibição. */
 .spec-fields{border:1px solid var(--border);border-radius:10px;padding:16px;display:grid;gap:14px;background:rgba(9,28,54,.5)}
 .spec-fields-head{display:grid;gap:3px}.spec-fields-head strong{font-size:13px;color:var(--text)}.spec-fields-head span{font-size:11px;color:var(--muted);line-height:1.4}
@@ -275,3 +283,14 @@ body{font-family:var(--font-geist-sans),Arial,sans-serif;font-size:16px;line-hei
 .value-card p{margin:0;color:#e4ecf8;font-size:16px;line-height:1.55}
 .audience-subhead{max-width:640px;margin:-18px auto 30px;color:#697a96;font-size:15px;line-height:1.5}
 @media(max-width:860px){.value-strip{grid-template-columns:1fr;padding:0 20px 40px}}
+
+.field-block{display:grid;gap:7px;color:#c2d1e5;font-size:12px}
+.solution-selector.matched{grid-template-columns:1fr;max-height:280px;overflow-y:auto}
+.match-check{display:flex!important;align-items:flex-start!important;gap:9px;padding:8px 6px;border-radius:7px}
+.match-check:hover{background:rgba(255,255,255,.03)}
+.match-check input{margin-top:3px}
+.match-check-body{display:flex;flex-direction:column;gap:3px;flex:1;min-width:0}
+.match-check-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.match-check-head strong{font-size:13px;color:var(--text)}
+.match-pill{flex:0 0 auto;background:rgba(89,201,238,.12);color:var(--cyan);border:1px solid rgba(89,201,238,.28);border-radius:100px;padding:3px 9px;font-size:10px;font-weight:700;white-space:nowrap}
+.match-check-body>small{color:#8fa6c2;font-size:11px}

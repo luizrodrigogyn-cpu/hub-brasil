@@ -28,6 +28,7 @@ type Supplier = {
   founderMember?: boolean;
   quoteRequests?: number;
   quoteResponses?: number;
+  serviceStates?: string[];
 };
 
 type HubEvent = { id: number; name: string; supplier: string; venue: string; city: string; state: string; date: string; displayDate: string; link: string; x: number; y: number; demo?: boolean };
@@ -93,9 +94,35 @@ type QuoteDraft = {
   state: string;
   deadline: string;
   notes: string;
+  budget: string;
+  urgency: string;
+  integration: string[];
   supplierIds: string[];
   contactConsent: boolean;
 };
+
+const quoteBudgetOptions = ["Econômico", "Intermediário", "Avançado"] as const;
+const quoteUrgencyOptions = ["Imediata", "Até 15 dias", "Sem pressa"] as const;
+const quoteIntegrationOptions = ["API", "Planilha / exportação", "Nenhuma integração necessária"] as const;
+
+function matchScore(supplier: Supplier, draft: QuoteDraft): { score: number; reasons: string[] } {
+  let score = 0;
+  const reasons: string[] = [];
+  const wantedCategory = draft.category.replace(/\s+/g, " ").trim().toLowerCase();
+  const supplierCategories = (supplier.categories?.length ? supplier.categories : [supplier.category]).map((item) => displayCategory(item).toLowerCase());
+  if (wantedCategory && supplierCategories.some((item) => item.includes(wantedCategory) || wantedCategory.includes(item))) { score += 45; reasons.push("mesma especialidade"); }
+  const wantedState = draft.state.trim().toUpperCase();
+  if (wantedState) {
+    if (supplier.state === wantedState) {
+      score += 25; reasons.push(`atende ${wantedState}`);
+      if (draft.city && supplier.city && supplier.city.toLowerCase() === draft.city.trim().toLowerCase()) { score += 10; reasons.push("mesma cidade"); }
+    } else if (supplier.serviceStates?.includes(wantedState)) { score += 20; reasons.push(`cobertura em ${wantedState}`); }
+  }
+  const responseRate = typeof supplier.quoteResponses === "number" && typeof supplier.quoteRequests === "number" && supplier.quoteRequests > 0 ? supplier.quoteResponses / supplier.quoteRequests : null;
+  if (responseRate !== null) { score += Math.round(responseRate * 20); if (responseRate >= 0.6) reasons.push("alta taxa de resposta"); }
+  if (typeof supplier.qualityScore === "number") score += Math.round((supplier.qualityScore / 100) * 10);
+  return { score: Math.max(0, Math.min(100, score)), reasons };
+}
 
 function displayCategory(category: string) {
   return category === "Câmeras veiculares" || category === "ADAS e DSM" ? "Videotelemetria" : category;
@@ -144,7 +171,7 @@ export default function Home() {
   const [activeConversationId, setActiveConversationId] = useState<number | null>(null);
   const [navigationOpen, setNavigationOpen] = useState(false);
   const [quoteFlowOpen, setQuoteFlowOpen] = useState(false);
-  const [quoteDraft, setQuoteDraft] = useState<QuoteDraft>({ category: "", application: "", quantity: "1", city: "", state: "", deadline: "", notes: "", supplierIds: [], contactConsent: false });
+  const [quoteDraft, setQuoteDraft] = useState<QuoteDraft>({ category: "", application: "", quantity: "1", city: "", state: "", deadline: "", notes: "", budget: "", urgency: "", integration: [], supplierIds: [], contactConsent: false });
   const [pendingContactSupplier, setPendingContactSupplier] = useState<Supplier | null>(null);
   const [bootPhase, setBootPhase] = useState<"playing" | "leaving" | "done">("playing");
   const navigationMenuRef = useRef<HTMLDivElement>(null);
@@ -502,6 +529,14 @@ export default function Home() {
     setQuoteDraft((draft) => ({ ...draft, [name]: value }));
   }
 
+  function toggleQuoteIntegration(value: string) {
+    setQuoteDraft((draft) => {
+      if (value === "Nenhuma integração necessária") return { ...draft, integration: draft.integration.includes(value) ? [] : [value] };
+      const withoutNone = draft.integration.filter((item) => item !== "Nenhuma integração necessária");
+      return { ...draft, integration: withoutNone.includes(value) ? withoutNone.filter((item) => item !== value) : [...withoutNone, value] };
+    });
+  }
+
   function toggleQuoteSupplier(supplierId: number) {
     setQuoteDraft((draft) => {
       const current = new Set(draft.supplierIds);
@@ -526,6 +561,9 @@ export default function Home() {
       state: normalizeTextField(quoteDraft.state).toUpperCase(),
       deadline: normalizeTextField(quoteDraft.deadline),
       notes: normalizeTextField(quoteDraft.notes),
+      budget: quoteDraft.budget,
+      urgency: quoteDraft.urgency,
+      integration: quoteDraft.integration,
       contactConsent: quoteDraft.contactConsent,
     };
     if (!payload.contactConsent || !payload.category || !payload.application || !payload.city || !payload.state || !payload.supplierIds.length) {
@@ -539,7 +577,7 @@ export default function Home() {
     setQuoteFlowOpen(false);
     setToast(`Cotação enviada. Protocolo: ${data.protocol}`);
     window.setTimeout(() => setToast(""), 4500);
-    setQuoteDraft({ category: "", application: "", quantity: "1", city: "", state: "", deadline: "", notes: "", supplierIds: [], contactConsent: false });
+    setQuoteDraft({ category: "", application: "", quantity: "1", city: "", state: "", deadline: "", notes: "", budget: "", urgency: "", integration: [], supplierIds: [], contactConsent: false });
   }
 
   function normalizeTextField(value: string) {
@@ -645,6 +683,7 @@ export default function Home() {
               <span className="hero-kicker">✦ O ecossistema de negócios do rastreamento veicular</span>
               <h1>Encontre os melhores fornecedores de <em>rastreamento, telemetria e conectividade</em> em um só lugar.</h1>
               <p>Conecte-se a fabricantes, integradores e fornecedores validados de todo o Brasil.</p>
+              <div className="hero-ctas"><button className="primary" onClick={() => setView("directory")}>Buscar fornecedor aprovado <span>→</span></button><button className="secondary-action" onClick={() => openRegistration("supplier")}>Sou fornecedor de rastreamento <span>→</span></button></div>
               <p className="quality-promise"><span>✓</span> Aqui, o destaque do fornecedor é por qualidade!</p>
               <p className="empty-note">Somente fornecedores e eventos aprovados pela gestão aparecem no mapa.</p>
             </div>
@@ -774,14 +813,22 @@ export default function Home() {
               </div>
               <label>Cidade da operação<input name="city" value={quoteDraft.city} onChange={updateQuoteInput} required placeholder="Ex.: São Paulo" /></label>
               <label>Estado (UF)<select name="state" value={quoteDraft.state} onChange={updateQuoteInput} required><option value="">UF</option>{BRAZIL_STATES.map((state) => <option key={state}>{state}</option>)}</select></label>
+              <div className="field-row">
+                <label>Orçamento (opcional)<select name="budget" value={quoteDraft.budget} onChange={updateQuoteInput}><option value="">Não informar</option>{quoteBudgetOptions.map((option) => <option key={option}>{option}</option>)}</select></label>
+                <label>Urgência<select name="urgency" value={quoteDraft.urgency} onChange={updateQuoteInput}><option value="">Não informar</option>{quoteUrgencyOptions.map((option) => <option key={option}>{option}</option>)}</select></label>
+              </div>
+              <div className="field-block"><span>Integração desejada (opcional)</span><div className="chip-select">{quoteIntegrationOptions.map((option) => <button type="button" key={option} className={quoteDraft.integration.includes(option) ? "active" : ""} onClick={() => toggleQuoteIntegration(option)}>{option}</button>)}</div></div>
               <label>Notas de contexto<textarea name="notes" value={quoteDraft.notes} onChange={updateQuoteInput} rows={3} placeholder="Tipo de operação, horários de monitoramento, cobertura necessária..." /></label>
-              <fieldset className="solution-selector">
-                <legend>Fornecedores candidatos <small>Selecione 1 a 8</small></legend>
-                {suppliers.map((supplier) => (
-                  <label className="check" key={supplier.id}>
-                    <input type="checkbox" checked={quoteDraft.supplierIds.includes(String(supplier.id))} onChange={() => toggleQuoteSupplier(supplier.id)} />
-                    {supplier.name} · {supplier.city}/{supplier.state}
-                  </label>
+              <fieldset className="solution-selector matched">
+                <legend>Fornecedores candidatos <small>Selecione 1 a 8 — ordenados por compatibilidade com o briefing</small></legend>
+                {suppliers.map((supplier) => ({ supplier, match: matchScore(supplier, quoteDraft) })).sort((a, b) => b.match.score - a.match.score).map(({ supplier, match }) => (
+                  <div className="check match-check" key={supplier.id}>
+                    <input type="checkbox" aria-label={`Selecionar ${supplier.name}`} checked={quoteDraft.supplierIds.includes(String(supplier.id))} onChange={() => toggleQuoteSupplier(supplier.id)} />
+                    <span className="match-check-body">
+                      <span className="match-check-head"><strong>{supplier.name}</strong><span className="match-pill">🎯 {match.score}% compatível</span></span>
+                      <small>{supplier.city}/{supplier.state}{match.reasons.length ? ` · ${match.reasons.join(", ")}` : ""}</small>
+                    </span>
+                  </div>
                 ))}
               </fieldset>
               <label className="consent"><input type="checkbox" name="contactConsent" checked={quoteDraft.contactConsent} onChange={(event) => setQuoteDraft((draft) => ({ ...draft, contactConsent: event.target.checked }))} required /> <span>Autorizo o Hub a repassar meu contato aos fornecedores escolhidos para retorno da cotação.</span></label>
