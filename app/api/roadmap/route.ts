@@ -269,16 +269,19 @@ export async function POST(request: Request) {
     const ruleKey = placement === "map" ? "highlight_map" : placement === "search" ? "highlight_search" : placement === "product" ? "highlight_product" : "";
     const rule = ruleKey ? await ruleFor(db, ruleKey) : null;
     if (!rule || !rule.active || rule.kind !== "spend" || profile.hubScore < 40) return Response.json({ error: "Destaque indisponível. É necessário Hub Score mínimo de 40 e regra ativa." }, { status: 400 });
-    const [wallet] = await db.select().from(creditWallets).where(eq(creditWallets.supplierId, profile.id));
-    if (!wallet || wallet.availableBalance < rule.amount) return Response.json({ error: "Saldo de Hub Créditos insuficiente." }, { status: 400 });
     const active = await activeHighlights(db, profile.id);
     if (active.some((item: { placement: string }) => item.placement === placement)) return Response.json({ error: "Você já possui este destaque ativo." }, { status: 409 });
     const productId = Number(body.productId) || null;
     if (placement === "product") { const [product] = await db.select().from(products).where(and(eq(products.id, productId || 0), eq(products.ownerUserId, user.userId), eq(products.status, "approved"))); if (!product) return Response.json({ error: "Selecione um produto aprovado da sua empresa." }, { status: 400 }); }
     const now = new Date(); const ends = new Date(now.getTime() + 7 * 86400000);
+    // Debito atomico e condicional: a checagem de saldo acontece dentro do proprio UPDATE
+    // (WHERE availableBalance >= amount), nao numa leitura separada antes. Isso fecha a
+    // corrida de duas ativacoes simultaneas gastando o mesmo saldo (double-spend) e evita
+    // o saldo ficar negativo. Se 0 linhas forem afetadas, o saldo era insuficiente.
+    const [debited] = await db.update(creditWallets).set({ availableBalance: sql`${creditWallets.availableBalance} - ${rule.amount}`, totalUsed: sql`${creditWallets.totalUsed} + ${rule.amount}`, updatedAt: now.toISOString() }).where(and(eq(creditWallets.supplierId, profile.id), sql`${creditWallets.availableBalance} >= ${rule.amount}`)).returning();
+    if (!debited) return Response.json({ error: "Saldo de Hub Créditos insuficiente." }, { status: 400 });
     const [highlight] = await db.insert(highlightActivations).values({ supplierId: profile.id, productId, placement, state: profile.state, startsAt: now.toISOString(), endsAt: ends.toISOString(), creditCost: rule.amount }).returning();
     await db.insert(creditLedger).values({ supplierId: profile.id, amount: -rule.amount, direction: "debit", ruleKey, sourceType: "highlight", sourceId: highlight.id, idempotencyKey: `highlight:${highlight.id}`, note: rule.label });
-    await db.update(creditWallets).set({ availableBalance: sql`${creditWallets.availableBalance} - ${rule.amount}`, totalUsed: sql`${creditWallets.totalUsed} + ${rule.amount}`, updatedAt: now.toISOString() }).where(eq(creditWallets.supplierId, profile.id));
     return Response.json({ ok: true, highlight });
   }
 
