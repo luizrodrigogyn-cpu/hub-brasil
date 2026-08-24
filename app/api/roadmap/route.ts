@@ -43,23 +43,42 @@ export async function GET() {
   const [profile] = await db.select().from(leads).where(eq(leads.authUserId, user.userId));
   if (!profile) return Response.json({ error: "Conclua seu cadastro no Hub para acessar o painel." }, { status: 403 });
 
-  const [saved, alerts, clientQuotes] = await Promise.all([
+  const [saved, alerts, clientQuotesRaw] = await Promise.all([
     db.select().from(favorites).where(eq(favorites.userId, user.userId)).orderBy(desc(favorites.createdAt)),
     db.select().from(alertPreferences).where(eq(alertPreferences.userId, user.userId)),
     db.select().from(quoteRequests).where(eq(quoteRequests.clientUserId, user.userId)).orderBy(desc(quoteRequests.createdAt)).limit(30),
   ]);
+  const clientQuoteIds = clientQuotesRaw.map((item) => item.id);
+  const clientQuoteStats = clientQuoteIds.length
+    ? await db.select({ quoteId: quoteRecipients.quoteId, total: sql<number>`count(*)`, responded: sql<number>`sum(case when ${quoteRecipients.status} = 'responded' then 1 else 0 end)`, declined: sql<number>`sum(case when ${quoteRecipients.status} = 'declined' then 1 else 0 end)` }).from(quoteRecipients).where(inArray(quoteRecipients.quoteId, clientQuoteIds)).groupBy(quoteRecipients.quoteId)
+    : [];
+  const clientQuoteStatsMap = new Map(clientQuoteStats.map((item) => [item.quoteId, item]));
+  const clientQuotes = clientQuotesRaw.map((quote) => {
+    const stats = clientQuoteStatsMap.get(quote.id);
+    const recipientsResponded = Number(stats?.responded || 0);
+    const recipientsDeclined = Number(stats?.declined || 0);
+    return { ...quote, recipientsTotal: Number(stats?.total || 0), recipientsResponded, recipientsDeclined, recipientsCompleted: recipientsResponded + recipientsDeclined };
+  });
   const contactHistory = await db.select({ id: activityEvents.id, supplierId: activityEvents.supplierId, productId: activityEvents.productId, kind: activityEvents.kind, createdAt: activityEvents.createdAt }).from(activityEvents).where(eq(activityEvents.actorUserId, user.userId)).orderBy(desc(activityEvents.createdAt)).limit(80);
   const completeness = profileCompleteness(profile as unknown as Record<string, unknown>);
 
   let supplierMetrics = null;
   let supplierQuotes: unknown[] = [];
+  let supplierStats: { totalReceived: number; totalResponded: number; acceptanceRate: number; newLeads: number } | null = null;
   if (profile.role === "supplier") {
     const since90 = new Date(Date.now() - 90 * 86400000).toISOString();
+    const since48h = new Date(Date.now() - 48 * 3600000).toISOString();
     const metrics = await db.select({ kind: activityEvents.kind, total: sql<number>`count(*)` })
       .from(activityEvents).where(and(eq(activityEvents.supplierId, profile.id), gte(activityEvents.createdAt, since90))).groupBy(activityEvents.kind);
     supplierMetrics = Object.fromEntries(metrics.map((item) => [item.kind, Number(item.total)]));
-    supplierQuotes = await db.select({ id: quoteRequests.id, protocol: quoteRequests.protocol, category: quoteRequests.category, application: quoteRequests.application, quantity: quoteRequests.quantity, city: quoteRequests.city, state: quoteRequests.state, deadline: quoteRequests.deadline, notes: quoteRequests.notes, status: quoteRecipients.status, createdAt: quoteRequests.createdAt })
+    const rawSupplierQuotes = await db.select({ id: quoteRequests.id, protocol: quoteRequests.protocol, category: quoteRequests.category, application: quoteRequests.application, quantity: quoteRequests.quantity, city: quoteRequests.city, state: quoteRequests.state, deadline: quoteRequests.deadline, notes: quoteRequests.notes, status: quoteRecipients.status, createdAt: quoteRequests.createdAt })
       .from(quoteRecipients).innerJoin(quoteRequests, eq(quoteRecipients.quoteId, quoteRequests.id)).where(eq(quoteRecipients.supplierId, profile.id)).orderBy(desc(quoteRequests.createdAt)).limit(30);
+    supplierQuotes = rawSupplierQuotes.map((quote) => ({ ...quote, isNewLead: quote.status === "sent" && new Date(quote.createdAt).toISOString() >= since48h }));
+    const [allTimeRow] = await db.select({ total: sql<number>`count(*)`, responded: sql<number>`sum(case when ${quoteRecipients.status} = 'responded' then 1 else 0 end)` }).from(quoteRecipients).where(eq(quoteRecipients.supplierId, profile.id));
+    const [newLeadsRow] = await db.select({ total: sql<number>`count(*)` }).from(quoteRecipients).where(and(eq(quoteRecipients.supplierId, profile.id), eq(quoteRecipients.status, "sent"), gte(quoteRecipients.createdAt, since48h)));
+    const totalReceived = Number(allTimeRow?.total || 0);
+    const totalResponded = Number(allTimeRow?.responded || 0);
+    supplierStats = { totalReceived, totalResponded, acceptanceRate: totalReceived > 0 ? Math.round((totalResponded / totalReceived) * 100) : 0, newLeads: Number(newLeadsRow?.total || 0) };
   }
 
   const supplierIds = saved.filter((item) => item.entityType === "supplier").map((item) => item.entityId);
@@ -82,6 +101,7 @@ export async function GET() {
     clientQuotes,
     supplierQuotes,
     supplierMetrics,
+    supplierStats,
     contactHistory,
     credits: profile.role === "supplier" ? { wallet: wallet || { availableBalance: 0, totalEarned: 0, totalUsed: 0 }, ledger, highlights, referrals: { invited: referralRows.length, registered: referralRows.length, complete: referralRows.filter((item) => ["qualified"].includes(item.status)).length, qualified: referralRows.filter((item) => item.status === "qualified").length } } : null,
   });

@@ -20,5 +20,5 @@ export async function GET() {
   // Perfis de fornecedores continuam fora do sitemap enquanto o conteúdo público
   // estiver anonimizado. Isso evita indexar páginas protegidas ou duplicadas.
   const xml = `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${staticEntries.join("")}</urlset>`;
-  return new Response(xml, { headers: { "content-type": "application/xml; charset=utf-8" } });
+  return new Response(xml, { headers: { "content-type": "application/xml; charset=utf-8", "cache-control": "public, max-age=3600, s-maxage=3600" } });
 }

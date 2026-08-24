@@ -27,6 +27,12 @@ function normalizeSpecs(raw: string) {
   }
 }
 
+// Igual a /api/suppliers: resposta varia por sessão (nome do fornecedor, telefone,
+// detalhes técnicos completos). Só cacheável na borda quando não há viewer autenticado.
+function cacheHeaders(personalized: boolean) {
+  return { "cache-control": personalized ? "private, no-store" : "public, max-age=30, stale-while-revalidate=120, s-maxage=30", vary: "Cookie" };
+}
+
 async function ensureProductSpecColumns() {
   const schema = await env.DB.prepare("PRAGMA table_info(products)").all<{ name: string }>();
   const columns = new Set((schema.results || []).map((column) => column.name));
@@ -49,7 +55,7 @@ export async function GET() {
       if (item.specs) { try { specs = JSON.parse(item.specs); } catch { specs = null; } }
       return { id: item.id, supplierId: viewer ? supplier?.id || null : null, supplierName: viewer ? item.supplierName : "Fornecedor protegido", supplierPhone: viewer ? supplier?.phone || null : null, name: item.name, category: item.category, technicalDetails: viewer ? item.technicalDetails : "", highlighted: highlighted.has(item.id), imageUrl: item.imageKey ? `/api/product-images?key=${encodeURIComponent(item.imageKey)}` : null, specs, manualUrl: item.manualUrl || null, averagePrice: item.averagePrice || null };
     }));
-    return Response.json({ products: visibleProducts });
+    return Response.json({ products: visibleProducts }, { headers: cacheHeaders(Boolean(viewer)) });
   } catch { return Response.json({ products: [] }); }
 }
 

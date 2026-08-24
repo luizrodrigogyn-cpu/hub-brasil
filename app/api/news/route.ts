@@ -10,5 +10,6 @@ export async function GET() {
     .where(eq(sectorNews.status, "approved"))
     .orderBy(desc(sectorNews.publishedAt))
     .limit(60);
-  return Response.json({ news });
+  // Conteúdo público, igual para qualquer visitante — não varia por sessão, então pode ir para o cache de borda.
+  return Response.json({ news }, { headers: { "cache-control": "public, max-age=120, stale-while-revalidate=300, s-maxage=120" } });
 }
