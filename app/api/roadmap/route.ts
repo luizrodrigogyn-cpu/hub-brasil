@@ -230,8 +230,12 @@ export async function POST(request: Request) {
     if (profile.role !== "supplier") return Response.json({ error: "Apenas o fornecedor destinatário pode atualizar esta cotação." }, { status: 403 });
     const quoteId = Number(body.quoteId);
     const responseStatus = body.responseStatus === "declined" ? "declined" : "responded";
+    const [quote] = await db.select({ status: quoteRequests.status }).from(quoteRequests).where(eq(quoteRequests.id, quoteId));
+    if (!quote) return Response.json({ error: "Cotação não encontrada." }, { status: 404 });
+    if (quote.status === "closed") return Response.json({ error: "Esta cotação já foi encerrada pelo cliente." }, { status: 409 });
     const [recipient] = await db.select().from(quoteRecipients).where(and(eq(quoteRecipients.quoteId, quoteId), eq(quoteRecipients.supplierId, profile.id)));
     if (!recipient) return Response.json({ error: "Cotação não encontrada para este fornecedor." }, { status: 404 });
+    if (recipient.status !== "sent") return Response.json({ error: "Esta oportunidade já foi respondida ou recusada." }, { status: 409 });
     await db.update(quoteRecipients).set({ status: responseStatus, respondedAt: new Date().toISOString() }).where(eq(quoteRecipients.id, recipient.id));
     await db.insert(activityEvents).values({ actorUserId: user.userId, supplierId: profile.id, kind: responseStatus === "responded" ? "quote_responded" : "quote_declined" });
     if (responseStatus === "responded") { await awardCredit(db,{supplierId:profile.id,ruleKey:"quote_responded",sourceType:"quote_recipient",sourceId:recipient.id,idempotencyKey:`quote-responded:${recipient.id}`}); await recomputeHubScore(db,profile.id,"cotacao_respondida"); await qualifyReferralIfReady(db,profile.id); }

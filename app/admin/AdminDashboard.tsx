@@ -2,14 +2,23 @@
 import { useEffect, useState } from "react";
 
 type Item = Record<string, string | number | null>;
-type Tab = "suppliers" | "products" | "events" | "needs" | "updates" | "articles" | "news" | "reports" | "deletions" | "credits" | "audit";
+type Tab = "suppliers" | "products" | "events" | "needs" | "updates" | "articles" | "news" | "reports" | "deletions" | "credits" | "audit" | "kpis";
+type Kpis = {
+  timeToFirstProposal: { sampleSize: number; totalQuotes: number; avgHours: number | null; medianHours: number | null; under24hPct: number | null; goalHours: number };
+  leadToProposalConversion: { sampleSize: number; responded: number; ratePct: number | null };
+  acceptedRateAvailable: boolean;
+  churnAvailable: boolean;
+  minSample: number;
+};
 
 export default function AdminDashboard() {
-  const [data, setData] = useState<Record<Tab, Item[]>>({ suppliers: [], products: [], events: [], needs: [], updates: [], articles: [], news: [], reports: [], deletions: [], credits: [], audit: [] });
+  const [data, setData] = useState<Record<Exclude<Tab, "kpis">, Item[]>>({ suppliers: [], products: [], events: [], needs: [], updates: [], articles: [], news: [], reports: [], deletions: [], credits: [], audit: [] });
+  const [kpis, setKpis] = useState<Kpis | null>(null);
   const [tab, setTab] = useState<Tab>("suppliers");
   const [busy, setBusy] = useState("");
   const load = () => fetch("/api/admin/content").then((r) => r.json()).then(setData);
   useEffect(() => { load(); }, []);
+  useEffect(() => { if (tab === "kpis" && !kpis) fetch("/api/admin/kpis").then((r) => r.json()).then(setKpis).catch(() => {}); }, [tab, kpis]);
   async function act(entity: string, id: number, action: string, value?: string) {
     setBusy(`${entity}-${id}-${action}`);
     const response = await fetch("/api/admin/content", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ entity, id, action, value }) });
@@ -18,9 +27,10 @@ export default function AdminDashboard() {
   }
   async function createArticle(){const title=prompt("Título do artigo");if(!title)return;const summary=prompt("Resumo curto");if(!summary)return;const content=prompt("Conteúdo revisado");if(!content)return;const category=prompt("Categoria");if(!category)return;setBusy("article-new");const response=await fetch("/api/admin/content",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({entity:"article",action:"create_article",title,summary,content,category,author:"Equipe Hub Brasil"})});if(!response.ok){const result=await response.json();alert(result.error)}await load();setBusy("")}
   async function createNews(){const title=prompt("Título da notícia");if(!title)return;const summary=prompt("Resumo curto, escrito pelo Hub Brasil");if(!summary)return;const category=prompt("Categoria: Rastreamento, Telecom, Conectividade, Tecnologia ou Automotivo");if(!category)return;const sourceName=prompt("Nome da fonte original");if(!sourceName)return;const sourceUrl=prompt("Link HTTPS da notícia original");if(!sourceUrl)return;const publishedAt=prompt("Data da publicação (AAAA-MM-DD)",new Date().toISOString().slice(0,10));if(!publishedAt)return;setBusy("news-new");const response=await fetch("/api/admin/content",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({entity:"news",action:"create_news",title,summary,category,sourceName,sourceUrl,publishedAt})});if(!response.ok){const result=await response.json();alert(result.error)}await load();setBusy("")}
-  const pending = (key: Tab) => data[key].filter((item) => item.status === "pending").length;
+  const pending = (key: Exclude<Tab, "kpis">) => data[key].filter((item) => item.status === "pending").length;
   return <>
     <div className="admin-tabs">
+      <button className={tab === "kpis" ? "active" : ""} onClick={() => setTab("kpis")}>KPIs</button>
       <button className={tab === "suppliers" ? "active" : ""} onClick={() => setTab("suppliers")}>Fornecedores {pending("suppliers") > 0 && <b>{pending("suppliers")}</b>}</button>
       <button className={tab === "products" ? "active" : ""} onClick={() => setTab("products")}>Produtos {pending("products") > 0 && <b>{pending("products")}</b>}</button>
       <button className={tab === "events" ? "active" : ""} onClick={() => setTab("events")}>Eventos {pending("events") > 0 && <b>{pending("events")}</b>}</button>
@@ -33,7 +43,35 @@ export default function AdminDashboard() {
       <button className={tab === "credits" ? "active" : ""} onClick={() => setTab("credits")}>Hub Créditos</button>
       <button className={tab === "audit" ? "active" : ""} onClick={() => setTab("audit")}>Histórico</button>
     </div>
-    {tab === "audit" ? <div className="table-wrap"><table><thead><tr><th>Gestor</th><th>Ação</th><th>Conteúdo</th><th>Data</th></tr></thead><tbody>{data.audit.map((item) => <tr key={item.id}><td>{item.adminEmail}</td><td>{item.action}</td><td>{item.entity} #{item.entityId}</td><td>{new Date(String(item.createdAt)).toLocaleString("pt-BR")}</td></tr>)}</tbody></table></div> : <><div className="admin-create-actions">{tab==="articles"&&<button className="primary" disabled={Boolean(busy)} onClick={createArticle}>＋ Novo artigo editorial</button>}{tab==="news"&&<button className="primary" disabled={Boolean(busy)} onClick={createNews}>＋ Adicionar notícia ao Radar</button>}</div><div className="moderation-list">
+    {tab === "kpis" ? <div className="kpi-panel">
+      {!kpis ? <div className="admin-empty">Carregando…</div> : <>
+        <article className="kpi-card">
+          <h3>Tempo até a primeira proposta</h3>
+          <small>Meta inicial: menos de {kpis.timeToFirstProposal.goalHours}h</small>
+          {kpis.timeToFirstProposal.avgHours === null ? <p className="kpi-empty">Ainda não há amostra suficiente ({kpis.timeToFirstProposal.sampleSize} de {kpis.minSample} cotações respondidas necessárias).</p> : <>
+            <div className="kpi-numbers"><div><strong>{kpis.timeToFirstProposal.avgHours}h</strong><span>média</span></div><div><strong>{kpis.timeToFirstProposal.medianHours}h</strong><span>mediana</span></div><div><strong>{kpis.timeToFirstProposal.under24hPct}%</strong><span>abaixo da meta</span></div></div>
+            <small>{kpis.timeToFirstProposal.sampleSize} de {kpis.timeToFirstProposal.totalQuotes} cotações já respondidas pelo menos uma vez.</small>
+          </>}
+        </article>
+        <article className="kpi-card">
+          <h3>Conversão lead → proposta enviada</h3>
+          <small>Cada envio de cotação a um fornecedor conta como lead; a resposta dele é a proposta.</small>
+          {kpis.leadToProposalConversion.ratePct === null ? <p className="kpi-empty">Ainda não há amostra suficiente ({kpis.leadToProposalConversion.sampleSize} de {kpis.minSample} leads necessários).</p> : <div className="kpi-numbers"><div><strong>{kpis.leadToProposalConversion.ratePct}%</strong><span>{kpis.leadToProposalConversion.responded} de {kpis.leadToProposalConversion.sampleSize} leads</span></div></div>}
+        </article>
+        <article className="kpi-card kpi-card-missing">
+          <h3>Taxa de proposta aceita</h3>
+          <p className="kpi-empty">Não medível hoje: o sistema registra o pedido e a resposta do fornecedor, mas não captura se o cliente fechou negócio. Precisaria de um passo novo (ex.: cliente marcar &quot;fechei com este fornecedor&quot;).</p>
+        </article>
+        <article className="kpi-card kpi-card-missing">
+          <h3>Churn de fornecedor (30 dias)</h3>
+          <p className="kpi-empty">Não medível hoje: não existe um evento de cancelamento ou critério definido de inatividade para o fornecedor. Precisa ser definido antes de virar número.</p>
+        </article>
+        <article className="kpi-card kpi-card-missing">
+          <h3>NPS (usuário e fornecedor)</h3>
+          <p className="kpi-empty">Não coletado hoje: não existe pergunta de satisfação em nenhum ponto da jornada. Precisaria de uma nova coleta de resposta antes de virar KPI.</p>
+        </article>
+      </>}
+    </div> : tab === "audit" ? <div className="table-wrap"><table><thead><tr><th>Gestor</th><th>Ação</th><th>Conteúdo</th><th>Data</th></tr></thead><tbody>{data.audit.map((item) => <tr key={item.id}><td>{item.adminEmail}</td><td>{item.action}</td><td>{item.entity} #{item.entityId}</td><td>{new Date(String(item.createdAt)).toLocaleString("pt-BR")}</td></tr>)}</tbody></table></div> : <><div className="admin-create-actions">{tab==="articles"&&<button className="primary" disabled={Boolean(busy)} onClick={createArticle}>＋ Novo artigo editorial</button>}{tab==="news"&&<button className="primary" disabled={Boolean(busy)} onClick={createNews}>＋ Adicionar notícia ao Radar</button>}</div><div className="moderation-list">
       {data[tab].length === 0 ? <div className="admin-empty">Nenhum conteúdo nesta seção.</div> : data[tab].map((item) => {
         const entity = tab === "suppliers" ? "supplier" : tab === "products" ? "product" : tab === "events" ? "event" : tab === "needs" ? "need" : tab === "updates" ? "update" : tab === "articles" ? "article" : tab === "news" ? "news" : tab === "deletions" ? "deletion" : tab === "credits" ? "credit" : "report";
         const title = tab === "credits" ? `Fornecedor #${item.supplierId}` : String(item.company || item.name || item.title || "Sem nome");
