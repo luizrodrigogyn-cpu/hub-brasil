@@ -14,7 +14,9 @@ export async function POST(request: Request) {
     const phone = body.phone?.trim();
     const company = body.company?.trim() || null;
     const instagram = body.instagram?.trim() || null;
-    const website = body.website?.trim() || null;
+    const websiteRawInput = body.website?.trim() || "";
+    // Mesma normalização do PATCH: evita salvar sem protocolo e o link quebrar depois.
+    const website = websiteRawInput ? (websiteRawInput.startsWith("http://") || websiteRawInput.startsWith("https://") ? websiteRawInput : `https://${websiteRawInput}`) : null;
     const role = body.role === "supplier" ? "supplier" : "client";
     const address = body.address?.trim();
     const category = body.category?.trim() || null;

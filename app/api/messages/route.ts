@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull, ne, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, ne, sql } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { conversationMessages, conversations, leads } from "../../../db/schema";
 import { getApiUser } from "../../admin-auth";
@@ -43,6 +43,10 @@ export async function POST(request: Request) {
   const text = String(body.message || "").trim().slice(0, 2000);
   if (!text) return Response.json({ error: "Escreva uma mensagem." }, { status: 400 });
   const db = getDb();
+  // Anti-spam: protege ambas as pontas de flood de mensagens sem travar uso normal.
+  const tenMinutesAgo = new Date(Date.now() - 600000).toISOString();
+  const [{ recentTotal }] = await db.select({ recentTotal: sql<number>`count(*)` }).from(conversationMessages).where(and(eq(conversationMessages.senderUserId, user.userId), gte(conversationMessages.createdAt, tenMinutesAgo)));
+  if (Number(recentTotal) >= 20) return Response.json({ error: "Muitas mensagens em pouco tempo. Aguarde alguns minutos antes de enviar novamente." }, { status: 429 });
   let conversationId = Number(body.conversationId) || 0;
   if (!conversationId) {
     if (profile.role !== "client") return Response.json({ error: "A nova conversa deve ser iniciada por um cliente." }, { status: 403 });
