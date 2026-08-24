@@ -33,6 +33,8 @@ type Supplier = {
   priceRangeLabel?: string | null;
   productCount?: number;
   serviceAreaLabel?: string | null;
+  newSupplier?: boolean;
+  fastResponder?: boolean;
 };
 
 type HubEvent = { id: number; name: string; supplier: string; venue: string; city: string; state: string; date: string; displayDate: string; link: string; x: number; y: number; demo?: boolean };
@@ -795,7 +797,7 @@ export default function Home() {
               {filtered.map((supplier) => (
                 <article className="supplier-card" key={supplier.id}>
                   <div className="supplier-top"><div className={`supplier-logo ${supplier.accent}`}>{supplierLogoUrl(supplier.logoKey) ? <img src={supplierLogoUrl(supplier.logoKey) || ""} alt="" /> : supplier.initials}</div><span className="verified">{supplier.verificationStatus === "verified" ? "◆ Fornecedor verificado" : "Fornecedor aprovado"}</span></div>
-                  <div className="supplier-badges">{supplier.highlightedInSearch && <span>⭐ Destaque Hub</span>}{supplier.founderMember && <span>🏅 Membro Fundador</span>}</div>
+                  <div className="supplier-badges">{supplier.highlightedInSearch && <span>⭐ Destaque Hub</span>}{supplier.founderMember && <span>🏅 Membro Fundador</span>}{supplier.fastResponder && <span className="badge-fast">⚡ Resposta rápida</span>}{supplier.newSupplier && <span className="badge-new">🆕 Novo no Hub</span>}</div>
                   <span className="category">{displayCategory(supplier.category)}</span>
                   <h2>{supplier.name}</h2>
                   <p>{supplier.description}</p>
@@ -820,7 +822,7 @@ export default function Home() {
             <button className="back" onClick={() => setView("directory")}>← Voltar aos fornecedores</button>
             <div className="profile-hero">
               <div className={`supplier-logo large ${selectedSupplier.accent}`}>{supplierLogoUrl(selectedSupplier.logoKey) ? <img src={supplierLogoUrl(selectedSupplier.logoKey) || ""} alt="" /> : selectedSupplier.initials}</div>
-              <div><span className="verified">{selectedSupplier.verificationStatus === "verified" ? "◆ Fornecedor verificado" : "Fornecedor aprovado"}</span>{selectedSupplier.founderMember && <span className="verified">🏅 Membro Fundador</span>}<h1>{selectedSupplier.name}</h1><p>{displayCategory(selectedSupplier.category)} · {selectedSupplier.city}, {selectedSupplier.state}</p>{selectedSupplier.verifiedAt && <small>Verificado em {new Date(selectedSupplier.verifiedAt).toLocaleDateString("pt-BR")}</small>}</div>
+              <div><span className="verified">{selectedSupplier.verificationStatus === "verified" ? "◆ Fornecedor verificado" : "Fornecedor aprovado"}</span>{selectedSupplier.founderMember && <span className="verified">🏅 Membro Fundador</span>}{selectedSupplier.fastResponder && <span className="verified badge-fast">⚡ Resposta rápida</span>}{selectedSupplier.newSupplier && <span className="verified badge-new">🆕 Novo no Hub</span>}<h1>{selectedSupplier.name}</h1><p>{displayCategory(selectedSupplier.category)} · {selectedSupplier.city}, {selectedSupplier.state}</p>{selectedSupplier.verifiedAt && <small>Verificado em {new Date(selectedSupplier.verifiedAt).toLocaleDateString("pt-BR")}</small>}</div>
               <div className="profile-actions"><button className="event-create" onClick={() => { const url=`${window.location.origin}/fornecedor/${selectedSupplier.id}`; if(navigator.share) navigator.share({title:selectedSupplier.name,url}).catch(()=>{}); else navigator.clipboard.writeText(url).then(()=>{setToast("Link do perfil copiado.");window.setTimeout(()=>setToast(""),3000)}); }}>Compartilhar perfil</button>{userRole === "supplier" && <button className="event-create" onClick={() => setEventFormOpen(true)}>＋ Cadastrar evento</button>}</div>
             </div>
             <div className="rating-panel"><div><strong>{ratings[selectedSupplier.name] ? ratings[selectedSupplier.name].average.toFixed(1) : "Sem avaliações"}</strong>{ratings[selectedSupplier.name] && <span>{"★".repeat(Math.round(ratings[selectedSupplier.name].average))}</span>}</div>{ratings[selectedSupplier.name] && <small className="verified-note">✓ {ratings[selectedSupplier.name].total} avaliações verificadas de clientes que contataram este fornecedor</small>}<p>Avalie este fornecedor</p><div className="star-picker">{[1,2,3,4,5].map((star) => <button key={star} onClick={() => rateSupplier(selectedSupplier.name, star)} aria-label={`${star} estrelas`}>★</button>)}</div></div>
