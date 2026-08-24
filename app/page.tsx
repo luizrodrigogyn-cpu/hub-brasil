@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { type ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 type Supplier = {
   id: number;
@@ -24,6 +24,8 @@ type Supplier = {
   highlightedOnMap?: boolean;
   highlightedInSearch?: boolean;
   founderMember?: boolean;
+  quoteRequests?: number;
+  quoteResponses?: number;
 };
 
 type HubEvent = { id: number; name: string; supplier: string; venue: string; city: string; state: string; date: string; displayDate: string; link: string; x: number; y: number; demo?: boolean };
@@ -56,6 +58,18 @@ const audienceGroups = [
   "Empresas de instalação e serviços",
 ] as const;
 
+type QuoteDraft = {
+  category: string;
+  application: string;
+  quantity: string;
+  city: string;
+  state: string;
+  deadline: string;
+  notes: string;
+  supplierIds: string[];
+  contactConsent: boolean;
+};
+
 function displayCategory(category: string) {
   return category === "Câmeras veiculares" || category === "ADAS e DSM" ? "Videotelemetria" : category;
 }
@@ -67,6 +81,12 @@ function supplierLogoUrl(key?: string | null) {
 function mapPoint(state: string) {
   const points: Record<string, [number, number]> = { AC:[26,45],AM:[35,30],RR:[45,15],RO:[38,50],PA:[55,32],AP:[62,18],TO:[58,48],MA:[67,38],PI:[70,46],CE:[78,42],RN:[86,43],PB:[84,48],PE:[81,51],AL:[80,55],SE:[78,59],BA:[70,60],MT:[49,53],GO:[58,62],DF:[61,59],MS:[48,68],MG:[65,69],ES:[74,69],RJ:[70,76],SP:[59,76],PR:[55,83],SC:[56,89],RS:[51,95] };
   return points[state] || [55, 55];
+}
+
+function maskPhone(value?: string | null) {
+  const digits = String(value || "").replace(/\D/g, "");
+  if (!digits) return "Contato protegido";
+  return `(${digits.slice(0, 2)}) ${digits.slice(2, 3)}••••-••••`;
 }
 
 export default function Home() {
@@ -100,6 +120,20 @@ export default function Home() {
   const [messageData, setMessageData] = useState<{ conversations: Array<{id:number;subject:string;updatedAt:string;supplierName?:string;clientName?:string;clientCompany?:string}>; messages?: Array<{id:number;senderUserId:string;body:string;createdAt:string}>; currentUserId?:string }>({ conversations: [] });
   const [activeConversationId, setActiveConversationId] = useState<number | null>(null);
   const [navigationOpen, setNavigationOpen] = useState(false);
+  const [quoteFlowOpen, setQuoteFlowOpen] = useState(false);
+  const [quoteDraft, setQuoteDraft] = useState<QuoteDraft>({ category: "", application: "", quantity: "1", city: "", state: "", deadline: "", notes: "", supplierIds: [], contactConsent: false });
+  const [pendingContactSupplier, setPendingContactSupplier] = useState<Supplier | null>(null);
+  const [contactUnlocked, setContactUnlocked] = useState<Record<number, boolean>>({});
+  const navigationMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!navigationOpen) return;
+    function closeNavigation(event: PointerEvent) {
+      if (!navigationMenuRef.current?.contains(event.target as Node)) setNavigationOpen(false);
+    }
+    document.addEventListener("pointerdown", closeNavigation);
+    return () => document.removeEventListener("pointerdown", closeNavigation);
+  }, [navigationOpen]);
 
   function navigateTo(nextView: typeof view) {
     setView(nextView);
@@ -182,7 +216,7 @@ export default function Home() {
     const matchesCategory = category === "Todas as categorias" || (supplier.categories || [supplier.category]).some((item) => displayCategory(item) === category);
     const matchesState = stateFilter === "Todo o Brasil" || supplier.state === stateFilter;
     return matchesQuery && matchesCategory && matchesState;
-  }), [query, category, stateFilter]);
+  }), [suppliers, query, category, stateFilter]);
 
   const plottedEvents = useMemo(() => {
     const eventsByState = new Map<string, HubEvent[]>();
@@ -201,6 +235,7 @@ export default function Home() {
 
   const newsCategories = useMemo(() => ["Todos", ...Array.from(new Set(news.map((item) => item.category)))], [news]);
   const filteredNews = useMemo(() => newsCategory === "Todos" ? news : news.filter((item) => item.category === newsCategory), [news, newsCategory]);
+  const isContactUnlocked = (supplier: Supplier) => Boolean(contactUnlocked[supplier.id]);
 
   function requestAccess(supplier?: Supplier) {
     if (supplier) setSelectedSupplier(supplier);
@@ -209,6 +244,67 @@ export default function Home() {
       return;
     }
     if (supplier) setView("supplier");
+  }
+
+  function openQuoteRequest(preselectedSupplier?: Supplier, presetCategory?: string) {
+    if (!registered) {
+      openRegistration("client");
+      setToast("Identifique-se para solicitar uma cotação aos fornecedores compatíveis.");
+      window.setTimeout(() => setToast(""), 3500);
+      return;
+    }
+    if (userRole !== "client") {
+      setToast("Somente perfis de usuário podem solicitar cotação.");
+      window.setTimeout(() => setToast(""), 3000);
+      return;
+    }
+    setQuoteDraft((draft) => ({
+      ...draft,
+      supplierIds: preselectedSupplier ? [String(preselectedSupplier.id)] : [],
+      category: presetCategory ?? (preselectedSupplier ? "" : draft.category),
+      city: preselectedSupplier ? draft.city || preselectedSupplier.city || "" : draft.city,
+      state: preselectedSupplier ? draft.state || preselectedSupplier.state || "" : draft.state,
+    }));
+    setQuoteFlowOpen(true);
+  }
+
+  function openContactForSupplier(supplier: Supplier) {
+    if (!registered) {
+      openRegistration("client");
+      setToast("Identifique-se para solicitar contato com fornecedores.");
+      window.setTimeout(() => setToast(""), 3000);
+      return;
+    }
+    if (userRole !== "client") {
+      setToast("A liberação de contato está disponível para perfis de usuário.");
+      window.setTimeout(() => setToast(""), 3000);
+      return;
+    }
+    if (isContactUnlocked(supplier)) {
+      setToast("Contato já liberado nesta sessão.");
+      window.setTimeout(() => setToast(""), 2000);
+      return;
+    }
+    setPendingContactSupplier(supplier);
+  }
+
+  async function confirmContactForSupplier() {
+    if (!pendingContactSupplier) return;
+    setContactUnlocked((current) => ({ ...current, [pendingContactSupplier.id]: true }));
+    try {
+      await fetch("/api/roadmap", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "track", kind: "contact_revealed", supplierId: pendingContactSupplier.id }),
+      });
+    } catch {}
+    setPendingContactSupplier(null);
+    setToast("Contato liberado. Agora o WhatsApp e telefone aparecem no perfil.");
+    window.setTimeout(() => setToast(""), 3000);
+  }
+
+  function closeContactForSupplier() {
+    setPendingContactSupplier(null);
   }
 
   async function register(event: FormEvent<HTMLFormElement>) {
@@ -308,30 +404,67 @@ export default function Home() {
     window.setTimeout(() => setToast(""), 3500);
   }
 
-  function openQuoteRequest() {
-    if (!registered) {
-      openRegistration("client");
-      setToast("Identifique-se para solicitar uma cotação aos fornecedores compatíveis.");
-      window.setTimeout(() => setToast(""), 3500);
+  function openQuoteRequestFromProduct(product: Product) {
+    const supplier = suppliers.find((item) => item.id === product.supplierId || item.name === product.supplierName);
+    if (supplier) {
+      openQuoteRequest(supplier, normalizeTextField(product.category));
       return;
     }
-    window.location.href = "/area-testes";
+    setQuoteDraft((draft) => ({
+      ...draft,
+      category: normalizeTextField(product.category),
+      supplierIds: [],
+    }));
+    setQuoteFlowOpen(true);
   }
 
-  function openEventForm() {
-    if (previewMode) {
-      setToast("Modo de visualização: cadastros estão desativados.");
-      window.setTimeout(() => setToast(""), 3000);
-      return;
-    }
-    if (userRole !== "supplier") {
-      setRegistrationRole("supplier");
-      setRegisterOpen(true);
-      setToast("Cadastre-se como fornecedor para publicar eventos.");
+  function updateQuoteInput(event: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) {
+    const { name, value } = event.target;
+    setQuoteDraft((draft) => ({ ...draft, [name]: value }));
+  }
+
+  function toggleQuoteSupplier(supplierId: number) {
+    setQuoteDraft((draft) => {
+      const current = new Set(draft.supplierIds);
+      if (current.has(String(supplierId))) {
+        current.delete(String(supplierId));
+      } else {
+        current.add(String(supplierId));
+      }
+      return { ...draft, supplierIds: Array.from(current) };
+    });
+  }
+
+  async function submitQuoteRequest(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const payload = {
+      action: "quote",
+      supplierIds: quoteDraft.supplierIds,
+      category: normalizeTextField(quoteDraft.category),
+      application: normalizeTextField(quoteDraft.application),
+      quantity: Number(quoteDraft.quantity || 1),
+      city: normalizeTextField(quoteDraft.city),
+      state: normalizeTextField(quoteDraft.state).toUpperCase(),
+      deadline: normalizeTextField(quoteDraft.deadline),
+      notes: normalizeTextField(quoteDraft.notes),
+      contactConsent: quoteDraft.contactConsent,
+    };
+    if (!payload.contactConsent || !payload.category || !payload.application || !payload.city || !payload.state || !payload.supplierIds.length) {
+      setToast("Confirme o consentimento e preencha categoria, aplicação, cidade, estado e pelo menos um fornecedor.");
       window.setTimeout(() => setToast(""), 3500);
       return;
     }
-    setEventFormOpen(true);
+    const response = await fetch("/api/roadmap", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
+    const data = await response.json();
+    if (!response.ok) { setToast(data.error || "Não foi possível abrir a cotação."); return; }
+    setQuoteFlowOpen(false);
+    setToast(`Cotação enviada. Protocolo: ${data.protocol}`);
+    window.setTimeout(() => setToast(""), 4500);
+    setQuoteDraft({ category: "", application: "", quantity: "1", city: "", state: "", deadline: "", notes: "", supplierIds: [], contactConsent: false });
+  }
+
+  function normalizeTextField(value: string) {
+    return value.replace(/\s+/g, " ").trim();
   }
 
   function openProduct(product: Product) {
@@ -394,7 +527,7 @@ export default function Home() {
           </nav>}
         </div>
         <div className="top-actions">
-          {registered && <a className="admin-link" href="/area-testes">Área de testes</a>}
+          {registered && <button className="admin-link" onClick={() => setView("supplier-dashboard")}>Painel da operação</button>}
           <a className="admin-link" href="/admin">Ver cadastros</a>
           {registered ? <span className="access-chip"><i></i>Acesso liberado</span> : <a className="text-action" href="/sign-in?return_to=/">Entrar</a>}
           {userRole === "supplier" && <button className="text-action" onClick={() => setView("supplier-dashboard")}>Minha empresa</button>}
@@ -471,10 +604,10 @@ export default function Home() {
                   <div className="supplier-top"><div className={`supplier-logo ${supplier.accent}`}>{supplierLogoUrl(supplier.logoKey) ? <img src={supplierLogoUrl(supplier.logoKey) || ""} alt="" /> : supplier.initials}</div><span className="verified">{supplier.verificationStatus === "verified" ? "◆ Fornecedor verificado" : "Fornecedor aprovado"}</span></div>
                   <div className="supplier-badges">{supplier.highlightedInSearch && <span>⭐ Destaque Hub</span>}{supplier.founderMember && <span>🏅 Membro Fundador</span>}</div>
                   <span className="category">{displayCategory(supplier.category)}</span>
-                  <h2>{registered ? supplier.name : "Empresa protegida"}</h2>
+                  <h2>{supplier.name}</h2>
                   <p>{supplier.description}</p>
                   {supplier.qualityScore !== undefined && <div className="quality-score"><strong>{supplier.qualityScore}</strong><span>Qualidade no Hub</span><small>{supplier.qualityReasons?.join(" · ")}</small></div>}
-                  <div className="card-meta"><span>⌖ {supplier.city}, {supplier.state}</span><span>☎ {registered ? supplier.phone : supplier.phonePreview}</span></div>
+                  <div className="card-meta"><span>⌖ {supplier.city}, {supplier.state}</span><span>☎ {isContactUnlocked(supplier) ? supplier.phone || "Contato protegido" : supplier.phonePreview}</span><span>↻ {supplier.quoteRequests ? `${supplier.quoteResponses || 0}/${supplier.quoteRequests} respostas` : "Sem resposta registrada"}</span></div>
                   <button className="card-action" onClick={() => showSupplier(supplier)}>{registered ? "Ver perfil completo" : "Identifique-se para acessar"}<span>→</span></button>
                 </article>
               ))}
@@ -493,7 +626,7 @@ export default function Home() {
             <div className="rating-panel"><div><strong>{ratings[selectedSupplier.name] ? ratings[selectedSupplier.name].average.toFixed(1) : "Sem avaliações"}</strong>{ratings[selectedSupplier.name] && <span>{"★".repeat(Math.round(ratings[selectedSupplier.name].average))}</span>}</div><p>Avalie este fornecedor</p><div className="star-picker">{[1,2,3,4,5].map((star) => <button key={star} onClick={() => rateSupplier(selectedSupplier.name, star)} aria-label={`${star} estrelas`}>★</button>)}</div></div>
             <div className="profile-columns">
               <div><h2>Produtos publicados</h2>{products.filter((item) => item.supplierName === selectedSupplier.name).length === 0 ? <div className="events-empty"><strong>Nenhum produto publicado</strong><p>Os produtos aprovados deste fornecedor aparecerão aqui.</p></div> : <div className="product-grid">{products.filter((item) => item.supplierName === selectedSupplier.name).map((item) => <article className="product-card" key={item.id}><div className="product-visual">{item.imageUrl ? <img src={item.imageUrl} alt={item.name} /> : <div className="device"></div>}</div><span className="category">{displayCategory(item.category)}</span><h3>{item.name}</h3><p>Especificações, aplicação e diferenciais</p><button onClick={() => openProduct(item)}>Ver informações →</button></article>)}</div>}</div>
-              <aside className="contact-panel"><h3>Contato comercial</h3><p>Fale diretamente com este fornecedor aprovado, sem expor seus dados publicamente.</p><dl><div><dt>Localização</dt><dd>{selectedSupplier.city}, {selectedSupplier.state}</dd></div>{selectedSupplier.phone && <div><dt>Telefone / WhatsApp</dt><dd>{selectedSupplier.phone}</dd></div>}{selectedSupplier.instagram && <div><dt>Instagram</dt><dd>{selectedSupplier.instagram}</dd></div>}</dl><div className="contact-actions"><button onClick={() => { if (!registered) { openRegistration("client"); return; } if (userRole !== "client") { setToast("Mensagens diretas são iniciadas por perfis de usuário."); return; } setActiveConversationId(null); setMessageData({ conversations: [] }); setView("messages"); }}>Enviar mensagem pelo Hub</button>{selectedSupplier.phone && <a href={`https://wa.me/55${selectedSupplier.phone.replace(/\D/g, "")}`} target="_blank" rel="noreferrer" onClick={() => fetch("/api/roadmap", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "track", kind: "whatsapp_click", supplierId: selectedSupplier.id }) }).catch(() => {})}>Conversar no WhatsApp</a>}{selectedSupplier.website && <a href={selectedSupplier.website} target="_blank" rel="noreferrer" onClick={() => fetch("/api/roadmap", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "track", kind: "website_click", supplierId: selectedSupplier.id }) }).catch(() => {})}>Visitar site</a>}</div></aside>
+              <aside className="contact-panel"><h3>Contato comercial</h3><p>Conecte-se com segurança e só compartilhe contato quando você decidir.</p><dl><div><dt>Localização</dt><dd>{selectedSupplier.city}, {selectedSupplier.state}</dd></div><div><dt>Telefone / WhatsApp</dt><dd>{isContactUnlocked(selectedSupplier) ? selectedSupplier.phone || "Contato protegido" : maskPhone(selectedSupplier.phone)}</dd></div>{selectedSupplier.instagram && <div><dt>Instagram</dt><dd>{selectedSupplier.instagram}</dd></div>}{selectedSupplier.website && <div><dt>Site</dt><dd>{selectedSupplier.website}</dd></div>}</dl><div className="contact-actions"><button onClick={openContactForSupplier.bind(null, selectedSupplier)}>{isContactUnlocked(selectedSupplier) ? "Contato liberado" : "Liberar contato para conexão"}</button><button onClick={() => { if (!registered) { openRegistration("client"); return; } if (userRole !== "client") { setToast("Mensagens diretas são iniciadas por perfis de usuário."); return; } setActiveConversationId(null); setMessageData({ conversations: [] }); setView("messages"); }}>Enviar mensagem pelo Hub</button>{isContactUnlocked(selectedSupplier) && selectedSupplier.phone && <a href={`https://wa.me/55${selectedSupplier.phone.replace(/\D/g, "")}`} target="_blank" rel="noreferrer" onClick={() => fetch("/api/roadmap", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "track", kind: "whatsapp_click", supplierId: selectedSupplier.id }) }).catch(() => {})}>Conversar no WhatsApp</a>}{selectedSupplier.website && <a href={selectedSupplier.website} target="_blank" rel="noreferrer" onClick={() => fetch("/api/roadmap", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "track", kind: "website_click", supplierId: selectedSupplier.id }) }).catch(() => {})}>Visitar site</a>}</div><button className="event-create" onClick={openQuoteRequest.bind(null, selectedSupplier)}>Solicitar cotação estruturada</button></aside>
             </div>
           </section>
         )}
@@ -519,11 +652,57 @@ export default function Home() {
         <button onClick={() => setRegisterOpen(true)}><span>◎</span>Conta</button>
       </nav>
 
-      {editingCompany && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setEditingCompany(false); }}><section className="access-modal event-form company-editor" role="dialog" aria-modal="true"><button className="modal-close" onClick={() => setEditingCompany(false)} aria-label="Fechar">×</button><span className="eyebrow">MINHA EMPRESA</span><h2>Editar informações da empresa</h2><p>Esses dados compõem seu perfil público após a aprovação da gestão.</p><form onSubmit={saveCompany}><label>Nome da empresa<input name="company" defaultValue={supplierCompany} required /></label><div className="field-row"><label>Telefone / WhatsApp<input name="phone" defaultValue={dashboard.profile?.phone || ""} required /></label><label>Instagram<input name="instagram" defaultValue={dashboard.profile?.instagram || ""} /></label></div><label>Site da empresa <small>Opcional</small><input name="website" type="url" defaultValue={dashboard.profile?.website || ""} placeholder="https://www.suaempresa.com.br" /></label><div className="field-row"><label>Cidade<input name="city" defaultValue={dashboard.profile?.city || ""} required /></label><label>Estado<input name="state" maxLength={2} defaultValue={dashboard.profile?.state || ""} required /></label></div><fieldset className="solution-selector"><legend>Soluções oferecidas <small>Escolha uma ou mais.</small></legend>{solutionCategories.map((item) => <label className="check" key={item.name}><input name="categories" type="checkbox" value={item.name} defaultChecked={(dashboard.profile?.categories || []).includes(item.name)} />{item.title}</label>)}</fieldset><label>Sobre a empresa<textarea name="description" rows={4} defaultValue={dashboard.profile?.description || ""} placeholder="Especialidades, diferenciais e informações relevantes" /></label><button className="primary full" type="submit">Salvar informações →</button></form></section></div>}
+      {quoteFlowOpen && (
+        <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setQuoteFlowOpen(false); }}>
+          <section className="access-modal event-form" role="dialog" aria-modal="true" aria-labelledby="quote-flow-title">
+            <button className="modal-close" onClick={() => setQuoteFlowOpen(false)} aria-label="Fechar">×</button>
+            <span className="eyebrow">SOLICITAÇÃO ESTRUTURADA</span>
+            <h2 id="quote-flow-title">Cotação de forma segura</h2>
+            <form onSubmit={submitQuoteRequest}>
+              <label>Categoria de necessidade<input name="category" value={quoteDraft.category} onChange={updateQuoteInput} required list="category-suggestions" placeholder="Ex.: Rastreadores para frota" /></label>
+              <datalist id="category-suggestions">{solutionCategories.map((item) => <option key={item.name} value={item.name} />)}</datalist>
+              <label>Uso da solução<textarea name="application" value={quoteDraft.application} onChange={updateQuoteInput} rows={3} required placeholder="Para quais operações e quantidade de veículos?" /></label>
+              <div className="field-row">
+                <label>Quantidade de ativos<input name="quantity" type="number" min="1" max="120" value={quoteDraft.quantity} onChange={updateQuoteInput} required /></label>
+                <label>Prazo limite (opcional)<input name="deadline" type="date" value={quoteDraft.deadline} onChange={updateQuoteInput} /></label>
+              </div>
+              <label>Cidade da operação<input name="city" value={quoteDraft.city} onChange={updateQuoteInput} required placeholder="Ex.: São Paulo" /></label>
+              <label>Estado (UF)<input name="state" value={quoteDraft.state} onChange={updateQuoteInput} required maxLength={2} placeholder="SP" /></label>
+              <label>Notas de contexto<textarea name="notes" value={quoteDraft.notes} onChange={updateQuoteInput} rows={3} placeholder="Tipo de operação, horários de monitoramento, cobertura necessária..." /></label>
+              <fieldset className="solution-selector">
+                <legend>Fornecedores candidatos <small>Selecione 1 a 8</small></legend>
+                {suppliers.map((supplier) => (
+                  <label className="check" key={supplier.id}>
+                    <input type="checkbox" checked={quoteDraft.supplierIds.includes(String(supplier.id))} onChange={() => toggleQuoteSupplier(supplier.id)} />
+                    {supplier.name} · {supplier.city}/{supplier.state}
+                  </label>
+                ))}
+              </fieldset>
+              <label className="consent"><input type="checkbox" name="contactConsent" checked={quoteDraft.contactConsent} onChange={(event) => setQuoteDraft((draft) => ({ ...draft, contactConsent: event.target.checked }))} required /> <span>Autorizo o Hub a repassar meu contato aos fornecedores escolhidos para retorno da cotação.</span></label>
+              <button className="primary full" type="submit">Enviar solicitação <span>→</span></button>
+            </form>
+          </section>
+        </div>
+      )}
+
+      {pendingContactSupplier && (
+        <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeContactForSupplier(); }}>
+          <section className="access-modal event-form" role="dialog" aria-modal="true" aria-labelledby="contact-consent-title">
+            <button className="modal-close" onClick={closeContactForSupplier} aria-label="Fechar">×</button>
+            <span className="eyebrow">CONTATO COM SEGURANÇA</span>
+            <h2 id="contact-consent-title">Revelar dados de contato</h2>
+            <p>Ao revelar, o telefone/WhatsApp de <strong>{pendingContactSupplier.name}</strong> fica visível para você e passará a receber os eventos de contato.</p>
+            <button className="primary full" onClick={confirmContactForSupplier}>Entendo e quero liberar contato</button>
+            <button className="event-create" onClick={closeContactForSupplier}>Agora não</button>
+          </section>
+        </div>
+      )}
+
+      {editingCompany && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setEditingCompany(false); }}><section className="access-modal event-form company-editor" role="dialog" aria-modal="true"><button className="modal-close" onClick={() => setEditingCompany(false)} aria-label="Fechar">×</button><span className="eyebrow">MINHA EMPRESA</span><h2>Editar informações da empresa</h2><p>Esses dados compõem seu perfil público após a aprovação da gestão.</p><form onSubmit={saveCompany}><label>Nome da empresa<input name="company" defaultValue={supplierCompany} required /></label><div className="field-row"><label>Telefone / WhatsApp<input name="phone" defaultValue={dashboard.profile?.phone || ""} required /></label><label>Instagram<input name="instagram" defaultValue={dashboard.profile?.instagram || ""} /></label></div><label>Site da empresa <small>Opcional</small><input name="website" type="url" defaultValue={dashboard.profile?.website || ""} placeholder="https://www.suaempresa.com.br" /></label><label>Endereço<input name="address" defaultValue={dashboard.profile?.address || ""} required placeholder="Rua, número, bairro e complemento" /></label><div className="field-row"><label>Cidade<input name="city" defaultValue={dashboard.profile?.city || ""} required /></label><label>Estado<input name="state" maxLength={2} defaultValue={dashboard.profile?.state || ""} required /></label></div><fieldset className="solution-selector"><legend>Soluções oferecidas <small>Escolha uma ou mais.</small></legend>{solutionCategories.map((item) => <label className="check" key={item.name}><input name="categories" type="checkbox" value={item.name} defaultChecked={(dashboard.profile?.categories || []).includes(item.name)} />{item.title}</label>)}</fieldset><label>Sobre a empresa<textarea name="description" rows={4} defaultValue={dashboard.profile?.description || ""} placeholder="Especialidades, diferenciais e informações relevantes" /></label><button className="primary full" type="submit">Salvar informações →</button></form></section></div>}
 
       {eventFormOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setEventFormOpen(false); }}><section className="access-modal event-form" role="dialog" aria-modal="true" aria-labelledby="event-form-title"><button className="modal-close" onClick={() => setEventFormOpen(false)} aria-label="Fechar">×</button><span className="eyebrow">ÁREA DO FORNECEDOR</span><h2 id="event-form-title">Cadastrar novo evento</h2><p>Após a revisão, o evento aparecerá na agenda e como um ponto especial no mapa.</p><form onSubmit={createEvent}><label>Nome do evento<input name="name" required placeholder="Ex.: Encontro de Integradores" /></label><div className="field-row"><label>Data<input name="date" type="date" required /></label><label>Local<input name="venue" required placeholder="Centro de eventos" /></label></div><div className="field-row"><label>Cidade<input name="city" required placeholder="São Paulo" /></label><label>Estado<select name="state" required><option value="">Selecione</option><option>SP</option><option>PR</option><option>MG</option><option>RJ</option><option>GO</option><option>PE</option></select></label></div><label>Link para inscrição<input name="link" type="url" required placeholder="https://seusite.com/inscricao" /></label><label>Descrição<textarea name="description" rows={3} placeholder="Conte brevemente sobre o evento" /></label><button className="primary full" type="submit">Enviar evento para publicação <span>→</span></button></form></section></div>}
 
-      {selectedProduct && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedProduct(null); }}><section className="access-modal product-detail" role="dialog" aria-modal="true"><button className="modal-close" onClick={() => setSelectedProduct(null)} aria-label="Fechar">×</button><div className="detail-photo">{selectedProduct.imageUrl ? <img src={selectedProduct.imageUrl} alt={selectedProduct.name} /> : <span>Produto sem foto</span>}</div><span className="category">{displayCategory(selectedProduct.category)}</span><h2>{selectedProduct.name}</h2><strong className="detail-supplier">{selectedProduct.supplierName}</strong><h3>Informações do produto</h3><p>{selectedProduct.technicalDetails}</p><p className="commercial-notice">Preços, disponibilidade, frete e condições comerciais devem ser confirmados diretamente com o fornecedor.</p>{selectedProduct.supplierPhone ? <a className="primary full quote-button" href={`https://wa.me/55${selectedProduct.supplierPhone.replace(/\D/g, "")}?text=${encodeURIComponent(`Olá! Vi o produto ${selectedProduct.name} no Hub Brasil e gostaria de solicitar uma cotação.`)}`} target="_blank" rel="noreferrer">Solicitar cotação pelo WhatsApp <span>→</span></a> : <button className="primary full" onClick={() => setSelectedProduct(null)}>Fechar <span>×</span></button>}</section></div>}
+      {selectedProduct && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedProduct(null); }}><section className="access-modal product-detail" role="dialog" aria-modal="true"><button className="modal-close" onClick={() => setSelectedProduct(null)} aria-label="Fechar">×</button><div className="detail-photo">{selectedProduct.imageUrl ? <img src={selectedProduct.imageUrl} alt={selectedProduct.name} /> : <span>Produto sem foto</span>}</div><span className="category">{displayCategory(selectedProduct.category)}</span><h2>{selectedProduct.name}</h2><strong className="detail-supplier">{selectedProduct.supplierName}</strong><h3>Informações do produto</h3><p>{selectedProduct.technicalDetails}</p><p className="commercial-notice">Preços, disponibilidade, frete e condições comerciais devem ser confirmados diretamente com o fornecedor.</p><button className="primary full quote-button" onClick={() => { setSelectedProduct(null); openQuoteRequestFromProduct(selectedProduct); }}>Solicitar cotação estruturada <span>→</span></button></section></div>}
 
       {productFormOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setProductFormOpen(false); }}><section className="access-modal event-form" role="dialog" aria-modal="true"><button className="modal-close" onClick={() => setProductFormOpen(false)} aria-label="Fechar">×</button><span className="eyebrow">ÁREA DO FORNECEDOR</span><h2>Cadastrar produto</h2><p>Destaque as informações que ajudam o cliente a identificar a solução adequada.</p><form onSubmit={createProduct}><label>Foto do produto<input name="photo" type="file" accept="image/jpeg,image/png,image/webp" required /></label><label>Nome do produto<input name="name" required placeholder="Ex.: Rastreador 4G LTE" /></label><label>Categoria<select name="category" required><option value="">Selecione</option>{solutionCategories.map((item) => <option key={item.name}>{item.name}</option>)}</select></label><label>Especificações técnicas<textarea name="technicalDetails" rows={4} required placeholder="Tecnologia, alimentação, conectividade, homologações e demais especificações" /></label><label>Aplicação<textarea name="application" rows={3} required placeholder="Para quais veículos, operações ou necessidades este produto é indicado?" /></label><label>Diferenciais<textarea name="differentials" rows={3} required placeholder="Recursos, benefícios e diferenciais da solução" /></label><p className="commercial-notice">Preços, disponibilidade, frete e condições comerciais serão tratados diretamente com o cliente.</p><button className="primary full" type="submit">Enviar produto para aprovação <span>→</span></button></form></section></div>}
 

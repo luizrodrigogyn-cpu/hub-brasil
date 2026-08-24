@@ -10,12 +10,27 @@ function list(value: unknown) {
   return Array.isArray(value) ? value.map(String).map((item) => item.trim()).filter(Boolean).slice(0, 30) : [];
 }
 
+function normalizeText(value: unknown, fallback = "") {
+  return String(value || fallback).replace(/\s+/g, " ").trim();
+}
+
+function normalizeIds(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => Number(item)).filter((item) => Number.isInteger(item) && item > 0).filter((item, index, rows) => rows.indexOf(item) === index);
+}
+
+function toPositiveInt(value: unknown, fallback: number, max: number) {
+  const candidate = Number(value);
+  if (!Number.isFinite(candidate) || candidate <= 0) return fallback;
+  return Math.floor(Math.min(max, Math.max(fallback, candidate)));
+}
+
 export async function GET() {
   const user = await getApiUser();
-  if (!user) return Response.json({ error: "Faça login para acessar a área de testes.", signIn: "/sign-in?return_to=/area-testes" }, { status: 401 });
+  if (!user) return Response.json({ error: "Faça login para acessar o painel.", signIn: "/sign-in?return_to=/" }, { status: 401 });
   const db = getDb();
   const [profile] = await db.select().from(leads).where(eq(leads.authUserId, user.userId));
-  if (!profile) return Response.json({ error: "Conclua seu cadastro no Hub antes de acessar os testes." }, { status: 403 });
+  if (!profile) return Response.json({ error: "Conclua seu cadastro no Hub para acessar o painel." }, { status: 403 });
 
   const [saved, alerts, clientQuotes] = await Promise.all([
     db.select().from(favorites).where(eq(favorites.userId, user.userId)).orderBy(desc(favorites.createdAt)),
@@ -63,7 +78,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   const user = await getApiUser();
-  if (!user) return Response.json({ error: "Faça login para continuar.", signIn: "/sign-in?return_to=/area-testes" }, { status: 401 });
+  if (!user) return Response.json({ error: "Faça login para continuar.", signIn: "/sign-in?return_to=/" }, { status: 401 });
   const db = getDb();
   const [profile] = await db.select().from(leads).where(eq(leads.authUserId, user.userId));
   if (!profile || profile.status !== "approved") return Response.json({ error: "Seu cadastro precisa estar aprovado." }, { status: 403 });
@@ -120,11 +135,18 @@ export async function POST(request: Request) {
 
   if (action === "quote") {
     if (profile.role !== "client") return Response.json({ error: "A cotação deve ser criada por um perfil de cliente." }, { status: 403 });
-    const supplierIds = list(body.supplierIds).map(Number).filter((id) => Number.isInteger(id) && id > 0).slice(0, 5);
-    const category = String(body.category || "").trim();
-    const application = String(body.application || "").trim();
-    const city = String(body.city || "").trim();
-    const state = String(body.state || "").trim();
+    const supplierIds = normalizeIds(body.supplierIds).slice(0, 8);
+    const category = normalizeText(body.category);
+    const application = normalizeText(body.application);
+    const city = normalizeText(body.city);
+    const state = normalizeText(body.state).toUpperCase().slice(0, 2);
+    const notes = normalizeText(body.notes).slice(0, 2000);
+    const contactConsent = body.contactConsent === true || String(body.contactConsent).toLowerCase() === "true";
+    const quantity = toPositiveInt(body.quantity, 1, 120);
+    const deadlineText = normalizeText(body.deadline);
+    const deadline = deadlineText ? new Date(`${deadlineText}T23:59:59`) : null;
+    if (deadlineText && (!deadline || Number.isNaN(deadline.getTime()) || deadline < new Date())) return Response.json({ error: "Prazo inválido para solicitação de cotação." }, { status: 400 });
+    if (!contactConsent) return Response.json({ error: "Confirme o consentimento para compartilhamento do seu contato." }, { status: 400 });
     if (!category || !application || !city || !state || !supplierIds.length) return Response.json({ error: "Preencha a necessidade e escolha ao menos um fornecedor." }, { status: 400 });
     const oneHourAgo = new Date(Date.now() - 3600000).toISOString();
     const [{ total }] = await db.select({ total: sql<number>`count(*)` }).from(quoteRequests).where(and(eq(quoteRequests.clientUserId, user.userId), gte(quoteRequests.createdAt, oneHourAgo)));
@@ -132,16 +154,23 @@ export async function POST(request: Request) {
     const approved = await db.select({ id: leads.id }).from(leads).where(and(inArray(leads.id, supplierIds), eq(leads.role, "supplier"), eq(leads.status, "approved")));
     if (!approved.length) return Response.json({ error: "Nenhum fornecedor selecionado está disponível." }, { status: 400 });
     const protocol = `HB-${new Date().getFullYear()}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
-    const consentSnapshot = JSON.stringify({ version: "2026-08-14", shared: ["nome", "telefone", "empresa_ou_instagram", "necessidade"], supplierIds: approved.map((item) => item.id), acceptedAt: new Date().toISOString() });
-    const [quote] = await db.insert(quoteRequests).values({ protocol, clientUserId: user.userId, category, application, quantity: Math.max(1, Math.min(100000, Number(body.quantity) || 1)), city, state, deadline: String(body.deadline || "").trim() || null, notes: String(body.notes || "").trim().slice(0, 2000) || null, consentSnapshot }).returning();
+    const consentSnapshot = JSON.stringify({ version: "2026-08-24", consent: true, shared: ["nome", "telefone", "empresa_ou_instagram", "necessidade"], supplierIds: approved.map((item) => item.id), acceptedAt: new Date().toISOString() });
+    const [quote] = await db.insert(quoteRequests).values({ protocol, clientUserId: user.userId, category, application, quantity, city, state, deadline: deadlineText || null, notes: notes || null, consentSnapshot }).returning();
     await db.batch(approved.map((supplier) => db.insert(quoteRecipients).values({ quoteId: quote.id, supplierId: supplier.id })).concat(approved.map((supplier) => db.insert(activityEvents).values({ actorUserId: user.userId, supplierId: supplier.id, kind: "quote_request" }))));
     return Response.json({ ok: true, protocol }, { status: 201 });
   }
 
   if (action === "track") {
     const kind = String(body.kind || "");
-    if (!["profile_view", "product_view", "whatsapp_click", "website_click"].includes(kind)) return Response.json({ error: "Evento inválido." }, { status: 400 });
-    await db.insert(activityEvents).values({ actorUserId: user.userId, supplierId: Number(body.supplierId) || null, productId: Number(body.productId) || null, eventId: Number(body.eventId) || null, kind });
+    const allowedKinds = new Set(["profile_view", "product_view", "whatsapp_click", "website_click", "contact_revealed", "quote_request"]);
+    if (!allowedKinds.has(kind)) return Response.json({ error: "Evento inválido." }, { status: 400 });
+    const supplierId = Number(body.supplierId);
+    const productId = Number(body.productId);
+    const eventId = Number(body.eventId);
+    if (kind === "quote_request" && (!supplierId || supplierId <= 0)) return Response.json({ error: "Fornecedor obrigatório para esta ação." }, { status: 400 });
+    if (kind === "contact_revealed" && (!supplierId || supplierId <= 0)) return Response.json({ error: "Fornecedor obrigatório para esta ação." }, { status: 400 });
+    if (kind === "product_view" && (!productId || productId <= 0 || !supplierId || supplierId <= 0)) return Response.json({ error: "Produto e fornecedor obrigatórios." }, { status: 400 });
+    await db.insert(activityEvents).values({ actorUserId: user.userId, supplierId: Number.isInteger(supplierId) && supplierId > 0 ? supplierId : null, productId: Number.isInteger(productId) && productId > 0 ? productId : null, eventId: Number.isInteger(eventId) && eventId > 0 ? eventId : null, kind });
     return Response.json({ ok: true });
   }
 

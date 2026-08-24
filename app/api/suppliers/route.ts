@@ -22,13 +22,15 @@ export async function GET() {
       const completenessFields = [item.name,item.phone,item.category,item.city,item.state,item.description,item.serviceStates||item.servesNationwide,item.services];
       const completeness = completenessFields.filter(Boolean).length / completenessFields.length;
       const rating = ratingMap.get(item.name || ""); const response = responseMap.get(item.id);
+      const quoteRequests = Number(response?.total || 0);
+      const quoteResponses = Number(response?.responded || 0);
       const responseRate = response?.total ? Number(response.responded) / Number(response.total) : 0;
       const fresh = Date.now() - new Date(item.updatedAt).getTime() < 120 * 86400000;
       const newSupplier = Date.now() - new Date(item.createdAt).getTime() < 30 * 86400000;
       const qualityScore = item.hubScore || Math.round((item.verificationStatus === "verified" ? 30 : 15) + completeness * 25 + (fresh ? 15 : 5) + (rating && Number(rating.total) >= 3 ? (Number(rating.average) / 5) * 20 : newSupplier ? 10 : 5) + responseRate * 10);
       const qualityReasons = [item.verificationStatus === "verified" ? "telefone e perfil verificados" : "cadastro aprovado", completeness >= .75 ? "perfil completo" : null, fresh ? "dados atualizados" : null, responseRate >= .6 ? "boa taxa de resposta" : null, newSupplier ? "novo no Hub" : null].filter(Boolean);
       const categories = (() => { try { const parsed = JSON.parse(item.categories || "[]"); return Array.isArray(parsed) && parsed.length ? parsed : [item.category]; } catch { return [item.category]; } })();
-      const base = { ...item, categories, phonePreview, qualityScore, qualityReasons, highlightedOnMap: highlightMap.has(`${item.id}:map`), highlightedInSearch: highlightMap.has(`${item.id}:search`), founderMember: Boolean(item.founderMemberAt), serviceStates: JSON.parse(item.serviceStates || "[]"), services: JSON.parse(item.services || "[]") };
+      const base = { ...item, categories, phonePreview, qualityScore, qualityReasons, quoteRequests, quoteResponses, responseRate, highlightedOnMap: highlightMap.has(`${item.id}:map`), highlightedInSearch: highlightMap.has(`${item.id}:search`), founderMember: Boolean(item.founderMemberAt), serviceStates: JSON.parse(item.serviceStates || "[]"), services: JSON.parse(item.services || "[]") };
       return viewer ? base : { id: item.id, name: "Fornecedor protegido", category: item.category, city: item.city, state: item.state, description: "Cadastre-se gratuitamente para conhecer esta empresa e acessar seus contatos.", logoKey: item.logoKey, phone: null, instagram: null, website: null, phonePreview, qualityScore, qualityReasons };
     }).sort((a,b) => Number((b as { highlightedInSearch?: boolean }).highlightedInSearch) - Number((a as { highlightedInSearch?: boolean }).highlightedInSearch) || b.qualityScore - a.qualityScore || Number(a.id) - Number(b.id));
     return Response.json({ suppliers: ranked, rankingExplanation: "Ordem baseada em verificação, completude, atualização, avaliações elegíveis e taxa de resposta. Pagamentos não alteram a posição." });
