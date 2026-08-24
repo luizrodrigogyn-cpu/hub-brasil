@@ -47,7 +47,7 @@ export async function GET() {
       const [supplier] = viewer ? await getDb().select({ id: leads.id, phone: leads.phone }).from(leads).where(and(or(eq(leads.company, item.supplierName), eq(leads.name, item.supplierName)), eq(leads.role, "supplier"), eq(leads.status, "approved"))) : [];
       let specs: unknown = null;
       if (item.specs) { try { specs = JSON.parse(item.specs); } catch { specs = null; } }
-      return { id: item.id, supplierId: viewer ? supplier?.id || null : null, supplierName: viewer ? item.supplierName : "Fornecedor protegido", supplierPhone: viewer ? supplier?.phone || null : null, name: item.name, category: item.category, technicalDetails: viewer ? item.technicalDetails : "", highlighted: highlighted.has(item.id), imageUrl: item.imageKey ? `/api/product-images?key=${encodeURIComponent(item.imageKey)}` : null, specs, manualUrl: item.manualUrl || null };
+      return { id: item.id, supplierId: viewer ? supplier?.id || null : null, supplierName: viewer ? item.supplierName : "Fornecedor protegido", supplierPhone: viewer ? supplier?.phone || null : null, name: item.name, category: item.category, technicalDetails: viewer ? item.technicalDetails : "", highlighted: highlighted.has(item.id), imageUrl: item.imageKey ? `/api/product-images?key=${encodeURIComponent(item.imageKey)}` : null, specs, manualUrl: item.manualUrl || null, averagePrice: item.averagePrice || null };
     }));
     return Response.json({ products: visibleProducts });
   } catch { return Response.json({ products: [] }); }
