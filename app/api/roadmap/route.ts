@@ -64,10 +64,12 @@ export async function GET() {
 
   let supplierMetrics = null;
   let supplierQuotes: unknown[] = [];
-  let supplierStats: { totalReceived: number; totalResponded: number; acceptanceRate: number; newLeads: number } | null = null;
+  let supplierStats: { totalReceived: number; totalResponded: number; acceptanceRate: number; newLeads: number; quoteRequests7d: number; quoteResponses7d: number; responseRate7d: number; avgResponseMinutes7d: number | null; quoteRequests30d: number } | null = null;
   if (profile.role === "supplier") {
     const since90 = new Date(Date.now() - 90 * 86400000).toISOString();
     const since48h = new Date(Date.now() - 48 * 3600000).toISOString();
+    const since7d = new Date(Date.now() - 7 * 86400000).toISOString();
+    const since30d = new Date(Date.now() - 30 * 86400000).toISOString();
     const metrics = await db.select({ kind: activityEvents.kind, total: sql<number>`count(*)` })
       .from(activityEvents).where(and(eq(activityEvents.supplierId, profile.id), gte(activityEvents.createdAt, since90))).groupBy(activityEvents.kind);
     supplierMetrics = Object.fromEntries(metrics.map((item) => [item.kind, Number(item.total)]));
@@ -78,7 +80,26 @@ export async function GET() {
     const [newLeadsRow] = await db.select({ total: sql<number>`count(*)` }).from(quoteRecipients).where(and(eq(quoteRecipients.supplierId, profile.id), eq(quoteRecipients.status, "sent"), gte(quoteRecipients.createdAt, since48h)));
     const totalReceived = Number(allTimeRow?.total || 0);
     const totalResponded = Number(allTimeRow?.responded || 0);
-    supplierStats = { totalReceived, totalResponded, acceptanceRate: totalReceived > 0 ? Math.round((totalResponded / totalReceived) * 100) : 0, newLeads: Number(newLeadsRow?.total || 0) };
+    // Janela de 7 dias para o painel do fornecedor — reaproveita a mesma tabela/coluna
+    // usada no all-time acima, so muda o filtro de data.
+    const [window7dRow] = await db.select({
+      total: sql<number>`count(*)`,
+      responded: sql<number>`sum(case when ${quoteRecipients.status} = 'responded' then 1 else 0 end)`,
+      avgResponseMinutes: sql<number | null>`avg(case when ${quoteRecipients.status} = 'responded' then (julianday(${quoteRecipients.respondedAt}) - julianday(${quoteRecipients.createdAt})) * 24 * 60 end)`,
+    }).from(quoteRecipients).where(and(eq(quoteRecipients.supplierId, profile.id), gte(quoteRecipients.createdAt, since7d)));
+    const [window30dRow] = await db.select({ total: sql<number>`count(*)` }).from(quoteRecipients).where(and(eq(quoteRecipients.supplierId, profile.id), gte(quoteRecipients.createdAt, since30d)));
+    const requests7d = Number(window7dRow?.total || 0);
+    const responses7d = Number(window7dRow?.responded || 0);
+    supplierStats = {
+      totalReceived, totalResponded,
+      acceptanceRate: totalReceived > 0 ? Math.round((totalResponded / totalReceived) * 100) : 0,
+      newLeads: Number(newLeadsRow?.total || 0),
+      quoteRequests7d: requests7d,
+      quoteResponses7d: responses7d,
+      responseRate7d: requests7d > 0 ? Math.round((responses7d / requests7d) * 100) : 0,
+      avgResponseMinutes7d: responses7d > 0 && window7dRow?.avgResponseMinutes != null ? Math.round(Number(window7dRow.avgResponseMinutes)) : null,
+      quoteRequests30d: Number(window30dRow?.total || 0),
+    };
   }
 
   const supplierIds = saved.filter((item) => item.entityType === "supplier").map((item) => item.entityId);
