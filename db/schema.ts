@@ -180,6 +180,8 @@ export const products = sqliteTable("products", {
   technicalDetails: text("technical_details").notNull(),
   averagePrice: text("average_price"),
   imageKey: text("image_key"),
+  specs: text("specs"),
+  manualUrl: text("manual_url"),
   status: text("status").notNull().default("pending"),
   ownerUserId: text("owner_user_id"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),

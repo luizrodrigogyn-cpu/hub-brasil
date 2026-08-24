@@ -246,3 +246,25 @@ body{font-family:var(--font-geist-sans),Arial,sans-serif;font-size:16px;line-hei
 .boot-skip{position:absolute;bottom:24px;right:28px;background:transparent;border:1px solid #26456e;color:#8fadc9;padding:8px 16px;border-radius:100px;font-size:11px;font-family:inherit;letter-spacing:.05em;cursor:pointer}.boot-skip:hover{border-color:#59c9ee;color:#59c9ee}
 @media (max-width:560px){.boot-logo-name{font-size:26px}.boot-radar{width:64%}.boot-lines{left:20px;right:20px;font-size:9px}.boot-skip{right:20px}}
 @media (prefers-reduced-motion:reduce){.boot-grid,.boot-lines div,.boot-radar,.boot-logo{animation:none;opacity:1}.boot-sweep{animation:none}}
+
+/* Ficha técnica opcional no cadastro de produto (comparador) e badges de exibição. */
+.spec-fields{border:1px solid var(--border);border-radius:10px;padding:16px;display:grid;gap:14px;background:rgba(9,28,54,.5)}
+.spec-fields-head{display:grid;gap:3px}.spec-fields-head strong{font-size:13px;color:var(--text)}.spec-fields-head span{font-size:11px;color:var(--muted);line-height:1.4}
+.spec-field{display:grid;gap:6px}.spec-field>span{font-size:11px;color:#c2d1e5;font-weight:600}
+.spec-field select,.spec-field input{height:40px;background:#091c36;border:1px solid var(--border);border-radius:7px;padding:0 11px;color:var(--text);outline:0;font:inherit}
+.chip-select{display:flex;flex-wrap:wrap;gap:7px}
+.chip-select button{border:1px solid var(--border);background:#091c36;color:#a9bfd7;border-radius:100px;padding:7px 13px;font-size:12px;cursor:pointer}
+.chip-select button.active{border-color:var(--cyan);background:rgba(89,201,238,.12);color:var(--cyan)}
+.spec-toggle{display:flex;align-items:center;gap:9px;font-size:12px;color:#c2d1e5}
+.spec-toggle input{width:16px;height:16px}
+.manual-link{display:inline-flex;align-items:center;gap:7px;color:var(--cyan);text-decoration:none;font-size:13px;font-weight:700;margin-top:6px}
+.manual-link:hover{color:var(--text)}
+.spec-sheet{border:1px solid var(--border);border-radius:10px;padding:16px;margin:16px 0;background:rgba(9,28,54,.5)}
+.spec-sheet-title{font-size:11px;text-transform:uppercase;letter-spacing:1.2px;color:var(--cyan);font-weight:700}
+.spec-sheet dl{margin:12px 0 0;display:grid;gap:9px}
+.spec-sheet dl div{display:flex;justify-content:space-between;gap:14px;padding-top:9px;border-top:1px solid var(--border)}
+.spec-sheet dl div:first-child{border-top:0;padding-top:0}
+.spec-sheet dt{color:var(--muted);font-size:12px}.spec-sheet dd{margin:0;font-size:12px;text-align:right;color:var(--text)}
+.spec-badges{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.spec-badge{background:rgba(62,214,160,.1);color:#73e3bc;border:1px solid rgba(62,214,160,.24);border-radius:20px;padding:5px 10px;font-size:10px;font-weight:700}
+.catalog-copy .spec-badges{margin:8px 0 0}

@@ -31,7 +31,8 @@ type Supplier = {
 };
 
 type HubEvent = { id: number; name: string; supplier: string; venue: string; city: string; state: string; date: string; displayDate: string; link: string; x: number; y: number; demo?: boolean };
-type Product = { id: number; supplierId?: number | null; supplierName: string; supplierPhone?: string | null; name: string; category: string; technicalDetails: string; highlighted?: boolean; imageUrl?: string | null };
+type ProductSpecs = { technology?: string[]; ip?: string; battery?: string; warranty?: string; anatel?: boolean; application?: string[]; features?: string[] };
+type Product = { id: number; supplierId?: number | null; supplierName: string; supplierPhone?: string | null; name: string; category: string; technicalDetails: string; highlighted?: boolean; imageUrl?: string | null; specs?: ProductSpecs | null; manualUrl?: string | null };
 type SectorNews = { id: number; title: string; summary: string; category: string; sourceName: string; sourceUrl: string; imageUrl?: string | null; publishedAt: string };
 
 const solutionCategories = [
@@ -47,6 +48,30 @@ const solutionCategories = [
   { name: "LoRaWAN", title: "LoRaWAN", icon: "⌇", description: "Conectividade de baixa potência para aplicações específicas." },
   { name: "Acessórios", title: "Acessórios", icon: "◇", description: "Complementos para instalação e operação de rastreamento." },
 ] as const;
+
+// Campos técnicos estruturados (opcionais) por categoria — pensado para comparação rápida
+// entre produtos sem transformar o cadastro numa ficha técnica obrigatória e cansativa.
+// Dados mais profundos (protocolos, pinagem, consumo detalhado etc.) ficam reservados
+// ao manual técnico em PDF/link, não ao formulário.
+const productSpecFields: Record<string, Array<"technology" | "ip" | "battery" | "warranty" | "anatel" | "application" | "features">> = {
+  "Rastreadores": ["technology", "ip", "battery", "warranty", "anatel", "application", "features"],
+  "Plataformas de rastreamento veicular": ["technology", "application"],
+  "Conectividade M2M": ["technology", "battery", "ip", "anatel"],
+  "Videotelemetria": ["technology", "ip", "anatel", "application", "features"],
+  "Tags e identificação": ["ip", "application"],
+  "Telemetria": ["technology", "application"],
+  "Sensores": ["ip", "battery", "application"],
+  "Identificação de motorista": ["technology", "features", "application"],
+  "CAN / OBD": ["technology", "application"],
+  "LoRaWAN": ["technology", "battery", "ip", "anatel"],
+  "Acessórios": ["application"],
+};
+
+const productTechnologyOptions = ["2G", "4G Cat 1", "GPS", "LoRaWAN", "BLE", "Satelital"] as const;
+const productIpOptions = ["IP54", "IP65", "IP66", "IP67", "IP68"] as const;
+const productWarrantyOptions = ["3 meses", "6 meses", "1 ano", "2 anos", "3 anos ou mais"] as const;
+const productApplicationOptions = ["Frota leve", "Frota pesada", "Moto", "Carga", "Ativos e equipamentos", "Uso pessoal"] as const;
+const productFeatureOptions = ["Detecção de jammer", "Análise do motorista (DBH)", "Cercas embarcadas"] as const;
 
 const audienceGroups = [
   "Empresas de rastreamento veicular",
@@ -103,6 +128,8 @@ export default function Home() {
   const [supplierCompany, setSupplierCompany] = useState("");
   const [supplierApproved, setSupplierApproved] = useState(false);
   const [productFormOpen, setProductFormOpen] = useState(false);
+  const [productFormCategory, setProductFormCategory] = useState("");
+  const [productFormSpecs, setProductFormSpecs] = useState<{ technology: string[]; ip: string; battery: string; warranty: string; anatel: boolean; application: string[]; features: string[] }>({ technology: [], ip: "", battery: "", warranty: "", anatel: false, application: [], features: [] });
   const [products, setProducts] = useState<Product[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [ratings, setRatings] = useState<Record<string, { average: number; total: number }>>({});
@@ -372,14 +399,37 @@ export default function Home() {
     window.setTimeout(() => setToast(""), 3500);
   }
 
+  function toggleProductSpecValue(field: "technology" | "application" | "features", value: string) {
+    setProductFormSpecs((current) => {
+      const list = current[field];
+      const next = list.includes(value) ? list.filter((item) => item !== value) : [...list, value];
+      return { ...current, [field]: next };
+    });
+  }
+
+  function resetProductForm() {
+    setProductFormCategory("");
+    setProductFormSpecs({ technology: [], ip: "", battery: "", warranty: "", anatel: false, application: [], features: [] });
+  }
+
   async function createProduct(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     form.set("supplierName", supplierCompany || "Fornecedor cadastrado");
     const photo = form.get("photo");
     const preview = photo instanceof File && photo.size ? URL.createObjectURL(photo) : null;
+    const allowedFields = productSpecFields[productFormCategory] || [];
+    const specs: Record<string, unknown> = {};
+    if (allowedFields.includes("technology") && productFormSpecs.technology.length) specs.technology = productFormSpecs.technology;
+    if (allowedFields.includes("ip") && productFormSpecs.ip) specs.ip = productFormSpecs.ip;
+    if (allowedFields.includes("battery") && productFormSpecs.battery.trim()) specs.battery = productFormSpecs.battery.trim();
+    if (allowedFields.includes("warranty") && productFormSpecs.warranty) specs.warranty = productFormSpecs.warranty;
+    if (allowedFields.includes("anatel") && productFormSpecs.anatel) specs.anatel = true;
+    if (allowedFields.includes("application") && productFormSpecs.application.length) specs.application = productFormSpecs.application;
+    if (allowedFields.includes("features") && productFormSpecs.features.length) specs.features = productFormSpecs.features;
+    if (Object.keys(specs).length) form.set("specs", JSON.stringify(specs));
     try { const response = await fetch("/api/products", { method: "POST", body: form }); const data = await response.json(); if (response.status === 401) { window.location.href = data.signIn; return; } if (!response.ok) { setToast(data.error); return; } } catch { setToast("Não foi possível enviar o produto."); return; }
-    if (preview) URL.revokeObjectURL(preview); setProductFormOpen(false); setView("supplier-dashboard"); setToast("Produto enviado para aprovação do gestor."); window.setTimeout(() => setToast(""), 3500);
+    if (preview) URL.revokeObjectURL(preview); setProductFormOpen(false); resetProductForm(); setView("supplier-dashboard"); setToast("Produto enviado para aprovação do gestor."); window.setTimeout(() => setToast(""), 3500);
   }
 
   async function rateSupplier(name: string, stars: number) {
@@ -684,7 +734,7 @@ export default function Home() {
         )}
 
         {view === "events" && <section className="events-page"><div className="page-heading"><div><span className="eyebrow">AGENDA DO SETOR</span><h1>Próximos eventos</h1><p>Encontros, feiras e treinamentos promovidos por fornecedores.</p></div><button className="primary" onClick={() => setEventFormOpen(true)}>＋ Cadastrar evento</button></div>{events.length === 0 ? <div className="events-empty"><strong>Nenhum evento real publicado ainda</strong><p>Quando um evento for cadastrado e aprovado, ele aparecerá nesta agenda e no mapa.</p><button className="event-create" onClick={() => setEventFormOpen(true)}>Cadastrar o primeiro evento</button></div> : <div className="events-grid">{events.sort((a,b) => a.date.localeCompare(b.date)).map((item) => <article className="event-card" key={item.id}><div className="calendar-block"><strong>{item.displayDate.split(" ")[0]}</strong><span>{item.displayDate.split(" ")[1]}</span><small>{item.displayDate.split(" ")[2]}</small></div><div className="event-card-copy"><span className="eyebrow">EVENTO CADASTRADO</span><h2>{item.name}</h2><p>⌖ {item.venue} · {item.city}, {item.state}</p><small>Promovido por {item.supplier}</small><button className="event-interest" onClick={()=>markEventInterest(item.id)}>☆ Tenho interesse</button></div><a href={item.link} target="_blank" rel="noreferrer">Inscrever-se →</a></article>)}</div>}</section>}
-        {view === "products" && <section className="products-page"><div className="page-heading"><div><span className="eyebrow">CATÁLOGO DO SETOR</span><h1>Produtos</h1><p>Fotos, especificações, aplicações e diferenciais publicados pelos fornecedores.</p></div>{userRole === "supplier" && <button className="primary" onClick={() => setProductFormOpen(true)}>＋ Cadastrar produto</button>}</div><p className="commercial-notice">Preços, disponibilidade, frete e condições comerciais devem ser confirmados diretamente com o fornecedor.</p>{products.length === 0 ? <div className="events-empty"><strong>Nenhum produto cadastrado ainda</strong><p>Os cards aparecerão aqui conforme os fornecedores adicionarem seus produtos.</p>{userRole === "supplier" ? <button className="event-create" onClick={() => setProductFormOpen(true)}>Cadastrar o primeiro produto</button> : <button className="event-create" onClick={() => openRegistration("supplier")}>Sou fornecedor</button>}</div> : <div className="catalog-grid">{products.map((product) => <article className="catalog-card" key={product.id} onClick={() => openProduct(product)}><div className="catalog-photo">{product.imageUrl ? <img src={product.imageUrl} alt={product.name} /> : <span>Sem foto</span>}</div><div className="catalog-copy">{product.highlighted && <span className="verified">⭐ Destaque Hub</span>}<span className="category">{displayCategory(product.category)}</span><h2>{product.name}</h2><p>{product.supplierName}</p><button>Ver especificações e aplicações →</button></div></article>)}</div>}</section>}
+        {view === "products" && <section className="products-page"><div className="page-heading"><div><span className="eyebrow">CATÁLOGO DO SETOR</span><h1>Produtos</h1><p>Fotos, especificações, aplicações e diferenciais publicados pelos fornecedores.</p></div>{userRole === "supplier" && <button className="primary" onClick={() => setProductFormOpen(true)}>＋ Cadastrar produto</button>}</div><p className="commercial-notice">Preços, disponibilidade, frete e condições comerciais devem ser confirmados diretamente com o fornecedor.</p>{products.length === 0 ? <div className="events-empty"><strong>Nenhum produto cadastrado ainda</strong><p>Os cards aparecerão aqui conforme os fornecedores adicionarem seus produtos.</p>{userRole === "supplier" ? <button className="event-create" onClick={() => setProductFormOpen(true)}>Cadastrar o primeiro produto</button> : <button className="event-create" onClick={() => openRegistration("supplier")}>Sou fornecedor</button>}</div> : <div className="catalog-grid">{products.map((product) => <article className="catalog-card" key={product.id} onClick={() => openProduct(product)}><div className="catalog-photo">{product.imageUrl ? <img src={product.imageUrl} alt={product.name} /> : <span>Sem foto</span>}</div><div className="catalog-copy">{product.highlighted && <span className="verified">⭐ Destaque Hub</span>}<span className="category">{displayCategory(product.category)}</span><h2>{product.name}</h2><p>{product.supplierName}</p>{product.specs && (product.specs.anatel || product.specs.technology?.length) && <div className="spec-badges">{product.specs.anatel && <span className="spec-badge">✓ ANATEL</span>}{product.specs.technology?.slice(0, 2).map((tech) => <span className="spec-badge" key={tech}>{tech}</span>)}</div>}<button>Ver especificações e aplicações →</button></div></article>)}</div>}</section>}
 
         {view === "news" && <section className="news-page"><div className="news-hero"><div><span className="eyebrow">INFORMAÇÃO PARA QUEM MOVE O MERCADO</span><h1>Radar do Setor</h1><p>Notícias selecionadas sobre rastreamento veicular, telecomunicações, conectividade, tecnologia e mercado automotivo.</p></div><div className="news-radar-mark" aria-hidden="true"><span></span><i></i></div></div><div className="news-trust"><strong>Curadoria com fonte identificada</strong><span>O Hub publica somente resumos e direciona você para a matéria original. Todo conteúdo passa por aprovação.</span></div><div className="news-filters" aria-label="Filtrar notícias por categoria">{newsCategories.map((item) => <button key={item} className={newsCategory === item ? "active" : ""} onClick={() => setNewsCategory(item)}>{item}</button>)}</div>{filteredNews.length === 0 ? <div className="events-empty news-empty"><strong>O Radar está pronto para receber notícias reais</strong><p>As primeiras publicações aparecerão aqui após a conferência da fonte e aprovação da gestão.</p><a className="event-create" href="/admin">Acessar gestão do Radar</a></div> : <div className="news-grid">{filteredNews.map((item, index) => <article className={`news-card ${index === 0 ? "featured" : ""}`} key={item.id}>{item.imageUrl ? <div className="news-image"><img src={item.imageUrl} alt="" /></div> : <div className="news-image news-image-placeholder"><span>RADAR</span><i></i></div>}<div className="news-card-copy"><div className="news-meta"><span>{item.category}</span><time dateTime={item.publishedAt}>{new Date(`${item.publishedAt}T12:00:00`).toLocaleDateString("pt-BR")}</time></div><h2>{item.title}</h2><p>{item.summary}</p><div className="news-source"><small>Fonte: {item.sourceName}</small><a href={item.sourceUrl} target="_blank" rel="noreferrer">Ler notícia completa →</a></div></div></article>)}</div>}</section>}
 
@@ -754,9 +804,86 @@ export default function Home() {
 
       {eventFormOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setEventFormOpen(false); }}><section className="access-modal event-form" role="dialog" aria-modal="true" aria-labelledby="event-form-title"><button className="modal-close" onClick={() => setEventFormOpen(false)} aria-label="Fechar">×</button><span className="eyebrow">ÁREA DO FORNECEDOR</span><h2 id="event-form-title">Cadastrar novo evento</h2><p>Após a revisão, o evento aparecerá na agenda e como um ponto especial no mapa.</p><form onSubmit={createEvent}><label>Nome do evento<input name="name" required placeholder="Ex.: Encontro de Integradores" /></label><div className="field-row"><label>Data<input name="date" type="date" required /></label><label>Local<input name="venue" required placeholder="Centro de eventos" /></label></div><div className="field-row"><label>Cidade<input name="city" required placeholder="São Paulo" /></label><label>Estado<select name="state" required><option value="">Selecione</option>{BRAZIL_STATES.map((state) => <option key={state}>{state}</option>)}</select></label></div><label>Link para inscrição<input name="link" type="url" required placeholder="https://seusite.com/inscricao" /></label><label>Descrição<textarea name="description" rows={3} placeholder="Conte brevemente sobre o evento" /></label><button className="primary full" type="submit">Enviar evento para publicação <span>→</span></button></form></section></div>}
 
-      {selectedProduct && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedProduct(null); }}><section className="access-modal product-detail" role="dialog" aria-modal="true"><button className="modal-close" onClick={() => setSelectedProduct(null)} aria-label="Fechar">×</button><div className="detail-photo">{selectedProduct.imageUrl ? <img src={selectedProduct.imageUrl} alt={selectedProduct.name} /> : <span>Produto sem foto</span>}</div><span className="category">{displayCategory(selectedProduct.category)}</span><h2>{selectedProduct.name}</h2><strong className="detail-supplier">{selectedProduct.supplierName}</strong><h3>Informações do produto</h3><p>{selectedProduct.technicalDetails}</p><p className="commercial-notice">Preços, disponibilidade, frete e condições comerciais devem ser confirmados diretamente com o fornecedor.</p><button className="primary full quote-button" onClick={() => { setSelectedProduct(null); openQuoteRequestFromProduct(selectedProduct); }}>Solicitar cotação estruturada <span>→</span></button></section></div>}
+      {selectedProduct && (
+        <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedProduct(null); }}>
+          <section className="access-modal product-detail" role="dialog" aria-modal="true">
+            <button className="modal-close" onClick={() => setSelectedProduct(null)} aria-label="Fechar">×</button>
+            <div className="detail-photo">{selectedProduct.imageUrl ? <img src={selectedProduct.imageUrl} alt={selectedProduct.name} /> : <span>Produto sem foto</span>}</div>
+            <span className="category">{displayCategory(selectedProduct.category)}</span>
+            <h2>{selectedProduct.name}</h2>
+            <strong className="detail-supplier">{selectedProduct.supplierName}</strong>
+            {selectedProduct.specs && Object.keys(selectedProduct.specs).length > 0 && (
+              <div className="spec-sheet">
+                <span className="spec-sheet-title">Ficha técnica</span>
+                <dl>
+                  {selectedProduct.specs.technology?.length ? <div><dt>Tecnologia</dt><dd>{selectedProduct.specs.technology.join(", ")}</dd></div> : null}
+                  {selectedProduct.specs.ip ? <div><dt>Grau de proteção</dt><dd>{selectedProduct.specs.ip}</dd></div> : null}
+                  {selectedProduct.specs.battery ? <div><dt>Bateria backup</dt><dd>{selectedProduct.specs.battery}</dd></div> : null}
+                  {selectedProduct.specs.warranty ? <div><dt>Garantia</dt><dd>{selectedProduct.specs.warranty}</dd></div> : null}
+                  {selectedProduct.specs.application?.length ? <div><dt>Aplicação recomendada</dt><dd>{selectedProduct.specs.application.join(", ")}</dd></div> : null}
+                </dl>
+                <div className="spec-badges">
+                  {selectedProduct.specs.anatel && <span className="spec-badge">✓ Homologado ANATEL</span>}
+                  {selectedProduct.specs.features?.map((feature) => <span className="spec-badge" key={feature}>✓ {feature}</span>)}
+                </div>
+              </div>
+            )}
+            <h3>Informações do produto</h3>
+            <p>{selectedProduct.technicalDetails}</p>
+            {selectedProduct.manualUrl && <a className="manual-link" href={selectedProduct.manualUrl} target="_blank" rel="noreferrer">📄 Baixar manual técnico</a>}
+            <p className="commercial-notice">Preços, disponibilidade, frete e condições comerciais devem ser confirmados diretamente com o fornecedor.</p>
+            <button className="primary full quote-button" onClick={() => { setSelectedProduct(null); openQuoteRequestFromProduct(selectedProduct); }}>Solicitar cotação estruturada <span>→</span></button>
+          </section>
+        </div>
+      )}
 
-      {productFormOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setProductFormOpen(false); }}><section className="access-modal event-form" role="dialog" aria-modal="true"><button className="modal-close" onClick={() => setProductFormOpen(false)} aria-label="Fechar">×</button><span className="eyebrow">ÁREA DO FORNECEDOR</span><h2>Cadastrar produto</h2><p>Destaque as informações que ajudam o cliente a identificar a solução adequada.</p><form onSubmit={createProduct}><label>Foto do produto<input name="photo" type="file" accept="image/jpeg,image/png,image/webp" required /></label><label>Nome do produto<input name="name" required placeholder="Ex.: Rastreador 4G LTE" /></label><label>Categoria<select name="category" required><option value="">Selecione</option>{solutionCategories.map((item) => <option key={item.name}>{item.name}</option>)}</select></label><label>Especificações técnicas<textarea name="technicalDetails" rows={4} required placeholder="Tecnologia, alimentação, conectividade, homologações e demais especificações" /></label><label>Aplicação<textarea name="application" rows={3} required placeholder="Para quais veículos, operações ou necessidades este produto é indicado?" /></label><label>Diferenciais<textarea name="differentials" rows={3} required placeholder="Recursos, benefícios e diferenciais da solução" /></label><p className="commercial-notice">Preços, disponibilidade, frete e condições comerciais serão tratados diretamente com o cliente.</p><button className="primary full" type="submit">Enviar produto para aprovação <span>→</span></button></form></section></div>}
+      {productFormOpen && (
+        <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) { setProductFormOpen(false); resetProductForm(); } }}>
+          <section className="access-modal event-form" role="dialog" aria-modal="true">
+            <button className="modal-close" onClick={() => { setProductFormOpen(false); resetProductForm(); }} aria-label="Fechar">×</button>
+            <span className="eyebrow">ÁREA DO FORNECEDOR</span>
+            <h2>Cadastrar produto</h2>
+            <p>Destaque as informações que ajudam o cliente a identificar a solução adequada.</p>
+            <form onSubmit={createProduct}>
+              <label>Foto do produto<input name="photo" type="file" accept="image/jpeg,image/png,image/webp" required /></label>
+              <label>Nome do produto<input name="name" required placeholder="Ex.: Rastreador 4G LTE" /></label>
+              <label>Categoria<select name="category" required value={productFormCategory} onChange={(event) => setProductFormCategory(event.target.value)}><option value="">Selecione</option>{solutionCategories.map((item) => <option key={item.name}>{item.name}</option>)}</select></label>
+              <label>Especificações técnicas<textarea name="technicalDetails" rows={4} required placeholder="Tecnologia, alimentação, conectividade, homologações e demais especificações" /></label>
+              <label>Aplicação<textarea name="application" rows={3} required placeholder="Para quais veículos, operações ou necessidades este produto é indicado?" /></label>
+              <label>Diferenciais<textarea name="differentials" rows={3} required placeholder="Recursos, benefícios e diferenciais da solução" /></label>
+              {Boolean(productFormCategory && (productSpecFields[productFormCategory] || []).length) && (
+                <div className="spec-fields">
+                  <div className="spec-fields-head"><strong>Ficha técnica (opcional)</strong><span>Ajuda o cliente a comparar com outros produtos — preencha só o que fizer sentido. Nada aqui é obrigatório.</span></div>
+                  {productSpecFields[productFormCategory].includes("technology") && (
+                    <div className="spec-field"><span>Tecnologia / Conectividade</span><div className="chip-select">{productTechnologyOptions.map((option) => <button type="button" key={option} className={productFormSpecs.technology.includes(option) ? "active" : ""} onClick={() => toggleProductSpecValue("technology", option)}>{option}</button>)}</div></div>
+                  )}
+                  {productSpecFields[productFormCategory].includes("ip") && (
+                    <div className="spec-field"><span>Grau de proteção (IP)</span><select value={productFormSpecs.ip} onChange={(event) => setProductFormSpecs((current) => ({ ...current, ip: event.target.value }))}><option value="">Não informado</option>{productIpOptions.map((option) => <option key={option}>{option}</option>)}</select></div>
+                  )}
+                  {productSpecFields[productFormCategory].includes("battery") && (
+                    <div className="spec-field"><span>Bateria backup</span><input placeholder="Ex.: 250 mAh" value={productFormSpecs.battery} onChange={(event) => setProductFormSpecs((current) => ({ ...current, battery: event.target.value }))} /></div>
+                  )}
+                  {productSpecFields[productFormCategory].includes("warranty") && (
+                    <div className="spec-field"><span>Garantia</span><select value={productFormSpecs.warranty} onChange={(event) => setProductFormSpecs((current) => ({ ...current, warranty: event.target.value }))}><option value="">Não informado</option>{productWarrantyOptions.map((option) => <option key={option}>{option}</option>)}</select></div>
+                  )}
+                  {productSpecFields[productFormCategory].includes("anatel") && (
+                    <label className="spec-toggle"><input type="checkbox" checked={productFormSpecs.anatel} onChange={(event) => setProductFormSpecs((current) => ({ ...current, anatel: event.target.checked }))} /> Produto homologado pela ANATEL</label>
+                  )}
+                  {productSpecFields[productFormCategory].includes("application") && (
+                    <div className="spec-field"><span>Aplicação recomendada</span><div className="chip-select">{productApplicationOptions.map((option) => <button type="button" key={option} className={productFormSpecs.application.includes(option) ? "active" : ""} onClick={() => toggleProductSpecValue("application", option)}>{option}</button>)}</div></div>
+                  )}
+                  {productSpecFields[productFormCategory].includes("features") && (
+                    <div className="spec-field"><span>Recursos-chave</span><div className="chip-select">{productFeatureOptions.map((option) => <button type="button" key={option} className={productFormSpecs.features.includes(option) ? "active" : ""} onClick={() => toggleProductSpecValue("features", option)}>{option}</button>)}</div></div>
+                  )}
+                </div>
+              )}
+              <label>Manual técnico — link para download (opcional)<input name="manualUrl" type="url" placeholder="https://... (PDF, Google Drive etc.)" /></label>
+              <p className="commercial-notice">Preços, disponibilidade, frete e condições comerciais serão tratados diretamente com o cliente.</p>
+              <button className="primary full" type="submit">Enviar produto para aprovação <span>→</span></button>
+            </form>
+          </section>
+        </div>
+      )}
 
       {welcomeOpen && !registered && !registerOpen && (
         <div className="welcome-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setWelcomeOpen(false); }}>
