@@ -119,7 +119,28 @@ export default function Home() {
   const [quoteFlowOpen, setQuoteFlowOpen] = useState(false);
   const [quoteDraft, setQuoteDraft] = useState<QuoteDraft>({ category: "", application: "", quantity: "1", city: "", state: "", deadline: "", notes: "", supplierIds: [], contactConsent: false });
   const [pendingContactSupplier, setPendingContactSupplier] = useState<Supplier | null>(null);
+  const [bootPhase, setBootPhase] = useState<"playing" | "leaving" | "done">("playing");
   const navigationMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (window.sessionStorage.getItem("hubBootShown")) { setBootPhase("done"); return; }
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const timer = window.setTimeout(() => setBootPhase("leaving"), reduceMotion ? 200 : 3400);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    if (bootPhase !== "leaving") return;
+    const timer = window.setTimeout(() => {
+      setBootPhase("done");
+      window.sessionStorage.setItem("hubBootShown", "1");
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [bootPhase]);
+
+  function skipBoot() {
+    setBootPhase("leaving");
+  }
 
   useEffect(() => {
     if (!navigationOpen) return;
@@ -504,10 +525,30 @@ export default function Home() {
 
   return (
     <div className="app-shell">
+      {bootPhase !== "done" && (
+        <div className={`boot-intro ${bootPhase === "leaving" ? "boot-intro-out" : ""}`} role="status" aria-label="Carregando Hub Brasil">
+          <div className="boot-grid"></div>
+          <div className="boot-lines">
+            <div>&gt; INICIALIZANDO REDE HUB BRASIL...</div>
+            <div>&gt; CONECTANDO FORNECEDORES APROVADOS...</div>
+            <div>&gt; SINCRONIZANDO 27 ESTADOS...</div>
+            <div>&gt; ACESSO LIBERADO</div>
+          </div>
+          <svg className="boot-radar" viewBox="0 0 200 200" aria-hidden="true">
+            <circle cx="100" cy="100" r="90" fill="none" stroke="#14263f" strokeWidth="1" />
+            <circle cx="100" cy="100" r="60" fill="none" stroke="#14263f" strokeWidth="1" />
+            <circle cx="100" cy="100" r="30" fill="none" stroke="#14263f" strokeWidth="1" />
+            <g className="boot-sweep"><path d="M100 100 L100 10 A90 90 0 0 1 163 37 Z" fill="url(#bootSweepGrad)" /></g>
+            <defs><linearGradient id="bootSweepGrad" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stopColor="#59c9ee" stopOpacity=".5" /><stop offset="1" stopColor="#59c9ee" stopOpacity="0" /></linearGradient></defs>
+          </svg>
+          <div className="boot-logo"><div className="boot-logo-name">HUB <em>BRASIL</em></div><div className="boot-logo-tag">CONECTANDO NEGÓCIOS</div></div>
+          <button className="boot-skip" type="button" onClick={skipBoot}>Pular →</button>
+        </div>
+      )}
       <header className="topbar">
         <button className="brand" onClick={() => navigateTo("map")} aria-label="Ir para o mapa do Hub Brasil">
           <span className="brand-mark"><span></span><span></span><span></span></span>
-          <span className="brand-copy"><strong>Hub <b>Brasil</b></strong><small>TECNOLOGIA VEICULAR</small></span>
+          <span className="brand-copy"><strong>Hub <b>Brasil</b></strong><small>CONECTANDO NEGÓCIOS</small></span>
         </button>
         <nav className="desktop-nav" aria-label="Navegação principal">
           <button className={view === "map" ? "active" : ""} onClick={() => setView("map")}>Início</button>
@@ -652,7 +693,7 @@ export default function Home() {
         {view === "messages" && <section className="messages-page"><div className="page-heading"><div><span className="eyebrow">MENSAGENS PRIVADAS</span><h1>Conversas no Hub</h1><p>O contato é compartilhado apenas quando você decide conversar.</p></div><button className="event-create" onClick={() => { setView(userRole === "supplier" ? "supplier-dashboard" : "directory"); }}>Voltar</button></div><div className="messages-layout"><aside><h2>Conversas</h2>{messageData.conversations.length === 0 ? <p>Nenhuma conversa iniciada ainda.</p> : messageData.conversations.map((conversation) => <button key={conversation.id} className={activeConversationId === conversation.id ? "active" : ""} onClick={() => loadMessages(conversation.id)}><strong>{conversation.supplierName || conversation.clientCompany || conversation.clientName || "Contato"}</strong><span>{conversation.subject}</span></button>)}</aside><section className="message-thread">{selectedSupplier && !activeConversationId && userRole === "client" ? <><h2>Nova mensagem para {selectedSupplier.name}</h2><p>Apresente sua necessidade. A empresa receberá a conversa em seu painel.</p><form onSubmit={sendMessage}><textarea name="message" required rows={6} placeholder="Olá, gostaria de saber mais sobre..." /><button className="primary">Enviar mensagem →</button></form></> : activeConversationId ? <><h2>{messageData.conversations.find((item) => item.id === activeConversationId)?.subject || "Conversa"}</h2><div className="thread-list">{messageData.messages?.map((message) => <article key={message.id} className={message.senderUserId === messageData.currentUserId ? "mine" : ""}><p>{message.body}</p><small>{new Date(message.createdAt).toLocaleString("pt-BR")}</small></article>)}</div><form onSubmit={sendMessage}><textarea name="message" required rows={3} placeholder="Escreva sua resposta" /><button className="primary">Enviar →</button></form></> : <div className="events-empty"><strong>Selecione uma conversa</strong><p>Quando um cliente entrar em contato, ela aparecerá aqui.</p></div>}</section></div></section>}
       </main>
 
-      <footer className="site-footer"><div className="footer-main"><div className="footer-brand"><button className="brand" onClick={() => setView("map")}><span className="brand-mark"><span></span><span></span><span></span></span><span className="brand-copy"><strong>Hub <b>Brasil</b></strong><small>TECNOLOGIA VEICULAR</small></span></button><p>O ecossistema de negócios do mercado de rastreamento, telemetria e IoT no Brasil.</p></div><div><strong>Plataforma</strong><button onClick={() => setView("directory")}>Fornecedores</button><button onClick={() => setView("solutions")}>Soluções</button><button onClick={() => setView("events")}>Eventos</button><button onClick={openQuoteRequest}>Solicitar cotação</button></div><div><strong>Para empresas</strong><button onClick={() => openRegistration("supplier")}>Cadastrar empresa</button><button onClick={() => setView("about")}>Sobre o Hub</button><button onClick={() => setRegisterOpen(true)}>Entrar</button></div><div><strong>Contato</strong><a href="mailto:suporte@niviontech.com.br">suporte@niviontech.com.br</a><span>Brasil</span></div></div><div className="footer-bottom"><span>© 2026 Hub Brasil. Todos os direitos reservados.</span><div><a href="/termos">Termos de uso</a><a href="/privacidade">Privacidade</a><a href="/admin">Gestão</a></div></div></footer>
+      <footer className="site-footer"><div className="footer-main"><div className="footer-brand"><button className="brand" onClick={() => setView("map")}><span className="brand-mark"><span></span><span></span><span></span></span><span className="brand-copy"><strong>Hub <b>Brasil</b></strong><small>CONECTANDO NEGÓCIOS</small></span></button><p>O ecossistema de negócios do mercado de rastreamento, telemetria e IoT no Brasil.</p></div><div><strong>Plataforma</strong><button onClick={() => setView("directory")}>Fornecedores</button><button onClick={() => setView("solutions")}>Soluções</button><button onClick={() => setView("events")}>Eventos</button><button onClick={openQuoteRequest}>Solicitar cotação</button></div><div><strong>Para empresas</strong><button onClick={() => openRegistration("supplier")}>Cadastrar empresa</button><button onClick={() => setView("about")}>Sobre o Hub</button><button onClick={() => setRegisterOpen(true)}>Entrar</button></div><div><strong>Contato</strong><a href="mailto:suporte@niviontech.com.br">suporte@niviontech.com.br</a><span>Brasil</span></div></div><div className="footer-bottom"><span>© 2026 Hub Brasil. Todos os direitos reservados.</span><div><a href="/termos">Termos de uso</a><a href="/privacidade">Privacidade</a><a href="/admin">Gestão</a></div></div></footer>
 
       <nav className="mobile-nav" aria-label="Navegação móvel">
         <button className={view === "map" ? "active" : ""} onClick={() => setView("map")}><span>⌖</span>Mapa</button>
