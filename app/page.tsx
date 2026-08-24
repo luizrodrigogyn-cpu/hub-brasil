@@ -533,13 +533,14 @@ export default function Home() {
             <button onClick={() => { openQuoteRequest(); setNavigationOpen(false); }}>Solicitar cotação</button>
             {userRole === "supplier" && <button onClick={() => navigateTo("supplier-dashboard")}>Minha empresa</button>}
             {!registered && <a href="/sign-in?return_to=/">Entrar</a>}
+            {registered && !previewMode && <a href="/sign-out">Sair</a>}
           </nav>}
         </div>
         <div className="top-actions">
           {previewMode && <a className="preview-exit" href="/admin">↩ Voltar à Visão Gestor</a>}
           {registered && <button className="admin-link" onClick={() => setView("supplier-dashboard")}>Painel da operação</button>}
           <a className="admin-link" href="/admin">Ver cadastros</a>
-          {registered ? <span className="access-chip"><i></i>Acesso liberado</span> : <a className="text-action" href="/sign-in?return_to=/">Entrar</a>}
+          {registered ? <><span className="access-chip"><i></i>Acesso liberado</span>{!previewMode && <a className="text-action" href="/sign-out">Sair</a>}</> : <a className="text-action" href="/sign-in?return_to=/">Entrar</a>}
           {userRole === "supplier" && <button className="text-action" onClick={() => setView("supplier-dashboard")}>Minha empresa</button>}
           <button className="primary small" onClick={() => openRegistration("supplier")}>Para fornecedores</button>
         </div>
