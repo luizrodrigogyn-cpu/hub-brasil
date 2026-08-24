@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { env } from "cloudflare:workers";
 import AuthProvider from "./auth-provider";
+import { runtimeValue } from "./runtime-env";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -42,7 +42,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <AuthProvider publishableKey={String((env as unknown as Record<string, unknown>).CLERK_PUBLISHABLE_KEY || "")}>{children}</AuthProvider>
+        <AuthProvider publishableKey={runtimeValue("CLERK_PUBLISHABLE_KEY")}>{children}</AuthProvider>
       </body>
     </html>
   );

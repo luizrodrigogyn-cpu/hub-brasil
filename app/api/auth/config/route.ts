@@ -1,9 +1,9 @@
-import { env } from "cloudflare:workers";
+import { runtimeValue } from "../../../runtime-env";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const publishableKey = String((env as unknown as Record<string, unknown>).CLERK_PUBLISHABLE_KEY || "");
+  const publishableKey = runtimeValue("CLERK_PUBLISHABLE_KEY");
   if (!publishableKey.startsWith("pk_")) {
     return Response.json({ error: "Autenticação indisponível" }, { status: 503, headers: { "cache-control": "no-store" } });
   }

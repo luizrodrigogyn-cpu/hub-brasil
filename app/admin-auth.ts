@@ -1,8 +1,8 @@
-import { env } from "cloudflare:workers";
 import { getChatGPTUser, requireChatGPTUser, type ChatGPTUser } from "./chatgpt-auth";
+import { runtimeValue } from "./runtime-env";
 
 export function isAdminEmail(email: string) {
-  const configured = String((env as unknown as Record<string, unknown>).ADMIN_EMAILS || "");
+  const configured = runtimeValue("ADMIN_EMAILS");
   return configured.split(",").map((item) => item.trim().toLowerCase()).filter(Boolean).includes(email.toLowerCase());
 }
 

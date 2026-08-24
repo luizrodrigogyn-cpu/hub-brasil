@@ -120,6 +120,13 @@
       "when": 1787400000000,
       "tag": "0016_founder_slots_and_audit_metadata",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1787449902850,
+      "tag": "0017_first_santa_claus",
+      "breakpoints": true
     }
   ]
 }

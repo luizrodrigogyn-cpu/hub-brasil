@@ -1,7 +1,7 @@
 import { createClerkClient } from "@clerk/backend";
-import { env } from "cloudflare:workers";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { runtimeValue } from "./runtime-env";
 
 export type ChatGPTUser = {
   userId: string;
@@ -16,14 +16,13 @@ const SIGN_OUT_PATH = "/sign-out";
 const CALLBACK_PATH = "/callback";
 
 export async function getChatGPTUser(): Promise<ChatGPTUser | null> {
-  const bindings = env as unknown as Record<string, string | undefined>;
-  const secretKey = bindings.CLERK_SECRET_KEY;
-  const publishableKey = bindings.CLERK_PUBLISHABLE_KEY;
+  const secretKey = runtimeValue("CLERK_SECRET_KEY");
+  const publishableKey = runtimeValue("CLERK_PUBLISHABLE_KEY");
   if (!secretKey || !publishableKey) return null;
   const requestHeaders = await headers();
   const host = requestHeaders.get("x-forwarded-host") || requestHeaders.get("host") || "hub.niviontech.com.br";
   const protocol = requestHeaders.get("x-forwarded-proto") || "https";
-  const authorizedParties = String(bindings.CLERK_AUTHORIZED_PARTIES || "").split(",").map((value) => value.trim()).filter(Boolean);
+  const authorizedParties = runtimeValue("CLERK_AUTHORIZED_PARTIES").split(",").map((value) => value.trim()).filter(Boolean);
   try {
     const clerk = createClerkClient({ secretKey, publishableKey });
     const state = await clerk.authenticateRequest(

@@ -39,7 +39,7 @@ const worker = {
     // is not consistently available during Vinext client hydration.
     if (url.pathname === "/hb-init") {
       return Response.json(
-        { clerkPublishableKey: env.CLERK_PUBLISHABLE_KEY || "" },
+        { clerkPublishableKey: env.CLERK_PUBLISHABLE_KEY || process.env.CLERK_PUBLISHABLE_KEY || "" },
         { headers: { "Cache-Control": "no-store" } },
       );
     }

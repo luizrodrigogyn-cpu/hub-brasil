@@ -115,7 +115,7 @@ export default function Home() {
   const [newsCategory, setNewsCategory] = useState("Todos");
   const [referralCode, setReferralCode] = useState("");
   const [previewMode, setPreviewMode] = useState<"client" | "supplier" | null>(null);
-  const [dashboard, setDashboard] = useState<{ supplierMetrics?: Record<string, number>; supplierQuotes?: Array<{ id:number; protocol:string; category:string; application:string; status:string; createdAt:string }>; profile?: { city?:string|null; state?:string|null; phone?:string|null; instagram?:string|null; website?:string|null; description?:string|null; categories?:string[] } }>({});
+  const [dashboard, setDashboard] = useState<{ supplierMetrics?: Record<string, number>; supplierQuotes?: Array<{ id:number; protocol:string; category:string; application:string; status:string; createdAt:string }>; profile?: { address?:string|null; city?:string|null; state?:string|null; phone?:string|null; instagram?:string|null; website?:string|null; description?:string|null; categories?:string[] } }>({});
   const [editingCompany, setEditingCompany] = useState(false);
   const [messageData, setMessageData] = useState<{ conversations: Array<{id:number;subject:string;updatedAt:string;supplierName?:string;clientName?:string;clientCompany?:string}>; messages?: Array<{id:number;senderUserId:string;body:string;createdAt:string}>; currentUserId?:string }>({ conversations: [] });
   const [activeConversationId, setActiveConversationId] = useState<number | null>(null);
@@ -311,7 +311,8 @@ export default function Home() {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const logo = form.get("logo");
-    const payload = Object.fromEntries([...form.entries()].filter(([key]) => key !== "logo")) as Record<string, FormDataEntryValue>;
+    const profilePhoto = form.get("profilePhoto");
+    const payload = Object.fromEntries([...form.entries()].filter(([key]) => key !== "logo" && key !== "profilePhoto")) as Record<string, FormDataEntryValue>;
     payload.categories = JSON.stringify(form.getAll("categories"));
     if (referralCode) payload.referralCode = referralCode;
     try {
@@ -326,6 +327,12 @@ export default function Home() {
       logoForm.set("logoConsent", String(payload.logoConsent === "on"));
       const logoResponse = await fetch("/api/supplier-logo", { method: "POST", body: logoForm });
       if (!logoResponse.ok) { const result = await logoResponse.json().catch(() => ({})); setToast(result.error || "Cadastro criado, mas não foi possível enviar a logo."); }
+    }
+    if (registrationRole === "client" && profilePhoto instanceof File && profilePhoto.size) {
+      const photoForm = new FormData();
+      photoForm.set("photo", profilePhoto);
+      const photoResponse = await fetch("/api/profile-photo", { method: "POST", body: photoForm });
+      if (!photoResponse.ok) { const result = await photoResponse.json().catch(() => ({})); setToast(result.error || "Cadastro criado, mas não foi possível enviar a foto."); }
     }
     setRegistered(true);
     await refreshSuppliers();
@@ -387,7 +394,7 @@ export default function Home() {
 
   async function saveCompany(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); const form = new FormData(event.currentTarget);
-    const payload = { company: form.get("company"), phone: form.get("phone"), instagram: form.get("instagram"), website: form.get("website"), city: form.get("city"), state: form.get("state"), description: form.get("description"), categories: form.getAll("categories") };
+    const payload = { company: form.get("company"), phone: form.get("phone"), instagram: form.get("instagram"), website: form.get("website"), address: form.get("address"), city: form.get("city"), state: form.get("state"), description: form.get("description"), categories: form.getAll("categories") };
     const response = await fetch("/api/leads", { method:"PATCH", headers:{"content-type":"application/json"}, body:JSON.stringify(payload) }); const data = await response.json();
     if (!response.ok) { setToast(data.error || "Não foi possível atualizar a empresa."); return; }
     setSupplierCompany(String(payload.company || "")); setEditingCompany(false); await refreshSuppliers(); fetch("/api/roadmap").then(r=>r.json()).then(setDashboard).catch(()=>{}); setToast("Informações da empresa atualizadas."); window.setTimeout(()=>setToast(""),3000);
@@ -511,7 +518,7 @@ export default function Home() {
           <button className={view === "about" ? "active" : ""} onClick={() => setView("about")}>Sobre o Hub</button>
           <button onClick={openQuoteRequest}>Solicitar cotação</button>
         </nav>
-        <div className="navigation-menu">
+        <div className="navigation-menu" ref={navigationMenuRef}>
           <button className="mobile-menu-toggle" type="button" aria-expanded={navigationOpen} aria-controls="mobile-navigation" onClick={() => setNavigationOpen((open) => !open)}>Menu <span>☰</span></button>
           {navigationOpen && <nav id="mobile-navigation" className="mobile-navigation" aria-label="Navegação principal móvel">
             <button onClick={() => navigateTo("map")}>Início</button>
@@ -742,8 +749,9 @@ export default function Home() {
               <input type="hidden" name="role" value={registrationRole} />
               <label>Seu nome<input name="name" required placeholder="Como podemos chamar você?" /></label>
               <label>Telefone / WhatsApp<input name="phone" required inputMode="tel" placeholder="(00) 00000-0000" /></label>
-              <div className="or"><span></span>Informe um dos dois<span></span></div>
-              <div className="field-row"><label>Empresa<input name="company" required={registrationRole === "supplier"} placeholder="Nome da empresa" /></label><label>Instagram<input name="instagram" placeholder="@suaempresa" /></label></div>
+              <label>Endereço<input name="address" required placeholder="Rua, número, bairro e complemento" /></label>
+              <div className="field-row"><label>Nome fantasia {registrationRole === "client" && <small>Opcional</small>}<input name="company" required={registrationRole === "supplier"} placeholder="Nome da empresa" /></label><label>Instagram <small>Opcional</small><input name="instagram" placeholder="@suaempresa" /></label></div>
+              {registrationRole === "client" && <><label>CNPJ <small>Opcional</small><input name="cnpj" inputMode="numeric" placeholder="00.000.000/0000-00" /></label><label>Foto de perfil <small>Opcional · PNG, JPG ou WebP, até 3 MB</small><input name="profilePhoto" type="file" accept="image/png,image/jpeg,image/webp" /></label></>}
               {registrationRole === "supplier" && <><label>CNPJ<input name="cnpj" required inputMode="numeric" placeholder="00.000.000/0000-00" /><small>Validamos apenas os dígitos; a confirmação empresarial é feita pela gestão.</small></label>{referralCode && <p className="commercial-notice">Você foi indicado por uma empresa parceira do Hub Brasil.</p>}<label>Categoria principal<select name="category" required><option value="">Selecione</option>{solutionCategories.map((item) => <option key={item.name}>{item.name}</option>)}</select></label><fieldset className="solution-selector"><legend>Soluções oferecidas <small>Selecione uma ou mais</small></legend>{solutionCategories.map((item) => <label className="check" key={item.name}><input name="categories" type="checkbox" value={item.name} /> {item.title}</label>)}</fieldset><div className="field-row"><label>Cidade<input name="city" required placeholder="Cidade da sede" /></label><label>Estado<select name="state" required><option value="">UF</option>{["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"].map((state) => <option key={state}>{state}</option>)}</select></label></div><label>Apresentação da empresa<textarea name="description" rows={3} placeholder="Especialidades, diferenciais e região atendida" /></label><label>Logo da empresa <small>PNG, JPG ou WebP, até 3 MB</small><input name="logo" type="file" accept="image/png,image/jpeg,image/webp" /></label><label className="consent logo-consent"><input name="logoConsent" type="checkbox" required /> <span>Declaro que possuo autorização para utilizar e divulgar esta marca/logotipo no Hub Brasil e autorizo sua exibição no perfil público, diretório e mapa da plataforma.</span></label></>}
               <label className="consent"><input type="checkbox" required /> <span>Li e concordo com a <a href="/privacidade" target="_blank">Política de Privacidade</a> e os <a href="/termos" target="_blank">Termos de Uso</a>.</span></label>
               <button className="primary full" type="submit">{registrationRole === "supplier" ? "Criar perfil da empresa" : "Liberar meu acesso"} <span>→</span></button>

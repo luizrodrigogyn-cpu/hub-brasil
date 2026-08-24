@@ -11,6 +11,8 @@ export const leads = sqliteTable("leads", {
   role: text("role").notNull().default("client"),
   authUserId: text("auth_user_id"),
   email: text("email"),
+  address: text("address"),
+  profileImageKey: text("profile_image_key"),
   status: text("status").notNull().default("pending"),
   phoneVerifiedAt: text("phone_verified_at"),
   category: text("category"),
