@@ -3,6 +3,7 @@ import { getDb } from "../../../db";
 import { eventInterests, leads, marketNeeds, needInterests, supplierUpdates, technicalArticles } from "../../../db/schema";
 import { getApiUser } from "../../admin-auth";
 import { awardCredit, qualifyReferralIfReady } from "../../hub-credits";
+import { isValidBrazilState, normalizeBrazilState } from "../../brazil-states";
 
 export async function GET() {
   const user = await getApiUser();
@@ -32,8 +33,9 @@ export async function POST(request: Request) {
   const action = String(body.action || "");
   if (action === "create_need") {
     if (profile.role !== "client") return Response.json({ error: "Somente clientes podem publicar necessidades." }, { status: 403 });
-    const category = String(body.category || "").trim(), title = String(body.title || "").trim(), description = String(body.description || "").trim(), city = String(body.city || "").trim(), state = String(body.state || "").trim();
+    const category = String(body.category || "").trim(), title = String(body.title || "").trim(), description = String(body.description || "").trim(), city = String(body.city || "").trim(), state = normalizeBrazilState(String(body.state || ""));
     if (!category || !title || !description || !city || !state) return Response.json({ error: "Preencha os campos obrigatórios." }, { status: 400 });
+    if (!isValidBrazilState(state)) return Response.json({ error: "Informe uma UF brasileira válida (ex.: SP, RJ, MG)." }, { status: 400 });
     await db.insert(marketNeeds).values({ clientUserId: user.userId, category, title: title.slice(0, 120), description: description.slice(0, 2000), city, state, deadline: String(body.deadline || "") || null, expiresAt: new Date(Date.now() + 45 * 86400000).toISOString() });
     return Response.json({ ok: true, pending: true }, { status: 201 });
   }

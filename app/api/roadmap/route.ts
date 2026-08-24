@@ -3,6 +3,7 @@ import { getDb } from "../../../db";
 import { activityEvents, alertPreferences, contentReports, creditLedger, creditWallets, deletionRequests, favorites, highlightActivations, leads, products, quoteRecipients, quoteRequests, referrals, supplierEvents } from "../../../db/schema";
 import { getApiUser } from "../../admin-auth";
 import { activeHighlights, awardCredit, profileCompleteness, qualifyReferralIfReady, recomputeHubScore, ruleFor } from "../../hub-credits";
+import { isValidBrazilState, normalizeBrazilState } from "../../brazil-states";
 
 const allowedFavoriteTypes = new Set(["supplier", "product", "event"]);
 
@@ -139,7 +140,7 @@ export async function POST(request: Request) {
     const category = normalizeText(body.category);
     const application = normalizeText(body.application);
     const city = normalizeText(body.city);
-    const state = normalizeText(body.state).toUpperCase().slice(0, 2);
+    const state = normalizeBrazilState(normalizeText(body.state));
     const notes = normalizeText(body.notes).slice(0, 2000);
     const contactConsent = body.contactConsent === true || String(body.contactConsent).toLowerCase() === "true";
     const quantity = toPositiveInt(body.quantity, 1, 120);
@@ -148,6 +149,7 @@ export async function POST(request: Request) {
     if (deadlineText && (!deadline || Number.isNaN(deadline.getTime()) || deadline < new Date())) return Response.json({ error: "Prazo inválido para solicitação de cotação." }, { status: 400 });
     if (!contactConsent) return Response.json({ error: "Confirme o consentimento para compartilhamento do seu contato." }, { status: 400 });
     if (!category || !application || !city || !state || !supplierIds.length) return Response.json({ error: "Preencha a necessidade e escolha ao menos um fornecedor." }, { status: 400 });
+    if (!isValidBrazilState(state)) return Response.json({ error: "Informe uma UF brasileira válida (ex.: SP, RJ, MG)." }, { status: 400 });
     const oneHourAgo = new Date(Date.now() - 3600000).toISOString();
     const [{ total }] = await db.select({ total: sql<number>`count(*)` }).from(quoteRequests).where(and(eq(quoteRequests.clientUserId, user.userId), gte(quoteRequests.createdAt, oneHourAgo)));
     if (Number(total) >= 3) return Response.json({ error: "Limite temporário atingido. Aguarde antes de enviar outra cotação." }, { status: 429 });

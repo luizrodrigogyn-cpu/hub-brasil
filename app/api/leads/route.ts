@@ -2,6 +2,7 @@ import { getDb } from "../../../db";
 import { leads, referrals } from "../../../db/schema";
 import { getApiUser } from "../../admin-auth";
 import { isValidCnpj, normalizeCnpj } from "../../hub-credits";
+import { isValidBrazilState, normalizeBrazilState } from "../../brazil-states";
 import { eq } from "drizzle-orm";
 
 export async function POST(request: Request) {
@@ -19,7 +20,8 @@ export async function POST(request: Request) {
     const category = body.category?.trim() || null;
     const selectedCategories = (() => { try { const parsed = JSON.parse(body.categories || "[]"); return Array.isArray(parsed) ? [...new Set(parsed.map(String).map((item) => item.trim()).filter(Boolean))].slice(0, 12) : []; } catch { return []; } })();
     const city = body.city?.trim() || null;
-    const state = body.state?.trim() || null;
+    const stateRaw = body.state?.trim() || null;
+    const state = stateRaw ? normalizeBrazilState(stateRaw) : null;
     const description = body.description?.trim() || null;
     const cnpj = body.cnpj?.trim() || null;
     const cnpjNormalized = cnpj ? normalizeCnpj(cnpj) : null;
@@ -28,6 +30,7 @@ export async function POST(request: Request) {
     if (!name || !phone || !address) return Response.json({ error: "Preencha nome, telefone e endereço." }, { status: 400 });
     if (!/^\d{10,11}$/.test(phone.replace(/\D/g, ""))) return Response.json({ error: "Informe um telefone brasileiro válido com DDD." }, { status: 400 });
     if (role === "supplier" && (!company || !category || !selectedCategories.length || !city || !state || !cnpj)) return Response.json({ error: "Fornecedor deve informar empresa, CNPJ, ao menos uma solução, cidade e estado." }, { status: 400 });
+    if (role === "supplier" && !isValidBrazilState(state || "")) return Response.json({ error: "Informe uma UF brasileira válida (ex.: SP, RJ, MG)." }, { status: 400 });
     if (role === "supplier" && !isValidCnpj(cnpj || "")) return Response.json({ error: "Informe um CNPJ com dígitos válidos. Esta validação não confirma a situação oficial da empresa." }, { status: 400 });
     if (role === "client" && cnpj && !isValidCnpj(cnpj)) return Response.json({ error: "O CNPJ informado não possui dígitos válidos." }, { status: 400 });
     const db = getDb();
@@ -64,10 +67,11 @@ export async function PATCH(request: Request) {
     const website = websiteRaw ? (websiteRaw.startsWith("http://") || websiteRaw.startsWith("https://") ? websiteRaw : `https://${websiteRaw}`) : null;
     const address = String(body.address || "").trim();
     const city = String(body.city || "").trim();
-    const state = String(body.state || "").trim().toUpperCase();
+    const state = normalizeBrazilState(String(body.state || ""));
     const description = String(body.description || "").trim().slice(0, 1500) || null;
     if (!company || !phone || !address || !city || !state) return Response.json({ error: "Informe empresa, telefone, endereço, cidade e estado." }, { status: 400 });
     if (!/^\d{10,11}$/.test(phone.replace(/\D/g, ""))) return Response.json({ error: "Informe um telefone brasileiro válido com DDD." }, { status: 400 });
+    if (!isValidBrazilState(state)) return Response.json({ error: "Informe uma UF brasileira válida (ex.: SP, RJ, MG)." }, { status: 400 });
     const categories = Array.isArray(body.categories) ? [...new Set(body.categories.map(String).map((item) => item.trim()).filter(Boolean))].slice(0, 12) : JSON.parse(profile.categories || "[]");
     if (!categories.length) return Response.json({ error: "Selecione ao menos uma solução." }, { status: 400 });
     await db.update(leads).set({ company, phone, instagram, website, address, city, state, description, category: categories[0], categories: JSON.stringify(categories), updatedAt: new Date().toISOString() }).where(eq(leads.id, profile.id));
