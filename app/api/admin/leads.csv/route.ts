@@ -2,13 +2,13 @@ import { desc } from "drizzle-orm";
 import { getDb } from "../../../../db";
 import { leads, moderationAudit } from "../../../../db/schema";
 import { getChatGPTUser } from "../../../chatgpt-auth";
-import { isHubAdmin } from "../../../admin-auth";
+import { adminAccessState, isHubAdmin } from "../../../admin-auth";
 
 function csv(value: unknown) { return `"${String(value ?? "").replaceAll('"', '""')}"`; }
 
 export async function GET() {
   const user = await getChatGPTUser();
-  if (!isHubAdmin(user)) return new Response("Não autorizado", { status: 403 });
+  if (!isHubAdmin(user)) return new Response(adminAccessState(user) === "needs_2fa" ? "Acesso restrito ao gestor. Conclua a verificação em duas etapas (2FA) na sua conta e faça login novamente." : "Não autorizado", { status: 403 });
   const db = getDb();
   const records = await db.select().from(leads).orderBy(desc(leads.createdAt));
   const rows = [["Perfil", "Status", "Telefone validado", "Nome", "Telefone", "Empresa", "Instagram", "Data"], ...records.map((lead) => [lead.role, lead.status, lead.phoneVerifiedAt ? "Sim" : "Não", lead.name, lead.phone, lead.company, lead.instagram, lead.createdAt])];

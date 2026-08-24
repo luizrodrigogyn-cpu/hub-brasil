@@ -6,11 +6,25 @@ export function isAdminEmail(email: string) {
   return configured.split(",").map((item) => item.trim().toLowerCase()).filter(Boolean).includes(email.toLowerCase());
 }
 
-export function isHubAdmin(user: ChatGPTUser | null): user is ChatGPTUser {
-  // O acesso é limitado à lista de e-mails autorizados e cada entrada exige
-  // o código enviado pelo Clerk. A segunda camada adicional será aplicada
-  // pelo Cloudflare Access quando o domínio próprio estiver conectado.
+function isAllowlistedAdmin(user: ChatGPTUser | null): user is ChatGPTUser {
   return Boolean(user && isAdminEmail(user.email));
+}
+
+export type AdminAccessState = "denied" | "needs_2fa" | "granted";
+
+// Segunda camada real de proteção: a allowlist de e-mail sozinha não é
+// suficiente para liberar acesso administrativo. `secondFactorVerified`
+// vem do Clerk (factorVerificationAge) e só é true quando a sessão atual
+// passou de fato por verificação de segundo fator — não é só um texto de
+// aviso, é checado em código antes de qualquer leitura/escrita de admin.
+export function adminAccessState(user: ChatGPTUser | null): AdminAccessState {
+  if (!isAllowlistedAdmin(user)) return "denied";
+  if (!user.secondFactorVerified) return "needs_2fa";
+  return "granted";
+}
+
+export function isHubAdmin(user: ChatGPTUser | null): user is ChatGPTUser {
+  return adminAccessState(user) === "granted";
 }
 
 export async function requireHubAdmin(returnTo = "/admin") {

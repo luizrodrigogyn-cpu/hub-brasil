@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNull, ne, sql } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { conversationMessages, conversations, leads } from "../../../db/schema";
 import { getApiUser } from "../../admin-auth";
@@ -22,9 +22,16 @@ export async function GET(request: Request) {
       .from(conversations).leftJoin(leads, eq(leads.authUserId, conversations.clientUserId)).where(eq(conversations.supplierId, profile.id)).orderBy(desc(conversations.updatedAt))
     : await db.select({ id: conversations.id, subject: conversations.subject, supplierId: conversations.supplierId, clientUserId: conversations.clientUserId, updatedAt: conversations.updatedAt, supplierName: leads.company, supplierCity: leads.city, supplierState: leads.state })
       .from(conversations).innerJoin(leads, eq(leads.id, conversations.supplierId)).where(eq(conversations.clientUserId, user.userId)).orderBy(desc(conversations.updatedAt));
-  if (!conversationId) return Response.json({ conversations: list });
+  if (!conversationId) {
+    // "Visto": contagem de mensagens da outra parte ainda não lidas, para badge na lista.
+    const unread = list.length ? await db.select({ conversationId: conversationMessages.conversationId, total: sql<number>`count(*)` }).from(conversationMessages).where(and(isNull(conversationMessages.readAt), ne(conversationMessages.senderUserId, user.userId))).groupBy(conversationMessages.conversationId) : [];
+    const unreadMap = new Map(unread.map((item) => [item.conversationId, Number(item.total)]));
+    return Response.json({ conversations: list.map((item) => ({ ...item, unreadCount: unreadMap.get(item.id) || 0 })) });
+  }
   const current = list.find((item) => item.id === conversationId);
   if (!current) return Response.json({ error: "Conversa não encontrada." }, { status: 404 });
+  // Marca como lida qualquer mensagem da outra parte ao abrir a conversa.
+  await db.update(conversationMessages).set({ readAt: new Date().toISOString() }).where(and(eq(conversationMessages.conversationId, conversationId), isNull(conversationMessages.readAt), ne(conversationMessages.senderUserId, user.userId)));
   const messages = await db.select().from(conversationMessages).where(eq(conversationMessages.conversationId, conversationId)).orderBy(conversationMessages.createdAt);
   return Response.json({ conversations: list, conversation: current, messages, currentUserId: user.userId });
 }

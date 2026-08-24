@@ -2,13 +2,16 @@ import { desc, eq, sql } from "drizzle-orm";
 import { getDb } from "../../../../db";
 import { contentReports, creditLedger, creditWallets, deletionRequests, highlightActivations, leads, marketNeeds, moderationAudit, products, sectorNews, supplierEvents, supplierUpdates, technicalArticles } from "../../../../db/schema";
 import { getChatGPTUser } from "../../../chatgpt-auth";
-import { isHubAdmin } from "../../../admin-auth";
+import { adminAccessState, isHubAdmin } from "../../../admin-auth";
 import { assignFounderMember, awardCredit, ensureReferralCode, qualifyReferralIfReady, recomputeHubScore } from "../../../hub-credits";
 
-async function authorized() { return isHubAdmin(await getChatGPTUser()); }
+function adminErrorMessage(state: "denied" | "needs_2fa" | "granted") {
+  return state === "needs_2fa" ? "Acesso restrito ao gestor. Conclua a verificação em duas etapas (2FA) na sua conta e faça login novamente." : "Acesso restrito ao gestor.";
+}
 
 export async function GET() {
-  if (!(await authorized())) return Response.json({ error: "Acesso restrito ao gestor." }, { status: 403 });
+  const state = adminAccessState(await getChatGPTUser());
+  if (state !== "granted") return Response.json({ error: adminErrorMessage(state) }, { status: 403 });
   const db = getDb();
   const [suppliers, productRows, events, needs, updates, articles, news, reports, deletions, audit] = await Promise.all([
     db.select().from(leads).where(eq(leads.role, "supplier")).orderBy(desc(leads.createdAt)),
@@ -28,7 +31,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   const admin = await getChatGPTUser();
-  if (!isHubAdmin(admin)) return Response.json({ error: "Acesso restrito ao gestor. A gestão exige segundo fator de autenticação." }, { status: 403 });
+  if (!isHubAdmin(admin)) return Response.json({ error: adminErrorMessage(adminAccessState(admin)) }, { status: 403 });
   const body = await request.json() as { entity?: string; id?: number; action?: string; value?: string; title?:string; summary?:string; content?:string; category?:string; author?:string; sourceName?:string; sourceUrl?:string; imageUrl?:string; publishedAt?:string };
   if (!body.entity || !body.action || (!["create_article", "create_news"].includes(body.action) && !body.id)) return Response.json({ error: "Ação inválida." }, { status: 400 });
   const db = getDb();

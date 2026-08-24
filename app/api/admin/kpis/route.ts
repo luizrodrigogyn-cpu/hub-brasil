@@ -2,9 +2,9 @@ import { eq, sql } from "drizzle-orm";
 import { getDb } from "../../../../db";
 import { quoteRecipients, quoteRequests } from "../../../../db/schema";
 import { getChatGPTUser } from "../../../chatgpt-auth";
-import { isHubAdmin } from "../../../admin-auth";
+import { adminAccessState } from "../../../admin-auth";
 
-async function authorized() { return isHubAdmin(await getChatGPTUser()); }
+async function adminState() { return adminAccessState(await getChatGPTUser()); }
 
 function median(values: number[]): number {
   const sorted = [...values].sort((a, b) => a - b);
@@ -16,7 +16,8 @@ function median(values: number[]): number {
 const MIN_SAMPLE = 5;
 
 export async function GET() {
-  if (!(await authorized())) return Response.json({ error: "Acesso restrito ao gestor." }, { status: 403 });
+  const state = await adminState();
+  if (state !== "granted") return Response.json({ error: state === "needs_2fa" ? "Acesso restrito ao gestor. Conclua a verificação em duas etapas (2FA) na sua conta e faça login novamente." : "Acesso restrito ao gestor." }, { status: 403 });
   const db = getDb();
 
   // 1) Tempo até a primeira proposta por cotação (meta: < 24h).
