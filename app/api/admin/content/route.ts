@@ -1,6 +1,6 @@
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, gte, sql } from "drizzle-orm";
 import { getDb } from "../../../../db";
-import { contentReports, creditLedger, creditWallets, deletionRequests, highlightActivations, leads, marketNeeds, moderationAudit, products, sectorNews, supplierEvents, supplierUpdates, technicalArticles } from "../../../../db/schema";
+import { contentReports, creditLedger, creditWallets, deletionRequests, highlightActivations, leads, marketNeeds, moderationAudit, products, sectorNews, supplierEvents, supplierRatings, supplierUpdates, technicalArticles } from "../../../../db/schema";
 import { getChatGPTUser } from "../../../chatgpt-auth";
 import { adminAccessState, isHubAdmin } from "../../../admin-auth";
 import { assignFounderMember, awardCredit, ensureReferralCode, qualifyReferralIfReady, recomputeHubScore } from "../../../hub-credits";
@@ -26,7 +26,11 @@ export async function GET() {
     db.select().from(moderationAudit).orderBy(desc(moderationAudit.createdAt)).limit(50),
   ]);
   const [wallets, credits, highlights] = await Promise.all([db.select().from(creditWallets), db.select().from(creditLedger).orderBy(desc(creditLedger.createdAt)).limit(100), db.select().from(highlightActivations).orderBy(desc(highlightActivations.createdAt)).limit(100)]);
-  return Response.json({ suppliers, products: productRows, events, needs, updates, articles, news, reports, deletions, audit, wallets, credits, highlights });
+  // Selo "Fornecedor verificado" exige >=5 avaliações com nota 4 ou 5 — usado para habilitar o botão "Conceder selo".
+  const positiveRatings = await db.select({ supplierName: supplierRatings.supplierName, positiveTotal: sql<number>`count(*)` }).from(supplierRatings).where(gte(supplierRatings.stars, 4)).groupBy(supplierRatings.supplierName);
+  const positiveMap = new Map(positiveRatings.map((item) => [item.supplierName, Number(item.positiveTotal)]));
+  const suppliersWithRatings = suppliers.map((item) => ({ ...item, positiveRatings: positiveMap.get(item.company || "") || 0 }));
+  return Response.json({ suppliers: suppliersWithRatings, products: productRows, events, needs, updates, articles, news, reports, deletions, audit, wallets, credits, highlights });
 }
 
 export async function POST(request: Request) {
@@ -38,7 +42,15 @@ export async function POST(request: Request) {
   if (body.entity === "supplier") {
     if (body.action === "verify_phone") { await db.update(leads).set({ phoneVerifiedAt: new Date().toISOString() }).where(eq(leads.id, body.id)); await recomputeHubScore(db, body.id!, "telefone_validado"); }
     else if (body.action === "confirm_cnpj") await db.update(leads).set({ cnpjValidationStatus: "manually_confirmed" }).where(eq(leads.id, body.id));
-    else if (body.action === "grant_verified") { const [supplier] = await db.select().from(leads).where(eq(leads.id, body.id)); if (!supplier?.phoneVerifiedAt || supplier.status !== "approved") return Response.json({ error: "Aprove e valide o telefone antes de conceder o selo." }, { status: 400 }); await db.update(leads).set({ verificationStatus: "verified", verifiedAt: new Date().toISOString() }).where(eq(leads.id, body.id)); await recomputeHubScore(db,body.id!,"selo_verificado"); }
+    else if (body.action === "grant_verified") {
+      const [supplier] = await db.select().from(leads).where(eq(leads.id, body.id));
+      if (!supplier?.phoneVerifiedAt || supplier.status !== "approved") return Response.json({ error: "Aprove e valide o telefone antes de conceder o selo." }, { status: 400 });
+      // Critério do selo: dono com telefone validado (identidade confirmada) + aprovação da gestão + >=5 avaliações positivas (nota 4 ou 5).
+      const [{ positiveTotal }] = await db.select({ positiveTotal: sql<number>`count(*)` }).from(supplierRatings).where(and(eq(supplierRatings.supplierName, supplier.company || ""), gte(supplierRatings.stars, 4)));
+      if (Number(positiveTotal) < 5) return Response.json({ error: "É necessário ao menos 5 avaliações de clientes com nota 4 ou 5 para conceder o selo." }, { status: 400 });
+      await db.update(leads).set({ verificationStatus: "verified", verifiedAt: new Date().toISOString() }).where(eq(leads.id, body.id));
+      await recomputeHubScore(db,body.id!,"selo_verificado");
+    }
     else if (body.action === "suspend_verified") await db.update(leads).set({ verificationStatus: "suspended", verifiedAt: null }).where(eq(leads.id, body.id));
     else if (body.action === "approve") { const [supplier] = await db.select().from(leads).where(eq(leads.id, body.id)); if (!supplier?.phoneVerifiedAt) return Response.json({ error: "Valide o telefone antes de aprovar." }, { status: 400 }); await db.update(leads).set({ status: "approved" }).where(eq(leads.id, body.id)); await ensureReferralCode(db,body.id!); await awardCredit(db,{supplierId:body.id!,ruleKey:"approved_verified",sourceType:"supplier",sourceId:body.id!,idempotencyKey:`approved-verified:${body.id}`}); await assignFounderMember(db,body.id!); await recomputeHubScore(db,body.id!,"fornecedor_aprovado"); await qualifyReferralIfReady(db,body.id!); }
     else if (body.action === "reject") await db.update(leads).set({ status: "rejected", verificationStatus: "unverified", verifiedAt: null }).where(eq(leads.id, body.id));
