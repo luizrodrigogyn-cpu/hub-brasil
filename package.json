@@ -11,6 +11,7 @@
     "start": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext start",
     "test": "npm run build && node --test tests/rendered-html.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
+    "typecheck": "WRANGLER_LOG_PATH=.wrangler/wrangler.log wrangler types && tsc --noEmit",
     "db:generate": "drizzle-kit generate",
     "deploy": "vinext build && wrangler deploy"
   },

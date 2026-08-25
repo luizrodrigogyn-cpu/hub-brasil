@@ -29,5 +29,8 @@ jobs:
       - name: Verificar padrão do código
         run: npm run lint
 
+      - name: Verificar tipos (TypeScript)
+        run: npm run typecheck
+
       - name: Executar testes
         run: npm test

@@ -4,6 +4,12 @@ import { ClerkProvider } from "@clerk/react";
 import { ptBR } from "@clerk/localizations";
 import { useEffect, useState } from "react";
 
+// Os tipos oficiais da Cloudflare tipam Response.json() como `unknown` em vez de `any`;
+// este helper concentra a conversão explícita usada na leitura de JSON do fetch.
+function readJson(response: Response): Promise<any> {
+  return response.json() as Promise<any>;
+}
+
 export default function AuthProvider({ children, publishableKey }: { children: React.ReactNode; publishableKey?: string }) {
   const initialKey = publishableKey && publishableKey !== "SET_IN_CLOUDFLARE_DASHBOARD" ? publishableKey : "";
   const [key, setKey] = useState(initialKey);
@@ -13,7 +19,7 @@ export default function AuthProvider({ children, publishableKey }: { children: R
     if (initialKey) return;
     let active = true;
     fetch("/hb-init", { cache: "no-store" })
-      .then((response) => response.ok ? response.json() : null)
+      .then((response) => response.ok ? readJson(response) : null)
       .then((data) => {
         if (active && typeof data?.clerkPublishableKey === "string" && data.clerkPublishableKey) setKey(data.clerkPublishableKey);
       })

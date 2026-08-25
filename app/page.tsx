@@ -3,6 +3,12 @@
 import { type ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { BRAZIL_STATES } from "./brazil-states";
 
+// Os tipos oficiais da Cloudflare tipam Response.json() como `unknown` em vez de `any`;
+// este helper concentra a conversão explícita usada em todas as leituras de JSON do fetch.
+function readJson(response: Response): Promise<any> {
+  return response.json() as Promise<any>;
+}
+
 type Supplier = {
   id: number;
   name: string;
@@ -224,11 +230,11 @@ export default function Home() {
   }
 
   async function refreshSuppliers() {
-    try { const response = await fetch("/api/suppliers"); const data = await response.json(); const mapped = (data.suppliers || []).map((item: Supplier) => ({ ...item, initials: item.name.split(/\s+/).slice(0,2).map((part) => part[0]).join("").toUpperCase(), description: item.description || "Fornecedor aprovado no Hub Brasil.", accent: "blue" })); setSuppliers(mapped); if (data.platformSlaLabel) setPlatformSlaLabel(data.platformSlaLabel); return mapped as Supplier[]; } catch { return null; }
+    try { const response = await fetch("/api/suppliers"); const data = await readJson(response); const mapped = (data.suppliers || []).map((item: Supplier) => ({ ...item, initials: item.name.split(/\s+/).slice(0,2).map((part) => part[0]).join("").toUpperCase(), description: item.description || "Fornecedor aprovado no Hub Brasil.", accent: "blue" })); setSuppliers(mapped); if (data.platformSlaLabel) setPlatformSlaLabel(data.platformSlaLabel); return mapped as Supplier[]; } catch { return null; }
   }
 
   async function refreshProducts() {
-    try { const response = await fetch("/api/products"); const data = await response.json(); setProducts(data.products || []); } catch {}
+    try { const response = await fetch("/api/products"); const data = await readJson(response); setProducts(data.products || []); } catch {}
   }
 
   useEffect(() => {
@@ -260,11 +266,11 @@ export default function Home() {
       window.history.replaceState({}, "", window.location.pathname);
     }
     refreshProducts();
-    fetch("/api/ratings").then((response) => response.json()).then((data) => setRatings(data.ratings || {})).catch(() => {});
+    fetch("/api/ratings").then((response) => readJson(response)).then((data) => setRatings(data.ratings || {})).catch(() => {});
     refreshSuppliers();
-    fetch("/api/news").then((response) => response.json()).then((data) => setNews(data.news || [])).catch(() => {});
-    fetch("/api/events").then((response) => response.json()).then((data) => setEvents((data.events || []).map((item: Record<string, string | number>) => { const [x,y] = mapPoint(String(item.state)); const date = new Date(`${item.eventDate}T12:00:00`); return { id: Number(item.id), name: String(item.name), supplier: String(item.supplierName || "Fornecedor aprovado"), venue: String(item.venue), city: String(item.city), state: String(item.state), date: String(item.eventDate), displayDate: date.toLocaleDateString("pt-BR", { day:"2-digit", month:"short", year:"numeric" }).toUpperCase().replace(".", ""), link: String(item.registrationUrl), x, y }; }))).catch(() => {});
-    fetch("/api/me").then((response) => response.json()).then((data) => {
+    fetch("/api/news").then((response) => readJson(response)).then((data) => setNews(data.news || [])).catch(() => {});
+    fetch("/api/events").then((response) => readJson(response)).then((data) => setEvents((data.events || []).map((item: Record<string, string | number>) => { const [x,y] = mapPoint(String(item.state)); const date = new Date(`${item.eventDate}T12:00:00`); return { id: Number(item.id), name: String(item.name), supplier: String(item.supplierName || "Fornecedor aprovado"), venue: String(item.venue), city: String(item.city), state: String(item.state), date: String(item.eventDate), displayDate: date.toLocaleDateString("pt-BR", { day:"2-digit", month:"short", year:"numeric" }).toUpperCase().replace(".", ""), link: String(item.registrationUrl), x, y }; }))).catch(() => {});
+    fetch("/api/me").then((response) => readJson(response)).then((data) => {
       if (data.isAdmin && !requestedPreview) {
         window.location.replace("/admin");
         return;
@@ -277,7 +283,7 @@ export default function Home() {
         setWelcomeOpen(false);
         refreshSuppliers();
         refreshProducts();
-        fetch("/api/roadmap").then((response) => response.ok ? response.json() : null).then((result) => result && setDashboard(result)).catch(() => {});
+        fetch("/api/roadmap").then((response) => response.ok ? readJson(response) : null).then((result) => result && setDashboard(result)).catch(() => {});
       }
     }).catch(() => {});
     return () => window.clearTimeout(timer);
@@ -386,7 +392,7 @@ export default function Home() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ action: "track", kind: "contact_revealed", supplierId: supplier.id }),
       });
-      const data = await response.json().catch(() => ({}));
+      const data = await readJson(response).catch(() => ({}));
       if (!response.ok) { setToast(data.error || "Não foi possível liberar o contato."); return; }
       const refreshedList = await refreshSuppliers();
       const refreshed = refreshedList?.find((item) => item.id === supplier.id);
@@ -411,7 +417,7 @@ export default function Home() {
     if (referralCode) payload.referralCode = referralCode;
     try {
       const response = await fetch("/api/leads", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
-      const result = await response.json();
+      const result = await readJson(response);
       if (response.status === 401) { window.location.href = result.signIn; return; }
       if (!response.ok) { setToast(result.error || "Não foi possível cadastrar."); return; }
     } catch { setToast("Não foi possível concluir o cadastro. Tente novamente."); return; }
@@ -420,13 +426,13 @@ export default function Home() {
       logoForm.set("logo", logo);
       logoForm.set("logoConsent", String(payload.logoConsent === "on"));
       const logoResponse = await fetch("/api/supplier-logo", { method: "POST", body: logoForm });
-      if (!logoResponse.ok) { const result = await logoResponse.json().catch(() => ({})); setToast(result.error || "Cadastro criado, mas não foi possível enviar a logo."); }
+      if (!logoResponse.ok) { const result = await readJson(logoResponse).catch(() => ({})); setToast(result.error || "Cadastro criado, mas não foi possível enviar a logo."); }
     }
     if (registrationRole === "client" && profilePhoto instanceof File && profilePhoto.size) {
       const photoForm = new FormData();
       photoForm.set("photo", profilePhoto);
       const photoResponse = await fetch("/api/profile-photo", { method: "POST", body: photoForm });
-      if (!photoResponse.ok) { const result = await photoResponse.json().catch(() => ({})); setToast(result.error || "Cadastro criado, mas não foi possível enviar a foto."); }
+      if (!photoResponse.ok) { const result = await readJson(photoResponse).catch(() => ({})); setToast(result.error || "Cadastro criado, mas não foi possível enviar a foto."); }
     }
     setRegistered(true);
     await refreshSuppliers();
@@ -473,7 +479,7 @@ export default function Home() {
     if (allowedFields.includes("application") && productFormSpecs.application.length) specs.application = productFormSpecs.application;
     if (allowedFields.includes("features") && productFormSpecs.features.length) specs.features = productFormSpecs.features;
     if (Object.keys(specs).length) form.set("specs", JSON.stringify(specs));
-    try { const response = await fetch("/api/products", { method: "POST", body: form }); const data = await response.json(); if (response.status === 401) { window.location.href = data.signIn; return; } if (!response.ok) { setToast(data.error); return; } } catch { setToast("Não foi possível enviar o produto."); return; }
+    try { const response = await fetch("/api/products", { method: "POST", body: form }); const data = await readJson(response); if (response.status === 401) { window.location.href = data.signIn; return; } if (!response.ok) { setToast(data.error); return; } } catch { setToast("Não foi possível enviar o produto."); return; }
     if (preview) URL.revokeObjectURL(preview); setProductFormOpen(false); resetProductForm(); setView("supplier-dashboard"); setToast("Produto enviado para aprovação do gestor."); window.setTimeout(() => setToast(""), 3500);
   }
 
@@ -482,17 +488,17 @@ export default function Home() {
     const current = ratings[name] || { average: 0, total: 0 };
     const optimistic = { average: (current.average * current.total + stars) / (current.total + 1), total: current.total + 1 };
     setRatings((all) => ({ ...all, [name]: optimistic }));
-    try { const response = await fetch("/api/ratings", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ supplierName: name, stars }) }); const data = await response.json(); if (response.status === 401) { window.location.href = data.signIn; return; } if (response.ok) setRatings((all) => ({ ...all, [name]: data })); } catch {}
+    try { const response = await fetch("/api/ratings", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ supplierName: name, stars }) }); const data = await readJson(response); if (response.status === 401) { window.location.href = data.signIn; return; } if (response.ok) setRatings((all) => ({ ...all, [name]: data })); } catch {}
   }
 
   async function respondQuote(quoteId: number, responseStatus: "responded" | "declined") {
     setQuoteActionBusy(`respond-${quoteId}`);
     try {
       const response = await fetch("/api/roadmap", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "quote_response", quoteId, responseStatus }) });
-      const data = await response.json().catch(() => ({}));
+      const data = await readJson(response).catch(() => ({}));
       if (response.status === 401) { window.location.href = data.signIn; return; }
       if (!response.ok) { setToast(data.error || "Não foi possível atualizar esta cotação."); window.setTimeout(() => setToast(""), 3500); return; }
-      const refreshed = await fetch("/api/roadmap").then((result) => result.ok ? result.json() : null).catch(() => null);
+      const refreshed = await fetch("/api/roadmap").then((result) => result.ok ? readJson(result) : null).catch(() => null);
       if (refreshed) setDashboard(refreshed);
       setToast(responseStatus === "responded" ? "Cotação marcada como respondida." : "Cotação recusada.");
       window.setTimeout(() => setToast(""), 3000);
@@ -505,10 +511,10 @@ export default function Home() {
     setQuoteActionBusy(`close-${quoteId}`);
     try {
       const response = await fetch("/api/roadmap", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "close_quote", quoteId }) });
-      const data = await response.json().catch(() => ({}));
+      const data = await readJson(response).catch(() => ({}));
       if (response.status === 401) { window.location.href = data.signIn; return; }
       if (!response.ok) { setToast(data.error || "Não foi possível encerrar esta cotação."); window.setTimeout(() => setToast(""), 3500); return; }
-      const refreshed = await fetch("/api/roadmap").then((result) => result.ok ? result.json() : null).catch(() => null);
+      const refreshed = await fetch("/api/roadmap").then((result) => result.ok ? readJson(result) : null).catch(() => null);
       if (refreshed) setDashboard(refreshed);
       setToast("Cotação encerrada.");
       window.setTimeout(() => setToast(""), 3000);
@@ -529,7 +535,7 @@ export default function Home() {
   }
 
   async function loadMessages(conversationId?: number) {
-    try { const response = await fetch(`/api/messages${conversationId ? `?conversationId=${conversationId}` : ""}`); const data = await response.json(); if (!response.ok) { setToast(data.error || "Não foi possível abrir mensagens."); return; } setMessageData(data); if (conversationId) setActiveConversationId(conversationId); } catch { setToast("Não foi possível abrir mensagens."); }
+    try { const response = await fetch(`/api/messages${conversationId ? `?conversationId=${conversationId}` : ""}`); const data = await readJson(response); if (!response.ok) { setToast(data.error || "Não foi possível abrir mensagens."); return; } setMessageData(data); if (conversationId) setActiveConversationId(conversationId); } catch { setToast("Não foi possível abrir mensagens."); }
   }
 
   async function sendMessage(event: FormEvent<HTMLFormElement>) {
@@ -541,7 +547,7 @@ export default function Home() {
     setFormBusy(true);
     try {
       const response = await fetch("/api/messages", { method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify(payload) });
-      const data = await response.json().catch(() => ({}));
+      const data = await readJson(response).catch(() => ({}));
       if (!response.ok) { setToast(data.error || "Não foi possível enviar a mensagem."); return; }
       event.currentTarget.reset(); await loadMessages(data.conversationId); setToast("Mensagem enviada."); window.setTimeout(()=>setToast(""),3000);
     } catch {
@@ -559,9 +565,9 @@ export default function Home() {
     setFormBusy(true);
     try {
       const response = await fetch("/api/leads", { method:"PATCH", headers:{"content-type":"application/json"}, body:JSON.stringify(payload) });
-      const data = await response.json().catch(() => ({}));
+      const data = await readJson(response).catch(() => ({}));
       if (!response.ok) { setToast(data.error || "Não foi possível atualizar a empresa."); return; }
-      setSupplierCompany(String(payload.company || "")); setEditingCompany(false); await refreshSuppliers(); fetch("/api/roadmap").then(r=>r.json()).then(setDashboard).catch(()=>{}); setToast("Informações da empresa atualizadas."); window.setTimeout(()=>setToast(""),3000);
+      setSupplierCompany(String(payload.company || "")); setEditingCompany(false); await refreshSuppliers(); fetch("/api/roadmap").then(r=>readJson(r)).then(setDashboard).catch(()=>{}); setToast("Informações da empresa atualizadas."); window.setTimeout(()=>setToast(""),3000);
     } catch {
       setToast("Falha de conexão. As alterações não foram salvas.");
     } finally {
@@ -645,7 +651,7 @@ export default function Home() {
     setFormBusy(true);
     try {
       const response = await fetch("/api/roadmap", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
-      const data = await response.json().catch(() => ({}));
+      const data = await readJson(response).catch(() => ({}));
       if (!response.ok) { setToast(data.error || "Não foi possível abrir a cotação."); return; }
       setQuoteFlowOpen(false);
       setToast(`Cotação enviada. Protocolo: ${data.protocol}`);
@@ -653,7 +659,7 @@ export default function Home() {
       setQuoteDraft({ category: "", application: "", quantity: "1", city: "", state: "", deadline: "", notes: "", budget: "", urgency: "", integration: [], supplierIds: [], contactConsent: false });
       // Sem isso, "Meus pedidos" so mostrava a cotacao recem-enviada depois de um reload —
       // o dashboard so era buscado uma vez no mount.
-      fetch("/api/roadmap").then((result) => result.ok ? result.json() : null).then((result) => result && setDashboard(result)).catch(() => {});
+      fetch("/api/roadmap").then((result) => result.ok ? readJson(result) : null).then((result) => result && setDashboard(result)).catch(() => {});
     } catch {
       setToast("Falha de conexão. A cotação não foi enviada.");
     } finally {
@@ -681,7 +687,7 @@ export default function Home() {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const payload = Object.fromEntries(form.entries()) as Record<string, string>;
-    try { const response = await fetch("/api/events", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) }); const data = await response.json(); if (response.status === 401) { window.location.href = data.signIn; return; } if (!response.ok) { setToast(data.error); return; } } catch { setToast("Não foi possível enviar o evento."); return; }
+    try { const response = await fetch("/api/events", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) }); const data = await readJson(response); if (response.status === 401) { window.location.href = data.signIn; return; } if (!response.ok) { setToast(data.error); return; } } catch { setToast("Não foi possível enviar o evento."); return; }
     setEventFormOpen(false); setView("supplier-dashboard"); setToast("Evento enviado para aprovação do gestor.");
     window.setTimeout(() => setToast(""), 3500);
   }
@@ -690,7 +696,7 @@ export default function Home() {
     if(!registered){setRegistrationRole("client");setRegisterOpen(true);return}
     try {
       const response=await fetch("/api/community",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:"event_interest",eventId,reminderEnabled:true})});
-      const result=await response.json().catch(()=>({}));
+      const result=await readJson(response).catch(()=>({}));
       setToast(response.ok?"Interesse salvo. Você poderá receber um lembrete.":result.error||"Não foi possível salvar.");
     } catch {
       setToast("Falha de conexão. Tente novamente.");

@@ -208,7 +208,16 @@ export async function POST(request: Request) {
     const protocol = `HB-${new Date().getFullYear()}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
     const consentSnapshot = JSON.stringify({ version: "2026-08-24", consent: true, shared: ["nome", "telefone", "empresa_ou_instagram", "necessidade"], supplierIds: approved.map((item) => item.id), acceptedAt: new Date().toISOString() });
     const [quote] = await db.insert(quoteRequests).values({ protocol, clientUserId: user.userId, category, application, quantity, city, state, deadline: deadlineText || null, notes: notes || null, budget: budget || null, urgency: urgency || null, integration: integration.length ? JSON.stringify(integration) : null, consentSnapshot }).returning();
-    await db.batch(approved.map((supplier) => db.insert(quoteRecipients).values({ quoteId: quote.id, supplierId: supplier.id })).concat(approved.map((supplier) => db.insert(activityEvents).values({ actorUserId: user.userId, supplierId: supplier.id, kind: "quote_request" }))));
+    // db.batch() exige uma tupla de tamanho fixo no tipo; um array montado dinamicamente (tamanho
+    // varia com a quantidade de fornecedores escolhidos) nunca bate com essa assinatura. Além
+    // disso, misturar inserts de tabelas diferentes (quoteRecipients e activityEvents) num mesmo
+    // array faz o TypeScript tentar unificar os dois tipos já na montagem — por isso o array
+    // precisa nascer tipado como `any[]`, e não só receber `as any` no ponto de uso.
+    const batchStatements: any[] = [
+      ...approved.map((supplier) => db.insert(quoteRecipients).values({ quoteId: quote.id, supplierId: supplier.id })),
+      ...approved.map((supplier) => db.insert(activityEvents).values({ actorUserId: user.userId, supplierId: supplier.id, kind: "quote_request" })),
+    ];
+    await db.batch(batchStatements as any);
     return Response.json({ ok: true, protocol }, { status: 201 });
   }
 

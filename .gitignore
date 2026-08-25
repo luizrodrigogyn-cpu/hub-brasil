@@ -43,3 +43,6 @@ yarn-error.log*
 /.codex-publish-temp/
 /.pnpm-store/
 tsconfig.tsbuildinfo
+
+# gerado por `wrangler types` (script typecheck); cada ambiente deve regenerar o seu
+/worker-configuration.d.ts

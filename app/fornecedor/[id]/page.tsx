@@ -2,6 +2,12 @@
 
 import { useEffect, useState } from "react";
 
+// Os tipos oficiais da Cloudflare tipam Response.json() como `unknown` em vez de `any`;
+// este helper concentra a conversão explícita usada em todas as leituras de JSON do fetch.
+function readJson(response: Response): Promise<any> {
+  return response.json() as Promise<any>;
+}
+
 type Supplier = {
   id: number;
   name: string;
@@ -47,7 +53,7 @@ export default function SharedSupplier({ params }: { params: Promise<RouteParams
 
   useEffect(() => {
     if (!id) return;
-    Promise.all([fetch("/api/suppliers").then((response) => response.json()), fetch("/api/products").then((response) => response.json())])
+    Promise.all([fetch("/api/suppliers").then((response) => readJson(response)), fetch("/api/products").then((response) => readJson(response))])
       .then(([supplierResult, productResult]) => {
         const rows = (supplierResult.suppliers || []) as Array<Record<string, unknown>>;
         const item = rows.find((record) => Number(record.id) === id) as Record<string, unknown> | undefined;
