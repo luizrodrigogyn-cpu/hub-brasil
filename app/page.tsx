@@ -766,7 +766,6 @@ export default function Home() {
         <div className="top-actions">
           {previewMode && <a className="preview-exit" href="/admin">↩ Voltar à Visão Gestor</a>}
           {registered && <button className="admin-link" onClick={() => setView(userRole === "supplier" ? "supplier-dashboard" : "client-dashboard")}>{userRole === "supplier" ? "Painel da operação" : "Meus pedidos"}</button>}
-          <a className="admin-link" href="/admin">Ver cadastros</a>
           {registered ? <><span className="access-chip"><i></i>Acesso liberado</span>{!previewMode && <a className="text-action" href="/sign-out">Sair</a>}</> : <a className="text-action" href="/sign-in?return_to=/">Entrar</a>}
           {userRole === "supplier" && <button className="text-action" onClick={() => setView("supplier-dashboard")}>Minha empresa</button>}
           {userRole === "client" && <button className="text-action" onClick={() => setView("client-dashboard")}>Meus pedidos</button>}
@@ -779,7 +778,7 @@ export default function Home() {
           <>
           <section className="map-layout">
             <div className="map-copy">
-              <span className="hero-kicker">✦ O ecossistema de negócios do rastreamento veicular</span>
+              <span className="hero-kicker">✦ O ecossistema de networking</span>
               <h1>Encontre os melhores fornecedores de <em>rastreamento, telemetria e conectividade</em> em um só lugar.</h1>
               <p>Conecte-se a fabricantes, integradores e fornecedores validados de todo o Brasil.</p>
               <div className="hero-ctas"><button className="primary" onClick={() => setView("directory")}>Buscar fornecedor aprovado <span>→</span></button><button className="secondary-action" onClick={() => openRegistration("supplier")}>Sou fornecedor de rastreamento <span>→</span></button></div>
