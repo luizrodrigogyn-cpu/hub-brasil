@@ -140,6 +140,20 @@ function displayCategory(category: string) {
   return category === "Câmeras veiculares" || category === "ADAS e DSM" ? "Videotelemetria" : category;
 }
 
+// Fornecedores "broker" atendem várias categorias (marcadas em "Soluções oferecidas"), mas o
+// card só mostrava a categoria principal — dava a impressão de que a empresa atendia só uma
+// frente. Mostra até 2 categorias e resume o resto em "+N categorias".
+function supplierCategoryBadges(supplier: { category: string; categories?: string[] }) {
+  // Normaliza pelo nome de exibição ANTES de filtrar/deduplicar: "Câmeras veiculares" e "ADAS e
+  // DSM" viram "Videotelemetria" via displayCategory, então precisam colapsar num badge só —
+  // senão o mesmo rótulo aparecia repetido.
+  const raw = supplier.categories?.length ? supplier.categories : [supplier.category];
+  const categories = [...new Set(raw.map(displayCategory).filter(Boolean))];
+  const shown = categories.slice(0, 2);
+  const extra = categories.length - shown.length;
+  return <div className="category-badges">{shown.map((item) => <span className="category-badge" key={item}>{item}</span>)}{extra > 0 && <span className="category-badge more">+{extra} categoria{extra > 1 ? "s" : ""}</span>}</div>;
+}
+
 function supplierLogoUrl(key?: string | null) {
   return key ? `/api/supplier-logo?key=${encodeURIComponent(key)}` : null;
 }
@@ -847,7 +861,7 @@ export default function Home() {
                 <article className="supplier-card" key={supplier.id}>
                   <div className="supplier-top"><div className={`supplier-logo ${supplier.accent}`}>{supplierLogoUrl(supplier.logoKey) ? <img src={supplierLogoUrl(supplier.logoKey) || ""} alt="" /> : supplier.initials}</div><span className="verified">{supplier.verificationStatus === "verified" ? "◆ Fornecedor verificado" : "Fornecedor aprovado"}</span></div>
                   <div className="supplier-badges">{supplier.highlightedInSearch && <span>⭐ Destaque Hub</span>}{supplier.founderMember && <span>🏅 Membro Fundador</span>}{supplier.fastResponder && <span className="badge-fast">⚡ Resposta rápida</span>}{supplier.newSupplier && <span className="badge-new">🆕 Novo no Hub</span>}</div>
-                  <span className="category">{displayCategory(supplier.category)}</span>
+                  {supplierCategoryBadges(supplier)}
                   <h2>{supplier.name}</h2>
                   <p>{supplier.description}</p>
                   {supplier.qualityScore !== undefined && <div className="quality-score"><strong>{supplier.qualityScore}</strong><span>Qualidade no Hub</span><small>{supplier.qualityReasons?.join(" · ")}</small></div>}
