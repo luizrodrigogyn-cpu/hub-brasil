@@ -174,6 +174,10 @@ export default function Home() {
   const [dashboard, setDashboard] = useState<{ supplierMetrics?: Record<string, number>; supplierQuotes?: Array<{ id:number; protocol:string; category:string; application:string; status:string; createdAt:string; isNewLead?:boolean }>; supplierStats?: { totalReceived:number; totalResponded:number; acceptanceRate:number; newLeads:number; quoteRequests7d:number; quoteResponses7d:number; responseRate7d:number; avgResponseMinutes7d:number|null; quoteRequests30d:number } | null; clientQuotes?: Array<{ id:number; protocol:string; category:string; application:string; city:string; state:string; status:string; createdAt:string; recipientsTotal:number; recipientsResponded:number; recipientsDeclined:number; recipientsCompleted:number }>; profile?: { address?:string|null; city?:string|null; state?:string|null; phone?:string|null; instagram?:string|null; website?:string|null; description?:string|null; categories?:string[] } }>({});
   const [platformSlaLabel, setPlatformSlaLabel] = useState<string | null>(null);
   const [quoteActionBusy, setQuoteActionBusy] = useState("");
+  // Guarda contra duplo-clique/duplo-submit e contra falha de rede silenciosa nos 3 formularios
+  // principais (cotacao, mensagem, editar empresa) — antes, um erro de rede travava sem feedback
+  // e o botao continuava clicavel, permitindo enviar a mesma cotacao/mensagem duas vezes.
+  const [formBusy, setFormBusy] = useState(false);
   const [editingCompany, setEditingCompany] = useState(false);
   const [messageData, setMessageData] = useState<{ conversations: Array<{id:number;subject:string;updatedAt:string;supplierName?:string;clientName?:string;clientCompany?:string;unreadCount?:number}>; messages?: Array<{id:number;senderUserId:string;body:string;createdAt:string;readAt?:string|null}>; currentUserId?:string }>({ conversations: [] });
   const messageTemplates = ["Olá, gostaria de saber mais sobre os produtos e prazos de entrega.", "Preciso de um orçamento — pode me passar faixa de preço e disponibilidade?", "Qual o prazo médio de instalação/implantação para a minha região?"];
@@ -529,20 +533,40 @@ export default function Home() {
   }
 
   async function sendMessage(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); const form = new FormData(event.currentTarget); const message = String(form.get("message") || "");
+    event.preventDefault();
+    if (formBusy) return;
+    const form = new FormData(event.currentTarget); const message = String(form.get("message") || "");
     const payload = activeConversationId ? { conversationId: activeConversationId, message } : selectedSupplier ? { supplierId: selectedSupplier.id, subject: `Contato com ${selectedSupplier.name}`, message } : null;
     if (!payload) return;
-    const response = await fetch("/api/messages", { method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify(payload) }); const data = await response.json();
-    if (!response.ok) { setToast(data.error || "Não foi possível enviar a mensagem."); return; }
-    event.currentTarget.reset(); await loadMessages(data.conversationId); setToast("Mensagem enviada."); window.setTimeout(()=>setToast(""),3000);
+    setFormBusy(true);
+    try {
+      const response = await fetch("/api/messages", { method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify(payload) });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) { setToast(data.error || "Não foi possível enviar a mensagem."); return; }
+      event.currentTarget.reset(); await loadMessages(data.conversationId); setToast("Mensagem enviada."); window.setTimeout(()=>setToast(""),3000);
+    } catch {
+      setToast("Falha de conexão. A mensagem não foi enviada.");
+    } finally {
+      setFormBusy(false);
+    }
   }
 
   async function saveCompany(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); const form = new FormData(event.currentTarget);
+    event.preventDefault();
+    if (formBusy) return;
+    const form = new FormData(event.currentTarget);
     const payload = { company: form.get("company"), phone: form.get("phone"), instagram: form.get("instagram"), website: form.get("website"), address: form.get("address"), city: form.get("city"), state: form.get("state"), description: form.get("description"), categories: form.getAll("categories") };
-    const response = await fetch("/api/leads", { method:"PATCH", headers:{"content-type":"application/json"}, body:JSON.stringify(payload) }); const data = await response.json();
-    if (!response.ok) { setToast(data.error || "Não foi possível atualizar a empresa."); return; }
-    setSupplierCompany(String(payload.company || "")); setEditingCompany(false); await refreshSuppliers(); fetch("/api/roadmap").then(r=>r.json()).then(setDashboard).catch(()=>{}); setToast("Informações da empresa atualizadas."); window.setTimeout(()=>setToast(""),3000);
+    setFormBusy(true);
+    try {
+      const response = await fetch("/api/leads", { method:"PATCH", headers:{"content-type":"application/json"}, body:JSON.stringify(payload) });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) { setToast(data.error || "Não foi possível atualizar a empresa."); return; }
+      setSupplierCompany(String(payload.company || "")); setEditingCompany(false); await refreshSuppliers(); fetch("/api/roadmap").then(r=>r.json()).then(setDashboard).catch(()=>{}); setToast("Informações da empresa atualizadas."); window.setTimeout(()=>setToast(""),3000);
+    } catch {
+      setToast("Falha de conexão. As alterações não foram salvas.");
+    } finally {
+      setFormBusy(false);
+    }
   }
 
   async function copyRegistrationLink() {
@@ -597,6 +621,7 @@ export default function Home() {
 
   async function submitQuoteRequest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (formBusy) return;
     const payload = {
       action: "quote",
       supplierIds: quoteDraft.supplierIds,
@@ -617,16 +642,23 @@ export default function Home() {
       window.setTimeout(() => setToast(""), 3500);
       return;
     }
-    const response = await fetch("/api/roadmap", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
-    const data = await response.json();
-    if (!response.ok) { setToast(data.error || "Não foi possível abrir a cotação."); return; }
-    setQuoteFlowOpen(false);
-    setToast(`Cotação enviada. Protocolo: ${data.protocol}`);
-    window.setTimeout(() => setToast(""), 4500);
-    setQuoteDraft({ category: "", application: "", quantity: "1", city: "", state: "", deadline: "", notes: "", budget: "", urgency: "", integration: [], supplierIds: [], contactConsent: false });
-    // Sem isso, "Meus pedidos" so mostrava a cotacao recem-enviada depois de um reload —
-    // o dashboard so era buscado uma vez no mount.
-    fetch("/api/roadmap").then((result) => result.ok ? result.json() : null).then((result) => result && setDashboard(result)).catch(() => {});
+    setFormBusy(true);
+    try {
+      const response = await fetch("/api/roadmap", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) { setToast(data.error || "Não foi possível abrir a cotação."); return; }
+      setQuoteFlowOpen(false);
+      setToast(`Cotação enviada. Protocolo: ${data.protocol}`);
+      window.setTimeout(() => setToast(""), 4500);
+      setQuoteDraft({ category: "", application: "", quantity: "1", city: "", state: "", deadline: "", notes: "", budget: "", urgency: "", integration: [], supplierIds: [], contactConsent: false });
+      // Sem isso, "Meus pedidos" so mostrava a cotacao recem-enviada depois de um reload —
+      // o dashboard so era buscado uma vez no mount.
+      fetch("/api/roadmap").then((result) => result.ok ? result.json() : null).then((result) => result && setDashboard(result)).catch(() => {});
+    } catch {
+      setToast("Falha de conexão. A cotação não foi enviada.");
+    } finally {
+      setFormBusy(false);
+    }
   }
 
   function normalizeTextField(value: string) {
@@ -656,8 +688,14 @@ export default function Home() {
 
   async function markEventInterest(eventId:number){
     if(!registered){setRegistrationRole("client");setRegisterOpen(true);return}
-    const response=await fetch("/api/community",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:"event_interest",eventId,reminderEnabled:true})});
-    const result=await response.json();setToast(response.ok?"Interesse salvo. Você poderá receber um lembrete.":result.error||"Não foi possível salvar.");window.setTimeout(()=>setToast(""),3500);
+    try {
+      const response=await fetch("/api/community",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:"event_interest",eventId,reminderEnabled:true})});
+      const result=await response.json().catch(()=>({}));
+      setToast(response.ok?"Interesse salvo. Você poderá receber um lembrete.":result.error||"Não foi possível salvar.");
+    } catch {
+      setToast("Falha de conexão. Tente novamente.");
+    }
+    window.setTimeout(()=>setToast(""),3500);
   }
 
   return (
@@ -859,7 +897,7 @@ export default function Home() {
 
         {view === "how-it-works" && <section className="how-it-works-page"><div className="solutions-heading"><span className="eyebrow">PASSO A PASSO</span><h1>Como funciona o Hub Brasil</h1><p>Simples para quem procura tecnologia de rastreamento e para quem fornece — três passos de cada lado.</p></div><div className="how-tracks"><div className="how-track"><h2>Quero contratar</h2><ol className="how-steps"><li><strong>1. Descreva sua necessidade</strong><p>Categoria, aplicação, cidade/UF, orçamento e urgência — leva menos de 2 minutos.</p></li><li><strong>2. Fornecedores compatíveis recebem o pedido</strong><p>A cotação vai só para quem atende sua região e especialidade, ordenado por compatibilidade.</p></li><li><strong>3. Compare propostas e fale direto</strong><p>{platformSlaLabel ? `Fornecedores do Hub respondem em média em ${platformSlaLabel}.` : "Acompanhe as respostas no seu painel."} Fale com o fornecedor em 1 clique pelo WhatsApp.</p></li></ol></div><div className="how-track"><h2>Sou fornecedor</h2><ol className="how-steps"><li><strong>1. Cadastre sua empresa</strong><p>Telefone validado e aprovação da gestão antes de qualquer publicação.</p></li><li><strong>2. Leads chegam no seu painel</strong><p>Alertas de pedidos novos, com dados reais do que o cliente precisa.</p></li><li><strong>3. Responda e acompanhe sua taxa de aceite</strong><p>Resposta rápida melhora seu posicionamento no diretório — sem pagamento envolvido.</p></li></ol></div></div><div className="ecosystem-cta"><h2>Pronto para começar?</h2><p>Cadastre sua empresa ou encontre o parceiro certo hoje mesmo.</p><div><button className="primary" onClick={() => openRegistration("supplier")}>Sou fornecedor →</button><button className="secondary-action" onClick={openQuoteRequest}>Solicitar cotação →</button></div></div></section>}
 
-        {view === "messages" && <section className="messages-page"><div className="page-heading"><div><span className="eyebrow">MENSAGENS PRIVADAS</span><h1>Conversas no Hub</h1><p>O contato é compartilhado apenas quando você decide conversar.</p></div><button className="event-create" onClick={() => { setView(userRole === "supplier" ? "supplier-dashboard" : userRole === "client" ? "client-dashboard" : "directory"); }}>Voltar</button></div><div className="messages-layout"><aside><h2>Conversas</h2>{messageData.conversations.length === 0 ? <p>Nenhuma conversa iniciada ainda.</p> : messageData.conversations.map((conversation) => <button key={conversation.id} className={activeConversationId === conversation.id ? "active" : ""} onClick={() => loadMessages(conversation.id)}><strong>{conversation.supplierName || conversation.clientCompany || conversation.clientName || "Contato"}{Boolean(conversation.unreadCount) && <span className="unread-dot">{conversation.unreadCount}</span>}</strong><span>{conversation.subject}</span></button>)}</aside><section className="message-thread">{selectedSupplier && !activeConversationId && userRole === "client" ? <><h2>Nova mensagem para {selectedSupplier.name}</h2><p>Apresente sua necessidade. A empresa receberá a conversa em seu painel.</p><div className="message-templates">{messageTemplates.map((template) => <button type="button" key={template} onClick={() => { const field = document.querySelector<HTMLTextAreaElement>('.message-thread textarea[name="message"]'); if (field) field.value = template; }}>{template.slice(0, 28)}…</button>)}</div><form onSubmit={sendMessage}><textarea name="message" required rows={6} placeholder="Olá, gostaria de saber mais sobre..." /><small className="response-hint">Fornecedores respondem melhor mensagens objetivas — inclua sua necessidade e prazo. Recomendamos aguardar até 24h por um retorno.</small><button className="primary">Enviar mensagem →</button></form></> : activeConversationId ? <><h2>{messageData.conversations.find((item) => item.id === activeConversationId)?.subject || "Conversa"}</h2><div className="thread-list">{messageData.messages?.map((message) => <article key={message.id} className={message.senderUserId === messageData.currentUserId ? "mine" : ""}><p>{message.body}</p><small>{new Date(message.createdAt).toLocaleString("pt-BR")}{message.senderUserId === messageData.currentUserId && <span className="seen-status">{message.readAt ? " · ✓✓ Visto" : " · ✓ Enviado"}</span>}</small></article>)}</div><form onSubmit={sendMessage}><textarea name="message" required rows={3} placeholder="Escreva sua resposta" /><small className="response-hint">Recomendamos responder em até 24h para manter uma boa taxa de resposta.</small><button className="primary">Enviar →</button></form></> : <div className="events-empty"><strong>Selecione uma conversa</strong><p>Quando um cliente entrar em contato, ela aparecerá aqui.</p></div>}</section></div></section>}
+        {view === "messages" && <section className="messages-page"><div className="page-heading"><div><span className="eyebrow">MENSAGENS PRIVADAS</span><h1>Conversas no Hub</h1><p>O contato é compartilhado apenas quando você decide conversar.</p></div><button className="event-create" onClick={() => { setView(userRole === "supplier" ? "supplier-dashboard" : userRole === "client" ? "client-dashboard" : "directory"); }}>Voltar</button></div><div className="messages-layout"><aside><h2>Conversas</h2>{messageData.conversations.length === 0 ? <p>Nenhuma conversa iniciada ainda.</p> : messageData.conversations.map((conversation) => <button key={conversation.id} className={activeConversationId === conversation.id ? "active" : ""} onClick={() => loadMessages(conversation.id)}><strong>{conversation.supplierName || conversation.clientCompany || conversation.clientName || "Contato"}{Boolean(conversation.unreadCount) && <span className="unread-dot">{conversation.unreadCount}</span>}</strong><span>{conversation.subject}</span></button>)}</aside><section className="message-thread">{selectedSupplier && !activeConversationId && userRole === "client" ? <><h2>Nova mensagem para {selectedSupplier.name}</h2><p>Apresente sua necessidade. A empresa receberá a conversa em seu painel.</p><div className="message-templates">{messageTemplates.map((template) => <button type="button" key={template} onClick={() => { const field = document.querySelector<HTMLTextAreaElement>('.message-thread textarea[name="message"]'); if (field) field.value = template; }}>{template.slice(0, 28)}…</button>)}</div><form onSubmit={sendMessage}><textarea name="message" required rows={6} placeholder="Olá, gostaria de saber mais sobre..." /><small className="response-hint">Fornecedores respondem melhor mensagens objetivas — inclua sua necessidade e prazo. Recomendamos aguardar até 24h por um retorno.</small><button className="primary" disabled={formBusy}>{formBusy ? "Enviando…" : "Enviar mensagem →"}</button></form></> : activeConversationId ? <><h2>{messageData.conversations.find((item) => item.id === activeConversationId)?.subject || "Conversa"}</h2><div className="thread-list">{messageData.messages?.map((message) => <article key={message.id} className={message.senderUserId === messageData.currentUserId ? "mine" : ""}><p>{message.body}</p><small>{new Date(message.createdAt).toLocaleString("pt-BR")}{message.senderUserId === messageData.currentUserId && <span className="seen-status">{message.readAt ? " · ✓✓ Visto" : " · ✓ Enviado"}</span>}</small></article>)}</div><form onSubmit={sendMessage}><textarea name="message" required rows={3} placeholder="Escreva sua resposta" /><small className="response-hint">Recomendamos responder em até 24h para manter uma boa taxa de resposta.</small><button className="primary" disabled={formBusy}>{formBusy ? "Enviando…" : "Enviar →"}</button></form></> : <div className="events-empty"><strong>Selecione uma conversa</strong><p>Quando um cliente entrar em contato, ela aparecerá aqui.</p></div>}</section></div></section>}
       </main>
 
       <footer className="site-footer"><div className="footer-main"><div className="footer-brand"><button className="brand" onClick={() => setView("map")}><span className="brand-mark"><span></span><span></span><span></span></span><span className="brand-copy"><strong>Hub <b>Brasil</b></strong><small>CONECTANDO NEGÓCIOS</small></span></button><p>O ecossistema de negócios do mercado de rastreamento, telemetria e IoT no Brasil.</p></div><div><strong>Plataforma</strong><button onClick={() => setView("directory")}>Fornecedores</button><button onClick={() => setView("solutions")}>Soluções</button><button onClick={() => setView("events")}>Eventos</button><button onClick={() => setView("how-it-works")}>Como funciona</button><button onClick={openQuoteRequest}>Solicitar cotação</button></div><div><strong>Soluções por aplicação</strong><a href="/solucoes">Todas as soluções</a><a href="/solucoes/rastreamento-de-frotas">Rastreamento de frotas</a><a href="/solucoes/rastreamento-de-ativos-para-logistica">Rastreamento para logística</a><a href="/solucoes/rastreamento-de-equipamentos-de-obra">Rastreamento de equipamentos de obra</a></div><div><strong>Para empresas</strong><button onClick={() => openRegistration("supplier")}>Cadastrar empresa</button><button onClick={() => setView("about")}>Sobre o Hub</button><button onClick={() => setRegisterOpen(true)}>Entrar</button></div><div><strong>Contato</strong><a href="mailto:suporte@niviontech.com.br">suporte@niviontech.com.br</a><span>Brasil</span></div></div><div className="footer-bottom"><span>© 2026 Hub Brasil. Todos os direitos reservados.</span><div><a href="/termos">Termos de uso</a><a href="/privacidade">Privacidade</a><a href="/admin">Gestão</a></div></div></footer>
@@ -909,7 +947,7 @@ export default function Home() {
                 ))}
               </fieldset>
               <label className="consent"><input type="checkbox" name="contactConsent" checked={quoteDraft.contactConsent} onChange={(event) => setQuoteDraft((draft) => ({ ...draft, contactConsent: event.target.checked }))} required /> <span>Autorizo o Hub a repassar meu contato aos fornecedores escolhidos para retorno da cotação.</span></label>
-              <button className="primary full" type="submit">Enviar solicitação <span>→</span></button>
+              <button className="primary full" type="submit" disabled={formBusy}>{formBusy ? "Enviando…" : <>Enviar solicitação <span>→</span></>}</button>
             </form>
           </section>
         </div>
@@ -934,7 +972,7 @@ export default function Home() {
         </div>
       )}
 
-      {editingCompany && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setEditingCompany(false); }}><section className="access-modal event-form company-editor" role="dialog" aria-modal="true"><button className="modal-close" onClick={() => setEditingCompany(false)} aria-label="Fechar">×</button><span className="eyebrow">MINHA EMPRESA</span><h2>Editar informações da empresa</h2><p>Esses dados compõem seu perfil público após a aprovação da gestão.</p><form onSubmit={saveCompany}><label>Nome da empresa<input name="company" defaultValue={supplierCompany} required /></label><div className="field-row"><label>Telefone / WhatsApp<input name="phone" defaultValue={dashboard.profile?.phone || ""} required /></label><label>Instagram<input name="instagram" defaultValue={dashboard.profile?.instagram || ""} /></label></div><label>Site da empresa <small>Opcional</small><input name="website" type="url" defaultValue={dashboard.profile?.website || ""} placeholder="https://www.suaempresa.com.br" /></label><label>Endereço<input name="address" defaultValue={dashboard.profile?.address || ""} required placeholder="Rua, número, bairro e complemento" /></label><div className="field-row"><label>Cidade<input name="city" defaultValue={dashboard.profile?.city || ""} required /></label><label>Estado<select name="state" required defaultValue={dashboard.profile?.state || ""}><option value="">UF</option>{BRAZIL_STATES.map((state) => <option key={state}>{state}</option>)}</select></label></div><fieldset className="solution-selector"><legend>Soluções oferecidas <small>Escolha uma ou mais.</small></legend>{solutionCategories.map((item) => <label className="check" key={item.name}><input name="categories" type="checkbox" value={item.name} defaultChecked={(dashboard.profile?.categories || []).includes(item.name)} />{item.title}</label>)}</fieldset><label>Sobre a empresa<textarea name="description" rows={4} defaultValue={dashboard.profile?.description || ""} placeholder="Especialidades, diferenciais e informações relevantes" /></label><button className="primary full" type="submit">Salvar informações →</button></form></section></div>}
+      {editingCompany && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setEditingCompany(false); }}><section className="access-modal event-form company-editor" role="dialog" aria-modal="true"><button className="modal-close" onClick={() => setEditingCompany(false)} aria-label="Fechar">×</button><span className="eyebrow">MINHA EMPRESA</span><h2>Editar informações da empresa</h2><p>Esses dados compõem seu perfil público após a aprovação da gestão.</p><form onSubmit={saveCompany}><label>Nome da empresa<input name="company" defaultValue={supplierCompany} required /></label><div className="field-row"><label>Telefone / WhatsApp<input name="phone" defaultValue={dashboard.profile?.phone || ""} required /></label><label>Instagram<input name="instagram" defaultValue={dashboard.profile?.instagram || ""} /></label></div><label>Site da empresa <small>Opcional</small><input name="website" type="url" defaultValue={dashboard.profile?.website || ""} placeholder="https://www.suaempresa.com.br" /></label><label>Endereço<input name="address" defaultValue={dashboard.profile?.address || ""} required placeholder="Rua, número, bairro e complemento" /></label><div className="field-row"><label>Cidade<input name="city" defaultValue={dashboard.profile?.city || ""} required /></label><label>Estado<select name="state" required defaultValue={dashboard.profile?.state || ""}><option value="">UF</option>{BRAZIL_STATES.map((state) => <option key={state}>{state}</option>)}</select></label></div><fieldset className="solution-selector"><legend>Soluções oferecidas <small>Escolha uma ou mais.</small></legend>{solutionCategories.map((item) => <label className="check" key={item.name}><input name="categories" type="checkbox" value={item.name} defaultChecked={(dashboard.profile?.categories || []).includes(item.name)} />{item.title}</label>)}</fieldset><label>Sobre a empresa<textarea name="description" rows={4} defaultValue={dashboard.profile?.description || ""} placeholder="Especialidades, diferenciais e informações relevantes" /></label><button className="primary full" type="submit" disabled={formBusy}>{formBusy ? "Salvando…" : "Salvar informações →"}</button></form></section></div>}
 
       {eventFormOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setEventFormOpen(false); }}><section className="access-modal event-form" role="dialog" aria-modal="true" aria-labelledby="event-form-title"><button className="modal-close" onClick={() => setEventFormOpen(false)} aria-label="Fechar">×</button><span className="eyebrow">ÁREA DO FORNECEDOR</span><h2 id="event-form-title">Cadastrar novo evento</h2><p>Após a revisão, o evento aparecerá na agenda e como um ponto especial no mapa.</p><form onSubmit={createEvent}><label>Nome do evento<input name="name" required placeholder="Ex.: Encontro de Integradores" /></label><div className="field-row"><label>Data<input name="date" type="date" required /></label><label>Local<input name="venue" required placeholder="Centro de eventos" /></label></div><div className="field-row"><label>Cidade<input name="city" required placeholder="São Paulo" /></label><label>Estado<select name="state" required><option value="">Selecione</option>{BRAZIL_STATES.map((state) => <option key={state}>{state}</option>)}</select></label></div><label>Link para inscrição<input name="link" type="url" required placeholder="https://seusite.com/inscricao" /></label><label>Descrição<textarea name="description" rows={3} placeholder="Conte brevemente sobre o evento" /></label><button className="primary full" type="submit">Enviar evento para publicação <span>→</span></button></form></section></div>}
 

@@ -21,12 +21,19 @@ export default function AdminDashboard() {
   useEffect(() => { if (tab === "kpis" && !kpis) fetch("/api/admin/kpis").then((r) => r.json()).then(setKpis).catch(() => {}); }, [tab, kpis]);
   async function act(entity: string, id: number, action: string, value?: string) {
     setBusy(`${entity}-${id}-${action}`);
-    const response = await fetch("/api/admin/content", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ entity, id, action, value }) });
-    if (!response.ok) { const result = await response.json(); window.alert(result.error || "Não foi possível concluir a ação."); }
-    await load(); setBusy("");
+    try {
+      const response = await fetch("/api/admin/content", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ entity, id, action, value }) });
+      if (!response.ok) { const result = await response.json().catch(() => ({})); window.alert(result.error || "Não foi possível concluir a ação."); }
+      await load();
+    } catch {
+      // Falha de rede não pode travar o painel inteiro com o botão "carregando" para sempre.
+      window.alert("Falha de conexão. Tente novamente.");
+    } finally {
+      setBusy("");
+    }
   }
-  async function createArticle(){const title=prompt("Título do artigo");if(!title)return;const summary=prompt("Resumo curto");if(!summary)return;const content=prompt("Conteúdo revisado");if(!content)return;const category=prompt("Categoria");if(!category)return;setBusy("article-new");const response=await fetch("/api/admin/content",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({entity:"article",action:"create_article",title,summary,content,category,author:"Equipe Hub Brasil"})});if(!response.ok){const result=await response.json();alert(result.error)}await load();setBusy("")}
-  async function createNews(){const title=prompt("Título da notícia");if(!title)return;const summary=prompt("Resumo curto, escrito pelo Hub Brasil");if(!summary)return;const category=prompt("Categoria: Rastreamento, Telecom, Conectividade, Tecnologia ou Automotivo");if(!category)return;const sourceName=prompt("Nome da fonte original");if(!sourceName)return;const sourceUrl=prompt("Link HTTPS da notícia original");if(!sourceUrl)return;const publishedAt=prompt("Data da publicação (AAAA-MM-DD)",new Date().toISOString().slice(0,10));if(!publishedAt)return;setBusy("news-new");const response=await fetch("/api/admin/content",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({entity:"news",action:"create_news",title,summary,category,sourceName,sourceUrl,publishedAt})});if(!response.ok){const result=await response.json();alert(result.error)}await load();setBusy("")}
+  async function createArticle(){const title=prompt("Título do artigo");if(!title)return;const summary=prompt("Resumo curto");if(!summary)return;const content=prompt("Conteúdo revisado");if(!content)return;const category=prompt("Categoria");if(!category)return;setBusy("article-new");try{const response=await fetch("/api/admin/content",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({entity:"article",action:"create_article",title,summary,content,category,author:"Equipe Hub Brasil"})});if(!response.ok){const result=await response.json().catch(()=>({}));alert(result.error||"Não foi possível concluir a ação.")}await load()}catch{alert("Falha de conexão. Tente novamente.")}finally{setBusy("")}}
+  async function createNews(){const title=prompt("Título da notícia");if(!title)return;const summary=prompt("Resumo curto, escrito pelo Hub Brasil");if(!summary)return;const category=prompt("Categoria: Rastreamento, Telecom, Conectividade, Tecnologia ou Automotivo");if(!category)return;const sourceName=prompt("Nome da fonte original");if(!sourceName)return;const sourceUrl=prompt("Link HTTPS da notícia original");if(!sourceUrl)return;const publishedAt=prompt("Data da publicação (AAAA-MM-DD)",new Date().toISOString().slice(0,10));if(!publishedAt)return;setBusy("news-new");try{const response=await fetch("/api/admin/content",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({entity:"news",action:"create_news",title,summary,category,sourceName,sourceUrl,publishedAt})});if(!response.ok){const result=await response.json().catch(()=>({}));alert(result.error||"Não foi possível concluir a ação.")}await load()}catch{alert("Falha de conexão. Tente novamente.")}finally{setBusy("")}}
   const pending = (key: Exclude<Tab, "kpis">) => data[key].filter((item) => item.status === "pending").length;
   return <>
     <div className="admin-tabs">

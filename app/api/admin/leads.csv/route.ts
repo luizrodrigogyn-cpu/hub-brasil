@@ -4,7 +4,14 @@ import { leads, moderationAudit } from "../../../../db/schema";
 import { getChatGPTUser } from "../../../chatgpt-auth";
 import { adminAccessState, isHubAdmin } from "../../../admin-auth";
 
-function csv(value: unknown) { return `"${String(value ?? "").replaceAll('"', '""')}"`; }
+// Neutraliza CSV/formula injection: um cadastro com nome/empresa começando com =, +, -, @, tab ou CR
+// vira uma fórmula "viva" quando o CSV é aberto no Excel/LibreOffice (ex.: =HYPERLINK(...) ou =cmd|...).
+// Prefixar com apóstrofo faz o programa tratar o valor como texto puro.
+function csv(value: unknown) {
+  let text = String(value ?? "");
+  if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
+  return `"${text.replaceAll('"', '""')}"`;
+}
 
 export async function GET() {
   const user = await getChatGPTUser();

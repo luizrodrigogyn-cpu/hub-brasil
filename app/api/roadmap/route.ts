@@ -256,8 +256,10 @@ export async function POST(request: Request) {
     if (quote.status === "closed") return Response.json({ error: "Esta cotação já foi encerrada pelo cliente." }, { status: 409 });
     const [recipient] = await db.select().from(quoteRecipients).where(and(eq(quoteRecipients.quoteId, quoteId), eq(quoteRecipients.supplierId, profile.id)));
     if (!recipient) return Response.json({ error: "Cotação não encontrada para este fornecedor." }, { status: 404 });
-    if (recipient.status !== "sent") return Response.json({ error: "Esta oportunidade já foi respondida ou recusada." }, { status: 409 });
-    await db.update(quoteRecipients).set({ status: responseStatus, respondedAt: new Date().toISOString() }).where(eq(quoteRecipients.id, recipient.id));
+    // Update condicional (WHERE status='sent') evita que duas respostas concorrentes (ex.: aba duplicada) apliquem
+    // o status "responded" para credito/score mesmo quando a resposta que efetivamente persistiu foi "declined".
+    const [updated] = await db.update(quoteRecipients).set({ status: responseStatus, respondedAt: new Date().toISOString() }).where(and(eq(quoteRecipients.id, recipient.id), eq(quoteRecipients.status, "sent"))).returning();
+    if (!updated) return Response.json({ error: "Esta oportunidade já foi respondida ou recusada." }, { status: 409 });
     await db.insert(activityEvents).values({ actorUserId: user.userId, supplierId: profile.id, kind: responseStatus === "responded" ? "quote_responded" : "quote_declined" });
     if (responseStatus === "responded") { await awardCredit(db,{supplierId:profile.id,ruleKey:"quote_responded",sourceType:"quote_recipient",sourceId:recipient.id,idempotencyKey:`quote-responded:${recipient.id}`}); await recomputeHubScore(db,profile.id,"cotacao_respondida"); await qualifyReferralIfReady(db,profile.id); }
     return Response.json({ ok: true });

@@ -1,4 +1,4 @@
-import { and, desc, eq, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { env } from "cloudflare:workers";
 import { getDb } from "../../../db";
 import { highlightActivations, leads, products } from "../../../db/schema";
@@ -49,12 +49,21 @@ export async function GET() {
     const rows = await db.select({ id: products.id, supplierName: products.supplierName, name: products.name, category: products.category, technicalDetails: products.technicalDetails, averagePrice: products.averagePrice, imageKey: products.imageKey, specs: products.specs, manualUrl: products.manualUrl }).from(products).where(eq(products.status, "approved")).orderBy(desc(products.createdAt));
     const highlights = await db.select({ productId: highlightActivations.productId }).from(highlightActivations).where(and(eq(highlightActivations.placement,"product"),eq(highlightActivations.status,"active"),sql`${highlightActivations.endsAt} > ${new Date().toISOString()}`));
     const highlighted = new Set(highlights.map((item)=>item.productId));
-    const visibleProducts = await Promise.all(rows.map(async (item) => {
-      const [supplier] = viewer ? await getDb().select({ id: leads.id, phone: leads.phone }).from(leads).where(and(or(eq(leads.company, item.supplierName), eq(leads.name, item.supplierName)), eq(leads.role, "supplier"), eq(leads.status, "approved"))) : [];
+    // Antes: uma query de "leads" por produto (N+1, full scan sem índice em company/name a cada uma).
+    // Agora: uma única query batendo todos os supplierName distintos de uma vez, casada em memória.
+    const supplierNames = viewer ? [...new Set(rows.map((item) => item.supplierName).filter(Boolean))] : [];
+    const supplierRows = supplierNames.length ? await db.select({ id: leads.id, phone: leads.phone, company: leads.company, name: leads.name }).from(leads).where(and(or(inArray(leads.company, supplierNames), inArray(leads.name, supplierNames)), eq(leads.role, "supplier"), eq(leads.status, "approved"))) : [];
+    const supplierByName = new Map<string, { id: number; phone: string | null }>();
+    for (const supplier of supplierRows) {
+      if (supplier.company) supplierByName.set(supplier.company, supplier);
+      if (supplier.name) supplierByName.set(supplier.name, supplier);
+    }
+    const visibleProducts = rows.map((item) => {
+      const supplier = viewer ? supplierByName.get(item.supplierName) : null;
       let specs: unknown = null;
       if (item.specs) { try { specs = JSON.parse(item.specs); } catch { specs = null; } }
       return { id: item.id, supplierId: viewer ? supplier?.id || null : null, supplierName: viewer ? item.supplierName : "Fornecedor protegido", supplierPhone: viewer ? supplier?.phone || null : null, name: item.name, category: item.category, technicalDetails: viewer ? item.technicalDetails : "", highlighted: highlighted.has(item.id), imageUrl: item.imageKey ? `/api/product-images?key=${encodeURIComponent(item.imageKey)}` : null, specs, manualUrl: item.manualUrl || null, averagePrice: item.averagePrice || null };
-    }));
+    });
     return Response.json({ products: visibleProducts }, { headers: cacheHeaders(Boolean(viewer)) });
   } catch { return Response.json({ products: [] }); }
 }

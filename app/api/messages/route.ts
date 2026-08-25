@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, isNull, ne, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, ne, sql } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { conversationMessages, conversations, leads } from "../../../db/schema";
 import { getApiUser } from "../../admin-auth";
@@ -24,7 +24,7 @@ export async function GET(request: Request) {
       .from(conversations).innerJoin(leads, eq(leads.id, conversations.supplierId)).where(eq(conversations.clientUserId, user.userId)).orderBy(desc(conversations.updatedAt));
   if (!conversationId) {
     // "Visto": contagem de mensagens da outra parte ainda não lidas, para badge na lista.
-    const unread = list.length ? await db.select({ conversationId: conversationMessages.conversationId, total: sql<number>`count(*)` }).from(conversationMessages).where(and(isNull(conversationMessages.readAt), ne(conversationMessages.senderUserId, user.userId))).groupBy(conversationMessages.conversationId) : [];
+    const unread = list.length ? await db.select({ conversationId: conversationMessages.conversationId, total: sql<number>`count(*)` }).from(conversationMessages).where(and(inArray(conversationMessages.conversationId, list.map((item) => item.id)), isNull(conversationMessages.readAt), ne(conversationMessages.senderUserId, user.userId))).groupBy(conversationMessages.conversationId) : [];
     const unreadMap = new Map(unread.map((item) => [item.conversationId, Number(item.total)]));
     return Response.json({ conversations: list.map((item) => ({ ...item, unreadCount: unreadMap.get(item.id) || 0 })) });
   }

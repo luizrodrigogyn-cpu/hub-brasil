@@ -143,8 +143,13 @@ export async function awardCredit(db: any, args: { supplierId: number; ruleKey: 
   if (!rule || !rule.active || rule.kind !== "earn") return { awarded: false, reason: "Regra inativa" };
   const [existing] = await db.select({ id: creditLedger.id }).from(creditLedger).where(eq(creditLedger.idempotencyKey, args.idempotencyKey));
   if (existing) return { awarded: false, reason: "Ação já registrada" };
-  const [entry] = await db.insert(creditLedger).values({ supplierId: args.supplierId, amount: rule.amount, direction: "credit", ruleKey: args.ruleKey, sourceType: args.sourceType, sourceId: args.sourceId || null, idempotencyKey: args.idempotencyKey, note: args.note || rule.label }).returning();
-  await db.insert(creditWallets).values({ supplierId: args.supplierId, availableBalance: rule.amount, totalEarned: rule.amount }).onConflictDoUpdate({ target: creditWallets.supplierId, set: { availableBalance: sql`${creditWallets.availableBalance} + ${rule.amount}`, totalEarned: sql`${creditWallets.totalEarned} + ${rule.amount}`, updatedAt: new Date().toISOString() } });
+  // db.batch garante que o lancamento no ledger e o credito na carteira sejam atomicos: sem isso, uma falha
+  // entre as duas escritas deixava o ledger provando um credito que a carteira nunca recebeu — e, por causa
+  // da checagem de idempotencia acima, um retry nunca mais aplicava o valor faltante.
+  const [[entry]] = await db.batch([
+    db.insert(creditLedger).values({ supplierId: args.supplierId, amount: rule.amount, direction: "credit", ruleKey: args.ruleKey, sourceType: args.sourceType, sourceId: args.sourceId || null, idempotencyKey: args.idempotencyKey, note: args.note || rule.label }).returning(),
+    db.insert(creditWallets).values({ supplierId: args.supplierId, availableBalance: rule.amount, totalEarned: rule.amount }).onConflictDoUpdate({ target: creditWallets.supplierId, set: { availableBalance: sql`${creditWallets.availableBalance} + ${rule.amount}`, totalEarned: sql`${creditWallets.totalEarned} + ${rule.amount}`, updatedAt: new Date().toISOString() } }),
+  ]);
   return { awarded: true, entry };
 }
 

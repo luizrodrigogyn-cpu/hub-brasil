@@ -32,6 +32,9 @@ export default function SharedSupplier({ params }: { params: Promise<RouteParams
   const [id, setId] = useState(0);
   const [supplier, setSupplier] = useState<Supplier | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
+  // Antes, "carregando" e "link inválido/expirado" mostravam a mesma mensagem — um link
+  // compartilhado quebrado parecia carregar para sempre em vez de avisar o visitante.
+  const [notFound, setNotFound] = useState(false);
 
   useEffect(() => {
     const resolveParams = async () => {
@@ -50,6 +53,7 @@ export default function SharedSupplier({ params }: { params: Promise<RouteParams
         const item = rows.find((record) => Number(record.id) === id) as Record<string, unknown> | undefined;
         if (!item) {
           setSupplier(null);
+          setNotFound(true);
           return;
         }
         const parsedCategory = String(item.category || "Não informado");
@@ -76,8 +80,11 @@ export default function SharedSupplier({ params }: { params: Promise<RouteParams
       })
       .catch(() => {
         setProducts([]);
+        setNotFound(true);
       });
   }, [id]);
+
+  if (notFound) return <main className="test-area"><header className="test-header"><div><span>HUB BRASIL · PERFIL COMPARTILHADO</span><h1>Fornecedor não encontrado</h1><p>Este link pode estar expirado, ou o fornecedor não está mais aprovado no Hub.</p></div><a href="/">Voltar ao Hub</a></header></main>;
 
   if (!supplier) return <main className="test-area"><header className="test-header"><div><span>HUB BRASIL · PERFIL COMPARTILHADO</span><h1>Fornecedor</h1><p>Buscando fornecedor aprovado...</p></div><a href="/">Voltar ao Hub</a></header></main>;
 
