@@ -191,6 +191,7 @@ body{font-family:var(--font-geist-sans),Arial,sans-serif;font-size:16px;line-hei
 .mobile-navigation .preview-exit{order:initial;justify-self:start;margin-bottom:6px;padding:12px 16px}
 
 .auth-bootstrap{min-height:100vh;display:grid;place-items:center;background:#071326;color:#dce8ff;font-size:1rem}
+.auth-unavailable{margin:0;padding:14px 16px;border:1px solid rgba(255,145,120,.4);border-radius:12px;background:rgba(255,90,60,.1);color:#ffcdbf;line-height:1.5}
 
 /* Mantém o menu complementar compacto e ancorado ao botão do cabeçalho. */
 .topbar .navigation-menu {
