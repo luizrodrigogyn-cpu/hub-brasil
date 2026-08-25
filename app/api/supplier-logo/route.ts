@@ -14,6 +14,7 @@ export async function GET(request: Request) {
   const headers = new Headers();
   object.writeHttpMetadata(headers);
   headers.set("cache-control", "public, max-age=86400");
+  headers.set("x-content-type-options", "nosniff");
   return new Response(object.body, { headers });
 }
 

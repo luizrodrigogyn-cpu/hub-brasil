@@ -1,5 +1,5 @@
-import { and, desc, eq, sql } from "drizzle-orm";
-import { creditLedger, creditRules, creditWallets, hubScoreSnapshots, hubSettings, leads, needInterests, products, quoteRecipients, referrals, supplierRatings, supplierUpdates } from "../db/schema";
+import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
+import { activityEvents, contentReports, conversationMessages, conversations, creditLedger, creditRules, creditWallets, eventInterests, favorites, founderMemberSlots, highlightActivations, hubScoreSnapshots, hubSettings, leads, needInterests, products, quoteRecipients, referrals, supplierEvents, supplierRatings, supplierUpdates } from "../db/schema";
 
 export const DEFAULT_CREDIT_RULES = [
   ["profile_complete", "Perfil empresarial completo", 250, "earn"],
@@ -174,4 +174,55 @@ export async function activeHighlights(db: any, supplierId?: number) {
   const filters = [eq(highlightActivations.status, "active"), sql`${highlightActivations.endsAt} > ${new Date().toISOString()}`];
   if (supplierId) filters.push(eq(highlightActivations.supplierId, supplierId));
   return db.select().from(highlightActivations).where(and(...filters)).orderBy(desc(highlightActivations.endsAt));
+}
+
+// Exclusao completa de um fornecedor (usada pela gestao e por solicitacoes de privacidade/LGPD).
+// Antes, a exclusao so removia produtos, eventos e o cadastro em `leads` — cotacoes, mensagens,
+// creditos, destaques, indicacoes, avaliacoes, favoritos e denuncias ligados a este fornecedor
+// ficavam orfaos no banco (sem FK enforcement no D1, a escrita nao falhava, so deixava lixo).
+export async function deleteSupplierCascade(db: any, supplierId: number) {
+  const [supplier] = await db.select().from(leads).where(eq(leads.id, supplierId));
+  if (!supplier) return false;
+  const ownerUserId = supplier.authUserId || "";
+  const supplierNames = [...new Set([supplier.company, supplier.name].filter(Boolean))] as string[];
+
+  const [ownedProducts, ownedEvents] = await Promise.all([
+    ownerUserId ? db.select({ id: products.id }).from(products).where(eq(products.ownerUserId, ownerUserId)) : [],
+    ownerUserId ? db.select({ id: supplierEvents.id }).from(supplierEvents).where(eq(supplierEvents.ownerUserId, ownerUserId)) : [],
+  ]);
+  const productIds = ownedProducts.map((item: { id: number }) => item.id);
+  const eventIds = ownedEvents.map((item: { id: number }) => item.id);
+  const supplierConversations = await db.select({ id: conversations.id }).from(conversations).where(eq(conversations.supplierId, supplierId));
+  const conversationIds = supplierConversations.map((item: { id: number }) => item.id);
+
+  const statements = [
+    conversationIds.length ? db.delete(conversationMessages).where(inArray(conversationMessages.conversationId, conversationIds)) : null,
+    conversationIds.length ? db.delete(conversations).where(inArray(conversations.id, conversationIds)) : null,
+    db.delete(quoteRecipients).where(eq(quoteRecipients.supplierId, supplierId)),
+    db.delete(creditLedger).where(eq(creditLedger.supplierId, supplierId)),
+    db.delete(creditWallets).where(eq(creditWallets.supplierId, supplierId)),
+    db.delete(highlightActivations).where(eq(highlightActivations.supplierId, supplierId)),
+    db.delete(referrals).where(or(eq(referrals.referrerSupplierId, supplierId), eq(referrals.referredSupplierId, supplierId))),
+    db.delete(activityEvents).where(eq(activityEvents.supplierId, supplierId)),
+    db.delete(needInterests).where(eq(needInterests.supplierId, supplierId)),
+    db.delete(supplierUpdates).where(eq(supplierUpdates.supplierId, supplierId)),
+    db.delete(hubScoreSnapshots).where(eq(hubScoreSnapshots.supplierId, supplierId)),
+    db.update(founderMemberSlots).set({ supplierId: null, claimedAt: null }).where(eq(founderMemberSlots.supplierId, supplierId)),
+    db.delete(favorites).where(and(eq(favorites.entityType, "supplier"), eq(favorites.entityId, supplierId))),
+    db.delete(contentReports).where(and(eq(contentReports.entityType, "supplier"), eq(contentReports.entityId, supplierId))),
+    eventIds.length ? db.delete(eventInterests).where(inArray(eventInterests.eventId, eventIds)) : null,
+    eventIds.length ? db.delete(favorites).where(and(eq(favorites.entityType, "event"), inArray(favorites.entityId, eventIds))) : null,
+    eventIds.length ? db.delete(contentReports).where(and(eq(contentReports.entityType, "event"), inArray(contentReports.entityId, eventIds))) : null,
+    productIds.length ? db.delete(favorites).where(and(eq(favorites.entityType, "product"), inArray(favorites.entityId, productIds))) : null,
+    productIds.length ? db.delete(contentReports).where(and(eq(contentReports.entityType, "product"), inArray(contentReports.entityId, productIds))) : null,
+    supplierNames.length ? db.delete(supplierRatings).where(inArray(supplierRatings.supplierName, supplierNames)) : null,
+    ownerUserId ? db.delete(products).where(eq(products.ownerUserId, ownerUserId)) : null,
+    ownerUserId ? db.delete(supplierEvents).where(eq(supplierEvents.ownerUserId, ownerUserId)) : null,
+    db.delete(leads).where(eq(leads.id, supplierId)),
+  ].filter(Boolean);
+
+  // db.batch garante que tudo isso seja aplicado atomicamente — ou a exclusao acontece por inteiro
+  // (importante para o caso de uso de LGPD) ou nao muda nada, sem risco de excluir so metade.
+  await db.batch(statements as any);
+  return true;
 }

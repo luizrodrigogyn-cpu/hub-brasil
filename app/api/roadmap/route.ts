@@ -1,5 +1,4 @@
 import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
-import { env } from "cloudflare:workers";
 import { getDb } from "../../../db";
 import { activityEvents, alertPreferences, contentReports, creditLedger, creditWallets, deletionRequests, favorites, highlightActivations, leads, products, quoteRecipients, quoteRequests, referrals, supplierEvents } from "../../../db/schema";
 import { getApiUser } from "../../admin-auth";
@@ -27,18 +26,9 @@ function toPositiveInt(value: unknown, fallback: number, max: number) {
   return Math.floor(Math.min(max, Math.max(fallback, candidate)));
 }
 
-async function ensureQuoteBriefingColumns() {
-  const schema = await env.DB.prepare("PRAGMA table_info(quote_requests)").all<{ name: string }>();
-  const columns = new Set((schema.results || []).map((column) => column.name));
-  if (!columns.has("budget")) await env.DB.exec("ALTER TABLE quote_requests ADD COLUMN budget TEXT");
-  if (!columns.has("urgency")) await env.DB.exec("ALTER TABLE quote_requests ADD COLUMN urgency TEXT");
-  if (!columns.has("integration")) await env.DB.exec("ALTER TABLE quote_requests ADD COLUMN integration TEXT");
-}
-
 export async function GET() {
   const user = await getApiUser();
   if (!user) return Response.json({ error: "Faça login para acessar o painel.", signIn: "/sign-in?return_to=/" }, { status: 401 });
-  await ensureQuoteBriefingColumns();
   const db = getDb();
   const [profile] = await db.select().from(leads).where(eq(leads.authUserId, user.userId));
   if (!profile) return Response.json({ error: "Conclua seu cadastro no Hub para acessar o painel." }, { status: 403 });
@@ -187,7 +177,6 @@ export async function POST(request: Request) {
 
   if (action === "quote") {
     if (profile.role !== "client") return Response.json({ error: "A cotação deve ser criada por um perfil de cliente." }, { status: 403 });
-    await ensureQuoteBriefingColumns();
     const supplierIds = normalizeIds(body.supplierIds).slice(0, 8);
     const category = normalizeText(body.category);
     const application = normalizeText(body.application);

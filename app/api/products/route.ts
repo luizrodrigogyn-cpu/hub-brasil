@@ -7,6 +7,22 @@ import { getApiUser } from "../../admin-auth";
 const arraySpecFields = new Set(["technology", "application", "features"]);
 const textSpecFields = new Set(["ip", "battery", "warranty"]);
 
+// Mesma lista de app/api/supplier-logo/route.ts. SVG é deliberadamente excluído: é servido do
+// mesmo domínio e pode carregar <script> — abriria XSS se alguém acessar a imagem diretamente
+// (fora de uma tag <img>, que já neutraliza scripts, mas não protege navegação direta/objeto).
+const acceptedImageTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
+
+// Confere a assinatura real dos bytes, não só o content-type declarado pelo navegador —
+// um arquivo malicioso pode se anunciar como "image/png" mas conter outro conteúdo.
+async function matchesImageSignature(file: File): Promise<boolean> {
+  const header = new Uint8Array(await file.slice(0, 12).arrayBuffer());
+  const bytes = (...values: number[]) => values.every((value, index) => header[index] === value);
+  if (file.type === "image/jpeg") return bytes(0xff, 0xd8, 0xff);
+  if (file.type === "image/png") return bytes(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a);
+  if (file.type === "image/webp") return bytes(0x52, 0x49, 0x46, 0x46) && header[8] === 0x57 && header[9] === 0x45 && header[10] === 0x42 && header[11] === 0x50;
+  return false;
+}
+
 function normalizeSpecs(raw: string) {
   if (!raw || raw.length > 5_000) return null;
   try {
@@ -33,16 +49,8 @@ function cacheHeaders(personalized: boolean) {
   return { "cache-control": personalized ? "private, no-store" : "public, max-age=30, stale-while-revalidate=120, s-maxage=30", vary: "Cookie" };
 }
 
-async function ensureProductSpecColumns() {
-  const schema = await env.DB.prepare("PRAGMA table_info(products)").all<{ name: string }>();
-  const columns = new Set((schema.results || []).map((column) => column.name));
-  if (!columns.has("specs")) await env.DB.exec("ALTER TABLE products ADD COLUMN specs TEXT");
-  if (!columns.has("manual_url")) await env.DB.exec("ALTER TABLE products ADD COLUMN manual_url TEXT");
-}
-
 export async function GET() {
   try {
-    await ensureProductSpecColumns();
     const user = await getApiUser();
     const [viewer] = user ? await getDb().select({ id: leads.id }).from(leads).where(and(eq(leads.authUserId, user.userId), eq(leads.status, "approved"))) : [];
     const db = getDb();
@@ -70,7 +78,6 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    await ensureProductSpecColumns();
     const user = await getApiUser();
     if (!user) return Response.json({ error: "Faça login para publicar.", signIn: "/sign-in?return_to=/" }, { status: 401 });
     const [supplier] = await getDb().select().from(leads).where(and(eq(leads.authUserId, user.userId), eq(leads.role, "supplier")));
@@ -79,7 +86,8 @@ export async function POST(request: Request) {
     const photo = form.get("photo");
     let imageKey: string | null = null;
     if (photo instanceof File && photo.size > 0) {
-      if (!photo.type.startsWith("image/") || photo.size > 5_000_000) return Response.json({ error: "Envie uma imagem de até 5 MB." }, { status: 400 });
+      if (!acceptedImageTypes.has(photo.type) || photo.size > 5_000_000) return Response.json({ error: "Envie uma imagem JPG, PNG ou WebP de até 5 MB." }, { status: 400 });
+      if (!(await matchesImageSignature(photo))) return Response.json({ error: "O arquivo enviado não é uma imagem válida." }, { status: 400 });
       imageKey = `${crypto.randomUUID()}-${photo.name.replace(/[^a-zA-Z0-9._-]/g, "-")}`;
       await env.PRODUCT_IMAGES.put(imageKey, await photo.arrayBuffer(), { httpMetadata: { contentType: photo.type } });
     }

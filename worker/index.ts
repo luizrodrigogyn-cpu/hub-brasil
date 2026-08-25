@@ -30,6 +30,17 @@ interface ExecutionContext {
 // dangerouslyAllowSVG: true in next.config.js and uncomment below:
 // const imageConfig: ImageConfig = { dangerouslyAllowSVG: true };
 
+// Cabeçalhos de segurança aplicados a toda resposta HTML/documento. CSP fica de fora por ora —
+// definir uma política errada quebra o Clerk (login) e outros scripts legítimos silenciosamente;
+// precisa ser testada em modo report-only num ambiente real antes de ativar em produção.
+function withSecurityHeaders(response: Response): Response {
+  const headers = new Headers(response.headers);
+  if (!headers.has("x-content-type-options")) headers.set("x-content-type-options", "nosniff");
+  if (!headers.has("referrer-policy")) headers.set("referrer-policy", "strict-origin-when-cross-origin");
+  if (!headers.has("permissions-policy")) headers.set("permissions-policy", "camera=(), microphone=(), geolocation=()");
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+}
+
 const worker = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
@@ -55,7 +66,7 @@ const worker = {
       }, allowedWidths);
     }
 
-    return handler.fetch(request, env, ctx);
+    return withSecurityHeaders(await handler.fetch(request, env, ctx));
   },
 };
 

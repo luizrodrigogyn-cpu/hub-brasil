@@ -3,7 +3,7 @@ import { getDb } from "../../../../db";
 import { contentReports, creditLedger, creditWallets, deletionRequests, highlightActivations, leads, marketNeeds, moderationAudit, products, sectorNews, supplierEvents, supplierRatings, supplierUpdates, technicalArticles } from "../../../../db/schema";
 import { getChatGPTUser } from "../../../chatgpt-auth";
 import { adminAccessState, isHubAdmin } from "../../../admin-auth";
-import { assignFounderMember, awardCredit, ensureReferralCode, qualifyReferralIfReady, recomputeHubScore } from "../../../hub-credits";
+import { assignFounderMember, awardCredit, deleteSupplierCascade, ensureReferralCode, qualifyReferralIfReady, recomputeHubScore } from "../../../hub-credits";
 
 function adminErrorMessage(state: "denied" | "needs_2fa" | "granted") {
   return state === "needs_2fa" ? "Acesso restrito ao gestor. Conclua a verificação em duas etapas (2FA) na sua conta e faça login novamente." : "Acesso restrito ao gestor.";
@@ -55,7 +55,7 @@ export async function POST(request: Request) {
     else if (body.action === "approve") { const [supplier] = await db.select().from(leads).where(eq(leads.id, body.id)); if (!supplier?.phoneVerifiedAt) return Response.json({ error: "Valide o telefone antes de aprovar." }, { status: 400 }); await db.update(leads).set({ status: "approved" }).where(eq(leads.id, body.id)); await ensureReferralCode(db,body.id!); await awardCredit(db,{supplierId:body.id!,ruleKey:"approved_verified",sourceType:"supplier",sourceId:body.id!,idempotencyKey:`approved-verified:${body.id}`}); await assignFounderMember(db,body.id!); await recomputeHubScore(db,body.id!,"fornecedor_aprovado"); await qualifyReferralIfReady(db,body.id!); }
     else if (body.action === "reject") await db.update(leads).set({ status: "rejected", verificationStatus: "unverified", verifiedAt: null }).where(eq(leads.id, body.id));
     else if (body.action === "edit_company") await db.update(leads).set({ company: String(body.value || "").trim() }).where(eq(leads.id, body.id));
-    else if (body.action === "delete") { const [supplier] = await db.select().from(leads).where(eq(leads.id, body.id)); if (supplier?.authUserId) { await db.delete(products).where(eq(products.ownerUserId, supplier.authUserId)); await db.delete(supplierEvents).where(eq(supplierEvents.ownerUserId, supplier.authUserId)); } await db.delete(leads).where(eq(leads.id, body.id)); }
+    else if (body.action === "delete") await deleteSupplierCascade(db, body.id!);
   } else if (body.entity === "product") {
     if (body.action === "approve") { const [product] = await db.select().from(products).where(eq(products.id, body.id)); const [supplier] = product?.ownerUserId ? await db.select().from(leads).where(eq(leads.authUserId, product.ownerUserId)) : []; if (!supplier || supplier.status !== "approved" || !supplier.phoneVerifiedAt) return Response.json({ error: "O fornecedor ainda não está aprovado." }, { status: 400 }); await db.update(products).set({ status: "approved" }).where(eq(products.id, body.id)); await awardCredit(db,{supplierId:supplier.id,ruleKey:"product_approved",sourceType:"product",sourceId:body.id!,idempotencyKey:`product-approved:${body.id}`}); await recomputeHubScore(db,supplier.id,"produto_aprovado"); await qualifyReferralIfReady(db,supplier.id); }
     else if (body.action === "reject") await db.update(products).set({ status: "rejected" }).where(eq(products.id, body.id));
