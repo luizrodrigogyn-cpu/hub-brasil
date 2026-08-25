@@ -26,7 +26,7 @@ export async function POST(request: Request) {
     if (required.some((key) => !body[key]?.trim())) return Response.json({ error: "Preencha todos os campos obrigatórios." }, { status: 400 });
     const state = normalizeBrazilState(body.state);
     if (!isValidBrazilState(state)) return Response.json({ error: "Informe uma UF brasileira válida (ex.: SP, RJ, MG)." }, { status: 400 });
-    const [event] = await getDb().insert(supplierEvents).values({ name: body.name.trim(), venue: body.venue.trim(), city: body.city.trim(), state, eventDate: body.date, registrationUrl: body.link.trim(), description: body.description?.trim() || null, ownerUserId: user.userId, supplierName: supplier.company || supplier.name, status: "pending" }).returning();
+    const [event] = await getDb().insert(supplierEvents).values({ name: body.name.trim(), venue: body.venue.trim(), city: body.city.trim(), state, eventDate: body.date, registrationUrl: body.link.trim(), description: body.description?.trim() || null, ownerUserId: user.userId, supplierId: supplier.id, supplierName: supplier.company || supplier.name, status: "pending" }).returning();
     return Response.json({ event, pending: true }, { status: 201 });
   } catch { return Response.json({ error: "Não foi possível cadastrar o evento." }, { status: 500 }); }
 }

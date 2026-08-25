@@ -54,23 +54,32 @@ export async function GET() {
     const user = await getApiUser();
     const [viewer] = user ? await getDb().select({ id: leads.id }).from(leads).where(and(eq(leads.authUserId, user.userId), eq(leads.status, "approved"))) : [];
     const db = getDb();
-    const rows = await db.select({ id: products.id, supplierName: products.supplierName, name: products.name, category: products.category, technicalDetails: products.technicalDetails, averagePrice: products.averagePrice, imageKey: products.imageKey, specs: products.specs, manualUrl: products.manualUrl }).from(products).where(eq(products.status, "approved")).orderBy(desc(products.createdAt));
+    const rows = await db.select({ id: products.id, supplierId: products.supplierId, supplierName: products.supplierName, name: products.name, category: products.category, technicalDetails: products.technicalDetails, averagePrice: products.averagePrice, imageKey: products.imageKey, specs: products.specs, manualUrl: products.manualUrl }).from(products).where(eq(products.status, "approved")).orderBy(desc(products.createdAt));
     const highlights = await db.select({ productId: highlightActivations.productId }).from(highlightActivations).where(and(eq(highlightActivations.placement,"product"),eq(highlightActivations.status,"active"),sql`${highlightActivations.endsAt} > ${new Date().toISOString()}`));
     const highlighted = new Set(highlights.map((item)=>item.productId));
-    // Antes: uma query de "leads" por produto (N+1, full scan sem índice em company/name a cada uma).
-    // Agora: uma única query batendo todos os supplierName distintos de uma vez, casada em memória.
-    const supplierNames = viewer ? [...new Set(rows.map((item) => item.supplierName).filter(Boolean))] : [];
-    const supplierRows = supplierNames.length ? await db.select({ id: leads.id, phone: leads.phone, company: leads.company, name: leads.name }).from(leads).where(and(or(inArray(leads.company, supplierNames), inArray(leads.name, supplierNames)), eq(leads.role, "supplier"), eq(leads.status, "approved"))) : [];
-    const supplierByName = new Map<string, { id: number; phone: string | null }>();
-    for (const supplier of supplierRows) {
+    // Antes: casamento por supplierName (texto) — quebrava quando a gestão renomeava a empresa
+    // depois do produto cadastrado (o nome salvo no produto ficava desatualizado). Agora o
+    // vínculo é pelo supplierId (estável), com o nome buscado sempre atualizado de `leads`.
+    // Poucos produtos antigos sem supplierId (pré-migração, sem match encontrado) caem no
+    // fallback por nome abaixo.
+    const supplierIds = viewer ? [...new Set(rows.map((item) => item.supplierId).filter((id): id is number => id != null))] : [];
+    const legacyNames = viewer ? [...new Set(rows.filter((item) => item.supplierId == null).map((item) => item.supplierName).filter(Boolean))] : [];
+    const [supplierRowsById, supplierRowsByName] = await Promise.all([
+      supplierIds.length ? db.select({ id: leads.id, phone: leads.phone, company: leads.company, name: leads.name }).from(leads).where(and(inArray(leads.id, supplierIds), eq(leads.role, "supplier"), eq(leads.status, "approved"))) : [],
+      legacyNames.length ? db.select({ id: leads.id, phone: leads.phone, company: leads.company, name: leads.name }).from(leads).where(and(or(inArray(leads.company, legacyNames), inArray(leads.name, legacyNames)), eq(leads.role, "supplier"), eq(leads.status, "approved"))) : [],
+    ]);
+    const supplierById = new Map(supplierRowsById.map((supplier) => [supplier.id, supplier]));
+    const supplierByName = new Map<string, { id: number; phone: string | null; company: string | null; name: string }>();
+    for (const supplier of supplierRowsByName) {
       if (supplier.company) supplierByName.set(supplier.company, supplier);
       if (supplier.name) supplierByName.set(supplier.name, supplier);
     }
     const visibleProducts = rows.map((item) => {
-      const supplier = viewer ? supplierByName.get(item.supplierName) : null;
+      const supplier = viewer ? (item.supplierId != null ? supplierById.get(item.supplierId) : supplierByName.get(item.supplierName)) : null;
       let specs: unknown = null;
       if (item.specs) { try { specs = JSON.parse(item.specs); } catch { specs = null; } }
-      return { id: item.id, supplierId: viewer ? supplier?.id || null : null, supplierName: viewer ? item.supplierName : "Fornecedor protegido", supplierPhone: viewer ? supplier?.phone || null : null, name: item.name, category: item.category, technicalDetails: viewer ? item.technicalDetails : "", highlighted: highlighted.has(item.id), imageUrl: item.imageKey ? `/api/product-images?key=${encodeURIComponent(item.imageKey)}` : null, specs, manualUrl: item.manualUrl || null, averagePrice: item.averagePrice || null };
+      const currentName = supplier ? supplier.company || supplier.name : item.supplierName;
+      return { id: item.id, supplierId: viewer ? supplier?.id || null : null, supplierName: viewer ? currentName : "Fornecedor protegido", supplierPhone: viewer ? supplier?.phone || null : null, name: item.name, category: item.category, technicalDetails: viewer ? item.technicalDetails : "", highlighted: highlighted.has(item.id), imageUrl: item.imageKey ? `/api/product-images?key=${encodeURIComponent(item.imageKey)}` : null, specs, manualUrl: item.manualUrl || null, averagePrice: item.averagePrice || null };
     });
     return Response.json({ products: visibleProducts }, { headers: cacheHeaders(Boolean(viewer)) });
   } catch { return Response.json({ products: [] }); }
@@ -100,7 +109,7 @@ export async function POST(request: Request) {
     const rawManualUrl = String(form.get("manualUrl") || "").trim();
     let manualUrl: string | null = null;
     if (rawManualUrl) { try { const parsed = new URL(rawManualUrl); if ((parsed.protocol === "http:" || parsed.protocol === "https:") && parsed.toString().length <= 2_048) manualUrl = parsed.toString(); } catch { manualUrl = null; } }
-    const values = { supplierName: supplier.company || supplier.name, name: String(form.get("name") || "").trim(), category: String(form.get("category") || "").trim(), technicalDetails, averagePrice: null, imageKey, specs, manualUrl, ownerUserId: user.userId, status: "pending" };
+    const values = { supplierId: supplier.id, supplierName: supplier.company || supplier.name, name: String(form.get("name") || "").trim(), category: String(form.get("category") || "").trim(), technicalDetails, averagePrice: null, imageKey, specs, manualUrl, ownerUserId: user.userId, status: "pending" };
     if (!values.name || !values.category || !specifications || !application || !differentials) return Response.json({ error: "Preencha especificações, aplicação e diferenciais." }, { status: 400 });
     const [product] = await getDb().insert(products).values(values).returning();
     return Response.json({ product, pending: true }, { status: 201 });

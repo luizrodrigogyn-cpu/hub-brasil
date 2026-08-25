@@ -118,7 +118,7 @@ export async function recomputeHubScore(db: any, supplierId: number, reason: str
   const [approvedProducts, respondedQuotes, rating] = await Promise.all([
     db.select({ total: sql<number>`count(*)` }).from(products).where(and(eq(products.ownerUserId, supplier.authUserId || ""), eq(products.status, "approved"))),
     db.select({ total: sql<number>`count(*)` }).from(quoteRecipients).where(and(eq(quoteRecipients.supplierId, supplierId), eq(quoteRecipients.status, "responded"))),
-    db.select({ average: sql<number>`avg(${supplierRatings.stars})`, total: sql<number>`count(*)` }).from(supplierRatings).where(eq(supplierRatings.supplierName, supplier.company || supplier.name)),
+    db.select({ average: sql<number>`avg(${supplierRatings.stars})`, total: sql<number>`count(*)` }).from(supplierRatings).where(eq(supplierRatings.supplierId, supplierId)),
   ]);
   const completeness = profileCompleteness(supplier as unknown as Record<string, unknown>);
   const fresh = Date.now() - new Date(supplier.updatedAt).getTime() < 120 * 86400000;
@@ -184,11 +184,16 @@ export async function deleteSupplierCascade(db: any, supplierId: number) {
   const [supplier] = await db.select().from(leads).where(eq(leads.id, supplierId));
   if (!supplier) return false;
   const ownerUserId = supplier.authUserId || "";
-  const supplierNames = [...new Set([supplier.company, supplier.name].filter(Boolean))] as string[];
 
+  // Localiza por supplierId (vínculo estável) OU ownerUserId (fallback para linhas legadas de
+  // antes da migração 0020, que ainda não têm supplierId preenchido). Usar só ownerUserId
+  // deixava de fora produtos/eventos cujo dono não tinha authUserId gravado, ou cujo supplierId
+  // foi setado por um caminho diferente do de cadastro normal.
+  const productMatch = ownerUserId ? or(eq(products.supplierId, supplierId), eq(products.ownerUserId, ownerUserId)) : eq(products.supplierId, supplierId);
+  const eventMatch = ownerUserId ? or(eq(supplierEvents.supplierId, supplierId), eq(supplierEvents.ownerUserId, ownerUserId)) : eq(supplierEvents.supplierId, supplierId);
   const [ownedProducts, ownedEvents] = await Promise.all([
-    ownerUserId ? db.select({ id: products.id }).from(products).where(eq(products.ownerUserId, ownerUserId)) : [],
-    ownerUserId ? db.select({ id: supplierEvents.id }).from(supplierEvents).where(eq(supplierEvents.ownerUserId, ownerUserId)) : [],
+    db.select({ id: products.id }).from(products).where(productMatch),
+    db.select({ id: supplierEvents.id }).from(supplierEvents).where(eventMatch),
   ]);
   const productIds = ownedProducts.map((item: { id: number }) => item.id);
   const eventIds = ownedEvents.map((item: { id: number }) => item.id);
@@ -215,9 +220,11 @@ export async function deleteSupplierCascade(db: any, supplierId: number) {
     eventIds.length ? db.delete(contentReports).where(and(eq(contentReports.entityType, "event"), inArray(contentReports.entityId, eventIds))) : null,
     productIds.length ? db.delete(favorites).where(and(eq(favorites.entityType, "product"), inArray(favorites.entityId, productIds))) : null,
     productIds.length ? db.delete(contentReports).where(and(eq(contentReports.entityType, "product"), inArray(contentReports.entityId, productIds))) : null,
-    supplierNames.length ? db.delete(supplierRatings).where(inArray(supplierRatings.supplierName, supplierNames)) : null,
-    ownerUserId ? db.delete(products).where(eq(products.ownerUserId, ownerUserId)) : null,
-    ownerUserId ? db.delete(supplierEvents).where(eq(supplierEvents.ownerUserId, ownerUserId)) : null,
+    // Antes filtrava por nome/empresa: avaliações feitas sob um nome anterior (a empresa foi
+    // renomeada depois) sobreviviam à exclusão. Pelo supplierId, nenhuma escapa.
+    db.delete(supplierRatings).where(eq(supplierRatings.supplierId, supplierId)),
+    db.delete(products).where(productMatch),
+    db.delete(supplierEvents).where(eventMatch),
     db.delete(leads).where(eq(leads.id, supplierId)),
   ].filter(Boolean);
 

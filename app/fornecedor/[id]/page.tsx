@@ -82,7 +82,9 @@ export default function SharedSupplier({ params }: { params: Promise<RouteParams
         });
 
         const catalog = (productResult.products || []) as Array<Record<string, unknown>>;
-        setProducts(catalog.filter((record) => String(record.supplierName) === parsedName).map((record) => ({ id: Number(record.id), supplierName: String(record.supplierName || ""), name: String(record.name || ""), category: String(record.category || ""), isProtected: true })));
+        // Casa pelo supplierId quando disponível (estável, imune a renomeação da empresa);
+        // cai para o nome só como fallback (ex.: visitante anônimo, sem supplierId no produto).
+        setProducts(catalog.filter((record) => record.supplierId != null ? Number(record.supplierId) === id : String(record.supplierName) === parsedName).map((record) => ({ id: Number(record.id), supplierName: String(record.supplierName || ""), name: String(record.name || ""), category: String(record.category || ""), isProtected: true })));
       })
       .catch(() => {
         setProducts([]);

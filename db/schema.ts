@@ -158,7 +158,10 @@ export const leadEvents = sqliteTable("lead_events", {
 
 export const supplierEvents = sqliteTable("supplier_events", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  supplierId: integer("supplier_id"),
+  // Vínculo estável com o fornecedor (leads.id). `supplierName` abaixo é só um cache de exibição
+  // preenchido no momento do cadastro — se a gestão renomear a empresa depois, esse texto fica
+  // desatualizado, mas o vínculo por ID continua correto. Ver migração 0020.
+  supplierId: integer("supplier_id").references(() => leads.id),
   name: text("name").notNull(),
   venue: text("venue").notNull(),
   city: text("city").notNull(),
@@ -170,10 +173,17 @@ export const supplierEvents = sqliteTable("supplier_events", {
   ownerUserId: text("owner_user_id"),
   supplierName: text("supplier_name"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-}, (table) => ({ statusIdx: index("idx_events_status").on(table.status) }));
+}, (table) => ({
+  statusIdx: index("idx_events_status").on(table.status),
+  supplierIdx: index("idx_events_supplier").on(table.supplierId),
+}));
 
 export const products = sqliteTable("products", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  // Vínculo estável com o fornecedor (leads.id). `supplierName` abaixo é só um cache de exibição
+  // preenchido no momento do cadastro — se a gestão renomear a empresa depois, esse texto fica
+  // desatualizado, mas o vínculo por ID continua correto. Ver migração 0020.
+  supplierId: integer("supplier_id").references(() => leads.id),
   supplierName: text("supplier_name").notNull(),
   name: text("name").notNull(),
   category: text("category").notNull(),
@@ -185,15 +195,22 @@ export const products = sqliteTable("products", {
   status: text("status").notNull().default("pending"),
   ownerUserId: text("owner_user_id"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-}, (table) => ({ statusIdx: index("idx_products_status").on(table.status) }));
+}, (table) => ({
+  statusIdx: index("idx_products_status").on(table.status),
+  supplierIdx: index("idx_products_supplier").on(table.supplierId),
+}));
 
 export const supplierRatings = sqliteTable("supplier_ratings", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  // Vínculo estável com o fornecedor (leads.id) — a chave de unicidade real da avaliação passou a
+  // ser (supplierId, raterUserId): imune a renomeação de empresa. `supplierName` continua só como
+  // registro do texto usado no momento da avaliação. Ver migração 0020.
+  supplierId: integer("supplier_id").references(() => leads.id),
   supplierName: text("supplier_name").notNull(),
   stars: integer("stars").notNull(),
   raterUserId: text("rater_user_id"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-}, (table) => ({ uniqueRating: uniqueIndex("idx_ratings_supplier_rater").on(table.supplierName, table.raterUserId) }));
+}, (table) => ({ uniqueRating: uniqueIndex("idx_ratings_supplier_rater").on(table.supplierId, table.raterUserId) }));
 
 export const moderationAudit = sqliteTable("moderation_audit", {
   id: integer("id").primaryKey({ autoIncrement: true }),

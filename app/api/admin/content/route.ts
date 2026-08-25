@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNotNull, sql } from "drizzle-orm";
 import { getDb } from "../../../../db";
 import { contentReports, creditLedger, creditWallets, deletionRequests, highlightActivations, leads, marketNeeds, moderationAudit, products, sectorNews, supplierEvents, supplierRatings, supplierUpdates, technicalArticles } from "../../../../db/schema";
 import { getChatGPTUser } from "../../../chatgpt-auth";
@@ -27,9 +27,11 @@ export async function GET() {
   ]);
   const [wallets, credits, highlights] = await Promise.all([db.select().from(creditWallets), db.select().from(creditLedger).orderBy(desc(creditLedger.createdAt)).limit(100), db.select().from(highlightActivations).orderBy(desc(highlightActivations.createdAt)).limit(100)]);
   // Selo "Fornecedor verificado" exige >=5 avaliações com nota 4 ou 5 — usado para habilitar o botão "Conceder selo".
-  const positiveRatings = await db.select({ supplierName: supplierRatings.supplierName, positiveTotal: sql<number>`count(*)` }).from(supplierRatings).where(gte(supplierRatings.stars, 4)).groupBy(supplierRatings.supplierName);
-  const positiveMap = new Map(positiveRatings.map((item) => [item.supplierName, Number(item.positiveTotal)]));
-  const suppliersWithRatings = suppliers.map((item) => ({ ...item, positiveRatings: positiveMap.get(item.company || "") || 0 }));
+  // Agrupado por supplierId (estável), não pelo nome salvo na avaliação (que fica desatualizado
+  // se a empresa for renomeada).
+  const positiveRatings = await db.select({ supplierId: supplierRatings.supplierId, positiveTotal: sql<number>`count(*)` }).from(supplierRatings).where(and(gte(supplierRatings.stars, 4), isNotNull(supplierRatings.supplierId))).groupBy(supplierRatings.supplierId);
+  const positiveMap = new Map(positiveRatings.map((item) => [item.supplierId, Number(item.positiveTotal)]));
+  const suppliersWithRatings = suppliers.map((item) => ({ ...item, positiveRatings: positiveMap.get(item.id) || 0 }));
   return Response.json({ suppliers: suppliersWithRatings, products: productRows, events, needs, updates, articles, news, reports, deletions, audit, wallets, credits, highlights });
 }
 
@@ -50,7 +52,7 @@ export async function POST(request: Request) {
       const [supplier] = await db.select().from(leads).where(eq(leads.id, id));
       if (!supplier?.phoneVerifiedAt || supplier.status !== "approved") return Response.json({ error: "Aprove e valide o telefone antes de conceder o selo." }, { status: 400 });
       // Critério do selo: dono com telefone validado (identidade confirmada) + aprovação da gestão + >=5 avaliações positivas (nota 4 ou 5).
-      const [{ positiveTotal }] = await db.select({ positiveTotal: sql<number>`count(*)` }).from(supplierRatings).where(and(eq(supplierRatings.supplierName, supplier.company || ""), gte(supplierRatings.stars, 4)));
+      const [{ positiveTotal }] = await db.select({ positiveTotal: sql<number>`count(*)` }).from(supplierRatings).where(and(eq(supplierRatings.supplierId, id), gte(supplierRatings.stars, 4)));
       if (Number(positiveTotal) < 5) return Response.json({ error: "É necessário ao menos 5 avaliações de clientes com nota 4 ou 5 para conceder o selo." }, { status: 400 });
       await db.update(leads).set({ verificationStatus: "verified", verifiedAt: new Date().toISOString() }).where(eq(leads.id, id));
       await recomputeHubScore(db,id,"selo_verificado");

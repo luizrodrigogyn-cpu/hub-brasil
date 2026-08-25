@@ -44,12 +44,14 @@ export async function GET() {
     const revealedRows = viewer?.role === "client" ? await getDb().select({ supplierId: activityEvents.supplierId }).from(activityEvents).where(and(eq(activityEvents.actorUserId, user!.userId), eq(activityEvents.kind, "contact_revealed"))) : [];
     const revealedIds = new Set(revealedRows.map((row) => row.supplierId));
     const rows = await getDb().select({ id: leads.id, name: leads.company, category: leads.category, categories: leads.categories, city: leads.city, state: leads.state, description: leads.description, logoKey: leads.logoKey, phone: leads.phone, instagram: leads.instagram, website: leads.website, verificationStatus: leads.verificationStatus, verifiedAt: leads.verifiedAt, hubScore: leads.hubScore, founderMemberAt: leads.founderMemberAt, serviceStates: leads.serviceStates, services: leads.services, serviceMode: leads.serviceMode, servesNationwide: leads.servesNationwide, updatedAt: leads.updatedAt, createdAt: leads.createdAt }).from(leads).where(and(eq(leads.status, "approved"), eq(leads.role, "supplier"), isNotNull(leads.phoneVerifiedAt)));
+    // Avaliações e produtos agora são agrupados por supplierId (estável) em vez do texto
+    // supplierName salvo na linha — que fica desatualizado se a gestão renomear a empresa.
     const [ratings, responses, slaRows, priceRows, productCountRows] = await Promise.all([
-      getDb().select({ supplierName: supplierRatings.supplierName, average: sql<number>`avg(${supplierRatings.stars})`, total: sql<number>`count(*)` }).from(supplierRatings).groupBy(supplierRatings.supplierName),
+      getDb().select({ supplierId: supplierRatings.supplierId, average: sql<number>`avg(${supplierRatings.stars})`, total: sql<number>`count(*)` }).from(supplierRatings).where(isNotNull(supplierRatings.supplierId)).groupBy(supplierRatings.supplierId),
       getDb().select({ supplierId: quoteRecipients.supplierId, total: sql<number>`count(*)`, responded: sql<number>`sum(case when ${quoteRecipients.status} = 'responded' then 1 else 0 end)` }).from(quoteRecipients).groupBy(quoteRecipients.supplierId),
       getDb().select({ supplierId: quoteRecipients.supplierId, avgHours: sql<number>`avg((julianday(${quoteRecipients.respondedAt}) - julianday(${quoteRecipients.createdAt})) * 24)`, respondedCount: sql<number>`count(*)` }).from(quoteRecipients).where(and(eq(quoteRecipients.status, "responded"), isNotNull(quoteRecipients.respondedAt))).groupBy(quoteRecipients.supplierId),
-      getDb().select({ supplierName: products.supplierName, averagePrice: products.averagePrice }).from(products).where(and(eq(products.status, "approved"), isNotNull(products.averagePrice))),
-      getDb().select({ supplierName: products.supplierName, total: sql<number>`count(*)` }).from(products).where(eq(products.status, "approved")).groupBy(products.supplierName),
+      getDb().select({ supplierId: products.supplierId, averagePrice: products.averagePrice }).from(products).where(and(eq(products.status, "approved"), isNotNull(products.averagePrice), isNotNull(products.supplierId))),
+      getDb().select({ supplierId: products.supplierId, total: sql<number>`count(*)` }).from(products).where(and(eq(products.status, "approved"), isNotNull(products.supplierId))).groupBy(products.supplierId),
     ]);
     const slaMap = new Map(slaRows.map((item) => [item.supplierId, item]));
     // Estatística da plataforma (não de um fornecedor específico) usada nas chamadas de ação
@@ -58,23 +60,23 @@ export async function GET() {
     const platformRespondedTotal = slaRows.reduce((sum, item) => sum + Number(item.respondedCount || 0), 0);
     const platformWeightedHours = slaRows.reduce((sum, item) => sum + Number(item.avgHours || 0) * Number(item.respondedCount || 0), 0);
     const platformSlaLabel = platformRespondedTotal >= 5 ? slaLabelFromHours(platformWeightedHours / platformRespondedTotal) : null;
-    const priceMap = new Map<string, number[]>();
+    const priceMap = new Map<number, number[]>();
     for (const row of priceRows) {
       const tokens = parsePriceTokens(row.averagePrice);
-      if (!tokens.length) continue;
-      priceMap.set(row.supplierName, [...(priceMap.get(row.supplierName) || []), ...tokens]);
+      if (!tokens.length || row.supplierId == null) continue;
+      priceMap.set(row.supplierId, [...(priceMap.get(row.supplierId) || []), ...tokens]);
     }
-    const productCountMap = new Map(productCountRows.map((item) => [item.supplierName, Number(item.total)]));
+    const productCountMap = new Map(productCountRows.filter((item) => item.supplierId != null).map((item) => [item.supplierId as number, Number(item.total)]));
     const highlights = await getDb().select().from(highlightActivations).where(and(eq(highlightActivations.status, "active"), sql`${highlightActivations.endsAt} > ${new Date().toISOString()}`));
     const highlightMap = new Map(highlights.filter((item) => item.placement === "map" || item.placement === "search").map((item) => [`${item.supplierId}:${item.placement}`, item]));
-    const ratingMap = new Map(ratings.map((item) => [item.supplierName, item]));
+    const ratingMap = new Map(ratings.filter((item) => item.supplierId != null).map((item) => [item.supplierId as number, item]));
     const responseMap = new Map(responses.map((item) => [item.supplierId, item]));
     const ranked = rows.filter((item) => item.name && item.category && item.city && item.state).map((item) => {
       const digits = String(item.phone || "").replace(/\D/g, "");
       const phonePreview = digits.length >= 3 ? `(${digits.slice(0, 2)}) ${digits.slice(2, 3)}••••-••••` : "Contato protegido";
       const completenessFields = [item.name,item.phone,item.category,item.city,item.state,item.description,item.serviceStates||item.servesNationwide,item.services];
       const completeness = completenessFields.filter(Boolean).length / completenessFields.length;
-      const rating = ratingMap.get(item.name || ""); const response = responseMap.get(item.id);
+      const rating = ratingMap.get(item.id); const response = responseMap.get(item.id);
       const quoteRequests = Number(response?.total || 0);
       const quoteResponses = Number(response?.responded || 0);
       const responseRate = response?.total ? Number(response.responded) / Number(response.total) : 0;
@@ -92,9 +94,9 @@ export async function GET() {
       const serviceAreaLabel = item.servesNationwide ? "Atende todo o Brasil" : additionalStates.length ? `Atende ${item.state} + ${additionalStates.length} estado${additionalStates.length > 1 ? "s" : ""}` : `Atende ${item.state}`;
       const sla = slaMap.get(item.id);
       const slaLabel = sla && Number(sla.respondedCount) >= 3 ? `Responde em média em ${slaLabelFromHours(Number(sla.avgHours))}` : null;
-      const priceTokens = priceMap.get(item.name || "") || [];
+      const priceTokens = priceMap.get(item.id) || [];
       const priceRangeLabel = priceTokens.length ? (Math.min(...priceTokens) === Math.max(...priceTokens) ? `A partir de ${formatCurrency(Math.min(...priceTokens))}` : `${formatCurrency(Math.min(...priceTokens))} – ${formatCurrency(Math.max(...priceTokens))}`) : null;
-      const productCount = productCountMap.get(item.name || "") || 0;
+      const productCount = productCountMap.get(item.id) || 0;
       // Selos exibidos no card: exigem amostra mínima para não virar promessa vazia
       // ("resposta rápida" com 1 cotação respondida em 100% não é sinal confiável).
       const fastResponder = quoteRequests >= 3 && responseRate >= 0.6;
