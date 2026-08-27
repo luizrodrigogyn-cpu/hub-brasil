@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import AuthProvider from "./auth-provider";
 import { runtimeValue } from "./runtime-env";
 import "./globals.css";
+import ErrorReporterButton from "./error-reporter";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -43,6 +44,7 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <AuthProvider publishableKey={runtimeValue("CLERK_PUBLISHABLE_KEY")}>{children}</AuthProvider>
+        <ErrorReporterButton />
       </body>
     </html>
   );

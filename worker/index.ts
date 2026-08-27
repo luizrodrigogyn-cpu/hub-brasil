@@ -33,17 +33,25 @@ interface ExecutionContext {
 // Cabeçalhos de segurança aplicados a toda resposta HTML/documento. CSP fica de fora por ora —
 // definir uma política errada quebra o Clerk (login) e outros scripts legítimos silenciosamente;
 // precisa ser testada em modo report-only num ambiente real antes de ativar em produção.
-function withSecurityHeaders(response: Response): Response {
+function withSecurityHeaders(response: Response, requestId: string): Response {
   const headers = new Headers(response.headers);
   if (!headers.has("x-content-type-options")) headers.set("x-content-type-options", "nosniff");
   if (!headers.has("referrer-policy")) headers.set("referrer-policy", "strict-origin-when-cross-origin");
   if (!headers.has("permissions-policy")) headers.set("permissions-policy", "camera=(), microphone=(), geolocation=()");
+  if (!headers.has("strict-transport-security")) headers.set("strict-transport-security", "max-age=31536000");
+  headers.set("x-request-id", requestId);
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
 
 const worker = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
+    const requestId = crypto.randomUUID();
+
+    if (url.protocol === "http:") {
+      url.protocol = "https:";
+      return Response.redirect(url.toString(), 308);
+    }
 
     // The Clerk publishable key is designed to be public.  Serving it from the
     // Worker avoids relying on a server-component environment binding, which
@@ -66,7 +74,12 @@ const worker = {
       }, allowedWidths);
     }
 
-    return withSecurityHeaders(await handler.fetch(request, env, ctx));
+    try {
+      return withSecurityHeaders(await handler.fetch(request, env, ctx), requestId);
+    } catch (error) {
+      console.error(JSON.stringify({ event: "worker_unhandled_error", requestId, method: request.method, path: url.pathname, message: error instanceof Error ? error.message : "Unknown error", stack: error instanceof Error ? error.stack?.slice(0, 4000) : undefined, occurredAt: new Date().toISOString() }));
+      return withSecurityHeaders(Response.json({ error: "Não foi possível concluir esta solicitação.", errorId: requestId }, { status: 500 }), requestId);
+    }
   },
 };
 

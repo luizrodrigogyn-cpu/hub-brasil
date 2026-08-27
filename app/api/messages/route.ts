@@ -2,6 +2,7 @@ import { and, desc, eq, gte, inArray, isNull, ne, sql } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { conversationMessages, conversations, leads } from "../../../db/schema";
 import { getApiUser } from "../../admin-auth";
+import { canAccessConversation } from "../../access-policy.mjs";
 
 async function profileForUser() {
   const user = await getApiUser();
@@ -57,7 +58,7 @@ export async function POST(request: Request) {
     conversationId = conversation.id;
   }
   const [conversation] = await db.select().from(conversations).where(eq(conversations.id, conversationId));
-  if (!conversation || (profile.role === "client" ? conversation.clientUserId !== user.userId : conversation.supplierId !== profile.id)) return Response.json({ error: "Você não tem acesso a esta conversa." }, { status: 403 });
+  if (!canAccessConversation(user, profile, conversation)) return Response.json({ error: "Você não tem acesso a esta conversa." }, { status: 403 });
   const [message] = await db.insert(conversationMessages).values({ conversationId, senderUserId: user.userId, body: text }).returning();
   await db.update(conversations).set({ updatedAt: new Date().toISOString() }).where(eq(conversations.id, conversationId));
   return Response.json({ ok: true, conversationId, message }, { status: 201 });

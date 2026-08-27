@@ -9,6 +9,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: hub-quality-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   quality:
     name: Qualidade
@@ -34,3 +38,39 @@ jobs:
 
       - name: Executar testes
         run: npm test
+
+  security:
+    name: Segurança
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Obter código
+        uses: actions/checkout@v4
+
+      - name: Iniciar análise de segurança
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+
+      - name: Usar Node.js 22.13.0
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.0
+          cache: npm
+
+      - name: Instalar dependências reproduzíveis
+        run: npm ci
+
+      - name: Impedir segredos no código
+        run: npm run security:secrets
+
+      - name: Bloquear vulnerabilidades altas em produção
+        run: npm run security:audit
+
+      - name: Testar isolamento entre clientes
+        run: npm run test:unit
+
+      - name: Concluir análise de segurança
+        uses: github/codeql-action/analyze@v3

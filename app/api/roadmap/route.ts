@@ -4,6 +4,7 @@ import { activityEvents, alertPreferences, contentReports, creditLedger, creditW
 import { getApiUser } from "../../admin-auth";
 import { activeHighlights, awardCredit, profileCompleteness, qualifyReferralIfReady, recomputeHubScore, ruleFor } from "../../hub-credits";
 import { isValidBrazilState, normalizeBrazilState } from "../../brazil-states";
+import { canManageClientQuote, canRespondToSupplierQuote } from "../../access-policy.mjs";
 
 const allowedFavoriteTypes = new Set(["supplier", "product", "event"]);
 
@@ -253,7 +254,7 @@ export async function POST(request: Request) {
     if (!quote) return Response.json({ error: "Cotação não encontrada." }, { status: 404 });
     if (quote.status === "closed") return Response.json({ error: "Esta cotação já foi encerrada pelo cliente." }, { status: 409 });
     const [recipient] = await db.select().from(quoteRecipients).where(and(eq(quoteRecipients.quoteId, quoteId), eq(quoteRecipients.supplierId, profile.id)));
-    if (!recipient) return Response.json({ error: "Cotação não encontrada para este fornecedor." }, { status: 404 });
+    if (!canRespondToSupplierQuote(profile, recipient)) return Response.json({ error: "Cotação não encontrada para este fornecedor." }, { status: 404 });
     // Update condicional (WHERE status='sent') evita que duas respostas concorrentes (ex.: aba duplicada) apliquem
     // o status "responded" para credito/score mesmo quando a resposta que efetivamente persistiu foi "declined".
     const [updated] = await db.update(quoteRecipients).set({ status: responseStatus, respondedAt: new Date().toISOString() }).where(and(eq(quoteRecipients.id, recipient.id), eq(quoteRecipients.status, "sent"))).returning();
@@ -288,8 +289,8 @@ export async function POST(request: Request) {
   if (action === "close_quote") {
     if (profile.role !== "client") return Response.json({ error: "Apenas o cliente pode encerrar a cotação." }, { status: 403 });
     const quoteId = Number(body.quoteId);
-    const [quote] = await db.select().from(quoteRequests).where(and(eq(quoteRequests.id, quoteId), eq(quoteRequests.clientUserId, user.userId)));
-    if (!quote) return Response.json({ error: "Cotação não encontrada." }, { status: 404 });
+    const [quote] = await db.select().from(quoteRequests).where(eq(quoteRequests.id, quoteId));
+    if (!canManageClientQuote(user, quote)) return Response.json({ error: "Cotação não encontrada." }, { status: 404 });
     await db.update(quoteRequests).set({ status: "closed", closedAt: new Date().toISOString() }).where(eq(quoteRequests.id, quoteId));
     return Response.json({ ok: true });
   }
