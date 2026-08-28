@@ -1,8 +1,73 @@
 import { sql } from "drizzle-orm";
 import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
+export const organizations = sqliteTable("organizations", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  slug: text("slug").notNull(),
+  kind: text("kind").notNull().default("client"),
+  status: text("status").notNull().default("active"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => ({ slugIdx: uniqueIndex("idx_organizations_slug").on(table.slug) }));
+
+export const organizationMembers = sqliteTable("organization_members", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  organizationId: text("organization_id").notNull().references(() => organizations.id),
+  userId: text("user_id").notNull(),
+  role: text("role").notNull().default("owner"),
+  status: text("status").notNull().default("active"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => ({
+  membershipIdx: uniqueIndex("idx_organization_members_org_user").on(table.organizationId, table.userId),
+  userIdx: index("idx_organization_members_user").on(table.userId, table.status),
+}));
+
+export const featureCatalog = sqliteTable("feature_catalog", {
+  featureKey: text("feature_key").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description").notNull(),
+  enabledByDefault: integer("enabled_by_default", { mode: "boolean" }).notNull().default(true),
+  audience: text("audience").notNull().default("all"),
+  dependencies: text("dependencies"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const organizationFeatures = sqliteTable("organization_features", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  organizationId: text("organization_id").notNull().references(() => organizations.id),
+  featureKey: text("feature_key").notNull().references(() => featureCatalog.featureKey),
+  enabled: integer("enabled", { mode: "boolean" }).notNull(),
+  configuration: text("configuration"),
+  changedBy: text("changed_by"),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => ({ flagIdx: uniqueIndex("idx_organization_features_org_key").on(table.organizationId, table.featureKey) }));
+
+export const errorIncidents = sqliteTable("error_incidents", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").references(() => organizations.id),
+  actorUserId: text("actor_user_id"),
+  source: text("source").notNull(),
+  severity: text("severity").notNull().default("error"),
+  message: text("message").notNull(),
+  details: text("details"),
+  stack: text("stack"),
+  path: text("path"),
+  userAgent: text("user_agent"),
+  requestId: text("request_id"),
+  deployVersion: text("deploy_version"),
+  status: text("status").notNull().default("open"),
+  occurredAt: text("occurred_at").notNull(),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => ({
+  statusCreatedIdx: index("idx_error_incidents_status_created").on(table.status, table.createdAt),
+  organizationCreatedIdx: index("idx_error_incidents_org_created").on(table.organizationId, table.createdAt),
+}));
+
 export const leads = sqliteTable("leads", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  organizationId: text("organization_id").references(() => organizations.id),
   name: text("name").notNull(),
   phone: text("phone").notNull(),
   company: text("company"),
@@ -46,6 +111,7 @@ export const leads = sqliteTable("leads", {
   cnpjIdx: uniqueIndex("idx_leads_cnpj_normalized").on(table.cnpjNormalized),
   referralCodeIdx: uniqueIndex("idx_leads_referral_code").on(table.referralCode),
   supplierStateIdx: index("idx_leads_supplier_state").on(table.role, table.status, table.state),
+  organizationIdx: index("idx_leads_organization").on(table.organizationId, table.role),
 }));
 
 export const hubScoreSnapshots = sqliteTable("hub_score_snapshots", {
@@ -158,6 +224,7 @@ export const leadEvents = sqliteTable("lead_events", {
 
 export const supplierEvents = sqliteTable("supplier_events", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  organizationId: text("organization_id").references(() => organizations.id),
   // Vínculo estável com o fornecedor (leads.id). `supplierName` abaixo é só um cache de exibição
   // preenchido no momento do cadastro — se a gestão renomear a empresa depois, esse texto fica
   // desatualizado, mas o vínculo por ID continua correto. Ver migração 0020.
@@ -180,6 +247,7 @@ export const supplierEvents = sqliteTable("supplier_events", {
 
 export const products = sqliteTable("products", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  organizationId: text("organization_id").references(() => organizations.id),
   // Vínculo estável com o fornecedor (leads.id). `supplierName` abaixo é só um cache de exibição
   // preenchido no momento do cadastro — se a gestão renomear a empresa depois, esse texto fica
   // desatualizado, mas o vínculo por ID continua correto. Ver migração 0020.
@@ -202,6 +270,8 @@ export const products = sqliteTable("products", {
 
 export const supplierRatings = sqliteTable("supplier_ratings", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  raterOrganizationId: text("rater_organization_id").references(() => organizations.id),
+  supplierOrganizationId: text("supplier_organization_id").references(() => organizations.id),
   // Vínculo estável com o fornecedor (leads.id) — a chave de unicidade real da avaliação passou a
   // ser (supplierId, raterUserId): imune a renomeação de empresa. `supplierName` continua só como
   // registro do texto usado no momento da avaliação. Ver migração 0020.
@@ -224,6 +294,7 @@ export const moderationAudit = sqliteTable("moderation_audit", {
 
 export const favorites = sqliteTable("favorites", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  organizationId: text("organization_id").references(() => organizations.id),
   userId: text("user_id").notNull(),
   entityType: text("entity_type").notNull(),
   entityId: integer("entity_id").notNull(),
@@ -235,6 +306,8 @@ export const favorites = sqliteTable("favorites", {
 
 export const activityEvents = sqliteTable("activity_events", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  actorOrganizationId: text("actor_organization_id").references(() => organizations.id),
+  supplierOrganizationId: text("supplier_organization_id").references(() => organizations.id),
   actorUserId: text("actor_user_id"),
   supplierId: integer("supplier_id"),
   productId: integer("product_id"),
@@ -250,6 +323,8 @@ export const activityEvents = sqliteTable("activity_events", {
 // consultar ou responder. Nenhum telefone é exposto por esta estrutura.
 export const conversations = sqliteTable("conversations", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  clientOrganizationId: text("client_organization_id").references(() => organizations.id),
+  supplierOrganizationId: text("supplier_organization_id").references(() => organizations.id),
   clientUserId: text("client_user_id").notNull(),
   supplierId: integer("supplier_id").notNull().references(() => leads.id),
   subject: text("subject").notNull(),
@@ -262,6 +337,7 @@ export const conversations = sqliteTable("conversations", {
 
 export const conversationMessages = sqliteTable("conversation_messages", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  senderOrganizationId: text("sender_organization_id").references(() => organizations.id),
   conversationId: integer("conversation_id").notNull().references(() => conversations.id),
   senderUserId: text("sender_user_id").notNull(),
   body: text("body").notNull(),
@@ -273,6 +349,7 @@ export const conversationMessages = sqliteTable("conversation_messages", {
 
 export const alertPreferences = sqliteTable("alert_preferences", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  organizationId: text("organization_id").references(() => organizations.id),
   userId: text("user_id").notNull(),
   categories: text("categories"),
   states: text("states"),
@@ -288,6 +365,7 @@ export const alertPreferences = sqliteTable("alert_preferences", {
 
 export const quoteRequests = sqliteTable("quote_requests", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  clientOrganizationId: text("client_organization_id").references(() => organizations.id),
   protocol: text("protocol").notNull(),
   clientUserId: text("client_user_id").notNull(),
   category: text("category").notNull(),
@@ -311,6 +389,7 @@ export const quoteRequests = sqliteTable("quote_requests", {
 
 export const quoteRecipients = sqliteTable("quote_recipients", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  supplierOrganizationId: text("supplier_organization_id").references(() => organizations.id),
   quoteId: integer("quote_id").notNull().references(() => quoteRequests.id),
   supplierId: integer("supplier_id").notNull().references(() => leads.id),
   status: text("status").notNull().default("sent"),
@@ -323,6 +402,7 @@ export const quoteRecipients = sqliteTable("quote_recipients", {
 
 export const contentReports = sqliteTable("content_reports", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  reporterOrganizationId: text("reporter_organization_id").references(() => organizations.id),
   reporterUserId: text("reporter_user_id").notNull(),
   entityType: text("entity_type").notNull(),
   entityId: integer("entity_id").notNull(),
@@ -334,6 +414,7 @@ export const contentReports = sqliteTable("content_reports", {
 
 export const marketNeeds = sqliteTable("market_needs", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  clientOrganizationId: text("client_organization_id").references(() => organizations.id),
   clientUserId: text("client_user_id").notNull(),
   category: text("category").notNull(),
   title: text("title").notNull(),
@@ -351,6 +432,7 @@ export const marketNeeds = sqliteTable("market_needs", {
 
 export const needInterests = sqliteTable("need_interests", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  supplierOrganizationId: text("supplier_organization_id").references(() => organizations.id),
   needId: integer("need_id").notNull().references(() => marketNeeds.id),
   supplierId: integer("supplier_id").notNull().references(() => leads.id),
   message: text("message"),
@@ -364,6 +446,7 @@ export const needInterests = sqliteTable("need_interests", {
 
 export const supplierUpdates = sqliteTable("supplier_updates", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  organizationId: text("organization_id").references(() => organizations.id),
   supplierId: integer("supplier_id").notNull().references(() => leads.id),
   ownerUserId: text("owner_user_id").notNull(),
   title: text("title").notNull(),
@@ -377,6 +460,7 @@ export const supplierUpdates = sqliteTable("supplier_updates", {
 
 export const eventInterests = sqliteTable("event_interests", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  organizationId: text("organization_id").references(() => organizations.id),
   eventId: integer("event_id").notNull().references(() => supplierEvents.id),
   userId: text("user_id").notNull(),
   reminderEnabled: integer("reminder_enabled", { mode: "boolean" }).notNull().default(true),
@@ -416,6 +500,7 @@ export const sectorNews = sqliteTable("sector_news", {
 
 export const deletionRequests = sqliteTable("deletion_requests", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  organizationId: text("organization_id").references(() => organizations.id),
   userId: text("user_id").notNull(),
   email: text("email").notNull(),
   reason: text("reason"),

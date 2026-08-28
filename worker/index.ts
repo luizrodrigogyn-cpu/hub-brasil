@@ -6,6 +6,8 @@ interface Env {
   ASSETS: Fetcher;
   DB: D1Database;
   PRODUCT_IMAGES: R2Bucket;
+  ERROR_QUEUE: Queue<ErrorReportMessage>;
+  ERROR_ALERT_WEBHOOK_URL?: string;
   ADMIN_EMAILS: string;
   CLERK_PUBLISHABLE_KEY: string;
   CLERK_SECRET_KEY: string;
@@ -22,6 +24,51 @@ interface Env {
 interface ExecutionContext {
   waitUntil(promise: Promise<unknown>): void;
   passThroughOnException(): void;
+}
+
+type ErrorReportMessage = {
+  errorId: string;
+  organizationId?: string | null;
+  actorUserId?: string | null;
+  source?: string;
+  message?: string;
+  details?: string;
+  stack?: string;
+  path?: string;
+  userAgent?: string;
+  occurredAt?: string;
+};
+
+function clipped(value: unknown, max: number) {
+  return String(value || "").slice(0, max);
+}
+
+async function persistError(env: Env, message: ErrorReportMessage) {
+  const incidentId = clipped(message.errorId, 100) || crypto.randomUUID();
+  await env.DB.prepare(`INSERT OR IGNORE INTO error_incidents
+    (id, organization_id, actor_user_id, source, severity, message, details, stack, path, user_agent, status, occurred_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?)`).bind(
+      incidentId,
+      message.organizationId || null,
+      message.actorUserId || null,
+      clipped(message.source, 30) || "client",
+      "error",
+      clipped(message.message, 500) || "Erro relatado pelo cliente",
+      clipped(message.details, 2000) || null,
+      clipped(message.stack, 6000) || null,
+      clipped(message.path, 500) || null,
+      clipped(message.userAgent, 500) || null,
+      message.occurredAt || new Date().toISOString(),
+    ).run();
+  console.error(JSON.stringify({ event: "error_incident_queued", errorId: incidentId, organizationId: message.organizationId || null, path: message.path || null }));
+  if (env.ERROR_ALERT_WEBHOOK_URL) {
+    const alert = await fetch(env.ERROR_ALERT_WEBHOOK_URL, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ text: `Hub Brasil: novo erro ${incidentId} em ${clipped(message.path, 200) || "rota desconhecida"}` }),
+    });
+    if (!alert.ok) throw new Error(`Alert webhook returned ${alert.status}`);
+  }
 }
 
 // Image security config. SVG sources with .svg extension auto-skip the
@@ -79,6 +126,17 @@ const worker = {
     } catch (error) {
       console.error(JSON.stringify({ event: "worker_unhandled_error", requestId, method: request.method, path: url.pathname, message: error instanceof Error ? error.message : "Unknown error", stack: error instanceof Error ? error.stack?.slice(0, 4000) : undefined, occurredAt: new Date().toISOString() }));
       return withSecurityHeaders(Response.json({ error: "Não foi possível concluir esta solicitação.", errorId: requestId }, { status: 500 }), requestId);
+    }
+  },
+  async queue(batch: MessageBatch<ErrorReportMessage>, env: Env): Promise<void> {
+    for (const message of batch.messages) {
+      try {
+        await persistError(env, message.body);
+        message.ack();
+      } catch (error) {
+        console.error(JSON.stringify({ event: "error_queue_failure", messageId: message.id, error: error instanceof Error ? error.message : "unknown" }));
+        message.retry();
+      }
     }
   },
 };

@@ -3,6 +3,8 @@ import { env } from "cloudflare:workers";
 import { getDb } from "../../../db";
 import { highlightActivations, leads, products } from "../../../db/schema";
 import { getApiUser } from "../../admin-auth";
+import { getTenantContext } from "../../tenant-context";
+import { FEATURES, requireFeature } from "../../features";
 
 const arraySpecFields = new Set(["technology", "application", "features"]);
 const textSpecFields = new Set(["ip", "battery", "warranty"]);
@@ -87,9 +89,12 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const user = await getApiUser();
-    if (!user) return Response.json({ error: "Faça login para publicar.", signIn: "/sign-in?return_to=/" }, { status: 401 });
-    const [supplier] = await getDb().select().from(leads).where(and(eq(leads.authUserId, user.userId), eq(leads.role, "supplier")));
+    const tenant = await getTenantContext();
+    if (!tenant) return Response.json({ error: "Faça login para publicar.", signIn: "/sign-in?return_to=/" }, { status: 401 });
+    const { user, organizationId } = tenant;
+    const featureError = await requireFeature(organizationId, FEATURES.directory);
+    if (featureError) return featureError;
+    const [supplier] = await getDb().select().from(leads).where(and(eq(leads.authUserId, user.userId), eq(leads.organizationId, organizationId), eq(leads.role, "supplier")));
     if (!supplier || supplier.status !== "approved" || !supplier.phoneVerifiedAt) return Response.json({ error: "Seu fornecedor precisa ter telefone validado e cadastro aprovado pelo gestor." }, { status: 403 });
     const form = await request.formData();
     const photo = form.get("photo");
@@ -109,7 +114,7 @@ export async function POST(request: Request) {
     const rawManualUrl = String(form.get("manualUrl") || "").trim();
     let manualUrl: string | null = null;
     if (rawManualUrl) { try { const parsed = new URL(rawManualUrl); if ((parsed.protocol === "http:" || parsed.protocol === "https:") && parsed.toString().length <= 2_048) manualUrl = parsed.toString(); } catch { manualUrl = null; } }
-    const values = { supplierId: supplier.id, supplierName: supplier.company || supplier.name, name: String(form.get("name") || "").trim(), category: String(form.get("category") || "").trim(), technicalDetails, averagePrice: null, imageKey, specs, manualUrl, ownerUserId: user.userId, status: "pending" };
+    const values = { organizationId, supplierId: supplier.id, supplierName: supplier.company || supplier.name, name: String(form.get("name") || "").trim(), category: String(form.get("category") || "").trim(), technicalDetails, averagePrice: null, imageKey, specs, manualUrl, ownerUserId: user.userId, status: "pending" };
     if (!values.name || !values.category || !specifications || !application || !differentials) return Response.json({ error: "Preencha especificações, aplicação e diferenciais." }, { status: 400 });
     const [product] = await getDb().insert(products).values(values).returning();
     return Response.json({ product, pending: true }, { status: 201 });

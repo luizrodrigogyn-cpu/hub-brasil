@@ -1,4 +1,6 @@
-import { getApiUser } from "../../admin-auth";
+import { env } from "cloudflare:workers";
+import { getTenantContext } from "../../tenant-context";
+import { FEATURES, requireFeature } from "../../features";
 
 const MAX_BODY_BYTES = 16_000;
 
@@ -21,8 +23,12 @@ export async function POST(request: Request) {
   }
 
   const errorId = safeText(body.errorId, 100) || crypto.randomUUID();
-  const user = await getApiUser();
-  console.error(JSON.stringify({
+  const tenant = await getTenantContext();
+  if (tenant) {
+    const featureError = await requireFeature(tenant.organizationId, FEATURES.reports);
+    if (featureError) return featureError;
+  }
+  const report = {
     event: "client_error_report",
     errorId,
     source: body.source === "boundary" ? "boundary" : "user",
@@ -31,8 +37,14 @@ export async function POST(request: Request) {
     stack: safeText(body.stack, 4000),
     path: safeText(body.path, 300),
     userAgent: safeText(body.userAgent, 300),
-    actorUserId: user?.userId || null,
+    organizationId: tenant?.organizationId || null,
+    actorUserId: tenant?.user.userId || null,
     occurredAt: new Date().toISOString(),
-  }));
+  };
+  try {
+    await env.ERROR_QUEUE.send(report, { contentType: "json" });
+  } catch (queueError) {
+    console.error(JSON.stringify({ ...report, queueFallback: true, queueError: queueError instanceof Error ? queueError.message : "unknown" }));
+  }
   return Response.json({ ok: true, errorId }, { status: 202, headers: { "Cache-Control": "no-store" } });
 }

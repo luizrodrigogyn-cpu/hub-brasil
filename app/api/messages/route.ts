@@ -1,28 +1,30 @@
 import { and, desc, eq, gte, inArray, isNull, ne, sql } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { conversationMessages, conversations, leads } from "../../../db/schema";
-import { getApiUser } from "../../admin-auth";
 import { canAccessConversation } from "../../access-policy.mjs";
+import { getTenantContext } from "../../tenant-context";
+import { FEATURES, requireFeature } from "../../features";
 
 async function profileForUser() {
-  const user = await getApiUser();
-  if (!user) return { user: null, profile: null };
-  const [profile] = await getDb().select().from(leads).where(eq(leads.authUserId, user.userId));
-  return { user, profile };
+  const tenant = await getTenantContext();
+  if (!tenant) return { user: null, profile: null, organizationId: null };
+  return { user: tenant.user, profile: tenant.profile, organizationId: tenant.organizationId };
 }
 
 export async function GET(request: Request) {
-  const { user, profile } = await profileForUser();
-  if (!user || !profile) return Response.json({ error: "Faça login e conclua seu cadastro para acessar mensagens." }, { status: 401 });
+  const { user, profile, organizationId } = await profileForUser();
+  if (!user || !profile || !organizationId) return Response.json({ error: "Faça login e conclua seu cadastro para acessar mensagens." }, { status: 401 });
+  const featureError = await requireFeature(organizationId, FEATURES.messages);
+  if (featureError) return featureError;
   const url = new URL(request.url);
   const conversationId = Number(url.searchParams.get("conversationId"));
   const db = getDb();
   const isSupplier = profile.role === "supplier";
   const list = isSupplier
     ? await db.select({ id: conversations.id, subject: conversations.subject, supplierId: conversations.supplierId, clientUserId: conversations.clientUserId, updatedAt: conversations.updatedAt, clientName: leads.name, clientCompany: leads.company })
-      .from(conversations).leftJoin(leads, eq(leads.authUserId, conversations.clientUserId)).where(eq(conversations.supplierId, profile.id)).orderBy(desc(conversations.updatedAt))
+      .from(conversations).leftJoin(leads, eq(leads.authUserId, conversations.clientUserId)).where(eq(conversations.supplierOrganizationId, organizationId)).orderBy(desc(conversations.updatedAt))
     : await db.select({ id: conversations.id, subject: conversations.subject, supplierId: conversations.supplierId, clientUserId: conversations.clientUserId, updatedAt: conversations.updatedAt, supplierName: leads.company, supplierCity: leads.city, supplierState: leads.state })
-      .from(conversations).innerJoin(leads, eq(leads.id, conversations.supplierId)).where(eq(conversations.clientUserId, user.userId)).orderBy(desc(conversations.updatedAt));
+      .from(conversations).innerJoin(leads, eq(leads.id, conversations.supplierId)).where(eq(conversations.clientOrganizationId, organizationId)).orderBy(desc(conversations.updatedAt));
   if (!conversationId) {
     // "Visto": contagem de mensagens da outra parte ainda não lidas, para badge na lista.
     const unread = list.length ? await db.select({ conversationId: conversationMessages.conversationId, total: sql<number>`count(*)` }).from(conversationMessages).where(and(inArray(conversationMessages.conversationId, list.map((item) => item.id)), isNull(conversationMessages.readAt), ne(conversationMessages.senderUserId, user.userId))).groupBy(conversationMessages.conversationId) : [];
@@ -38,8 +40,10 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const { user, profile } = await profileForUser();
-  if (!user || !profile || profile.status !== "approved") return Response.json({ error: "Conclua um cadastro aprovado para usar as mensagens." }, { status: 403 });
+  const { user, profile, organizationId } = await profileForUser();
+  if (!user || !profile || !organizationId || profile.status !== "approved") return Response.json({ error: "Conclua um cadastro aprovado para usar as mensagens." }, { status: 403 });
+  const featureError = await requireFeature(organizationId, FEATURES.messages);
+  if (featureError) return featureError;
   const body = await request.json() as Record<string, unknown>;
   const text = String(body.message || "").trim().slice(0, 2000);
   if (!text) return Response.json({ error: "Escreva uma mensagem." }, { status: 400 });
@@ -52,14 +56,14 @@ export async function POST(request: Request) {
   if (!conversationId) {
     if (profile.role !== "client") return Response.json({ error: "A nova conversa deve ser iniciada por um cliente." }, { status: 403 });
     const supplierId = Number(body.supplierId);
-    const [supplier] = await db.select({ id: leads.id }).from(leads).where(and(eq(leads.id, supplierId), eq(leads.role, "supplier"), eq(leads.status, "approved"))).limit(1);
+    const [supplier] = await db.select({ id: leads.id, organizationId: leads.organizationId }).from(leads).where(and(eq(leads.id, supplierId), eq(leads.role, "supplier"), eq(leads.status, "approved"))).limit(1);
     if (!supplier) return Response.json({ error: "Fornecedor indisponível." }, { status: 404 });
-    const [conversation] = await db.insert(conversations).values({ clientUserId: user.userId, supplierId, subject: String(body.subject || "Contato pelo Hub Brasil").trim().slice(0, 140) }).onConflictDoUpdate({ target: [conversations.clientUserId, conversations.supplierId], set: { updatedAt: new Date().toISOString() } }).returning();
+    const [conversation] = await db.insert(conversations).values({ clientOrganizationId: organizationId, supplierOrganizationId: supplier.organizationId, clientUserId: user.userId, supplierId, subject: String(body.subject || "Contato pelo Hub Brasil").trim().slice(0, 140) }).onConflictDoUpdate({ target: [conversations.clientUserId, conversations.supplierId], set: { clientOrganizationId: organizationId, supplierOrganizationId: supplier.organizationId, updatedAt: new Date().toISOString() } }).returning();
     conversationId = conversation.id;
   }
   const [conversation] = await db.select().from(conversations).where(eq(conversations.id, conversationId));
-  if (!canAccessConversation(user, profile, conversation)) return Response.json({ error: "Você não tem acesso a esta conversa." }, { status: 403 });
-  const [message] = await db.insert(conversationMessages).values({ conversationId, senderUserId: user.userId, body: text }).returning();
+  if (!conversation || ![conversation.clientOrganizationId, conversation.supplierOrganizationId].includes(organizationId) || !canAccessConversation(user, profile, conversation)) return Response.json({ error: "Você não tem acesso a esta conversa." }, { status: 403 });
+  const [message] = await db.insert(conversationMessages).values({ conversationId, senderOrganizationId: organizationId, senderUserId: user.userId, body: text }).returning();
   await db.update(conversations).set({ updatedAt: new Date().toISOString() }).where(eq(conversations.id, conversationId));
   return Response.json({ ok: true, conversationId, message }, { status: 201 });
 }

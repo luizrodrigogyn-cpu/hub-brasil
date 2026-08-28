@@ -2,6 +2,8 @@ import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { activityEvents, leads, supplierRatings } from "../../../db/schema";
 import { getApiUser } from "../../admin-auth";
+import { getTenantContext } from "../../tenant-context";
+import { FEATURES, requireFeature } from "../../features";
 
 export async function GET() {
   try {
@@ -28,17 +30,20 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const user = await getApiUser();
-    if (!user) return Response.json({ error: "Faça login para avaliar.", signIn: "/sign-in?return_to=/" }, { status: 401 });
+    const tenant = await getTenantContext();
+    if (!tenant) return Response.json({ error: "Faça login para avaliar.", signIn: "/sign-in?return_to=/" }, { status: 401 });
+    const { user, organizationId } = tenant;
+    const featureError = await requireFeature(organizationId, FEATURES.ratings);
+    if (featureError) return featureError;
     // O front agora manda o supplierId diretamente (não mais o nome da empresa): resolver por
     // nome escolhia "o primeiro resultado encontrado" quando dois fornecedores tinham o mesmo
     // nome — arriscado, mesmo sendo raro hoje. Validar o ID direto elimina essa ambiguidade.
     const body = await request.json() as { supplierId?: number; stars?: number };
     const supplierId = Number(body.supplierId);
     if (!Number.isInteger(supplierId) || supplierId <= 0 || !Number.isInteger(body.stars) || body.stars! < 1 || body.stars! > 5) return Response.json({ error: "Avaliação inválida." }, { status: 400 });
-    const [client] = await getDb().select({ role: leads.role }).from(leads).where(and(eq(leads.authUserId, user.userId), eq(leads.status, "approved")));
+    const [client] = await getDb().select({ role: leads.role }).from(leads).where(and(eq(leads.authUserId, user.userId), eq(leads.organizationId, organizationId), eq(leads.status, "approved")));
     if (client?.role !== "client") return Response.json({ error: "Somente clientes aprovados podem avaliar." }, { status: 403 });
-    const [supplier] = await getDb().select({ id: leads.id, company: leads.company, name: leads.name }).from(leads).where(and(eq(leads.id, supplierId), eq(leads.role, "supplier"), eq(leads.status, "approved")));
+    const [supplier] = await getDb().select({ id: leads.id, organizationId: leads.organizationId, company: leads.company, name: leads.name }).from(leads).where(and(eq(leads.id, supplierId), eq(leads.role, "supplier"), eq(leads.status, "approved")));
     if (!supplier) return Response.json({ error: "Fornecedor não encontrado." }, { status: 404 });
     const [eligible] = await getDb().select({ id: activityEvents.id }).from(activityEvents).where(and(eq(activityEvents.actorUserId, user.userId), eq(activityEvents.supplierId, supplierId), inArray(activityEvents.kind, ["whatsapp_click", "quote_request"]))).limit(1);
     if (!eligible) return Response.json({ error: "A avaliação é liberada após um contato ou pedido de cotação registrado." }, { status: 403 });
@@ -46,7 +51,7 @@ export async function POST(request: Request) {
     // Vínculo pelo supplierId (estável): a chave de unicidade da avaliação é (supplierId,
     // raterUserId), imune a renomeação de empresa. `supplierName` fica só como registro do texto
     // usado neste momento.
-    await getDb().insert(supplierRatings).values({ supplierId, supplierName, stars: body.stars!, raterUserId: user.userId }).onConflictDoUpdate({ target: [supplierRatings.supplierId, supplierRatings.raterUserId], set: { stars: body.stars!, supplierName } });
+    await getDb().insert(supplierRatings).values({ supplierId, supplierName, raterOrganizationId: organizationId, supplierOrganizationId: supplier.organizationId, stars: body.stars!, raterUserId: user.userId }).onConflictDoUpdate({ target: [supplierRatings.supplierId, supplierRatings.raterUserId], set: { stars: body.stars!, supplierName, raterOrganizationId: organizationId, supplierOrganizationId: supplier.organizationId } });
     const [summary] = await getDb().select({ average: sql<number>`avg(${supplierRatings.stars})`, total: sql<number>`count(*)` }).from(supplierRatings).where(eq(supplierRatings.supplierId, supplierId));
     return Response.json({ average: Number(summary.average), total: Number(summary.total) }, { status: 201 });
   } catch { return Response.json({ error: "Não foi possível avaliar." }, { status: 500 }); }

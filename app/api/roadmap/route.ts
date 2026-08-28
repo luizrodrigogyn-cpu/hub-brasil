@@ -1,7 +1,8 @@
 import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { activityEvents, alertPreferences, contentReports, creditLedger, creditWallets, deletionRequests, favorites, highlightActivations, leads, products, quoteRecipients, quoteRequests, referrals, supplierEvents } from "../../../db/schema";
-import { getApiUser } from "../../admin-auth";
+import { getTenantContext } from "../../tenant-context";
+import { FEATURES, requireFeature } from "../../features";
 import { activeHighlights, awardCredit, profileCompleteness, qualifyReferralIfReady, recomputeHubScore, ruleFor } from "../../hub-credits";
 import { isValidBrazilState, normalizeBrazilState } from "../../brazil-states";
 import { canManageClientQuote, canRespondToSupplierQuote } from "../../access-policy.mjs";
@@ -28,16 +29,17 @@ function toPositiveInt(value: unknown, fallback: number, max: number) {
 }
 
 export async function GET() {
-  const user = await getApiUser();
-  if (!user) return Response.json({ error: "Faça login para acessar o painel.", signIn: "/sign-in?return_to=/" }, { status: 401 });
+  const tenant = await getTenantContext();
+  if (!tenant) return Response.json({ error: "Faça login para acessar o painel.", signIn: "/sign-in?return_to=/" }, { status: 401 });
+  const { user, organizationId } = tenant;
   const db = getDb();
-  const [profile] = await db.select().from(leads).where(eq(leads.authUserId, user.userId));
+  const [profile] = await db.select().from(leads).where(and(eq(leads.authUserId, user.userId), eq(leads.organizationId, organizationId)));
   if (!profile) return Response.json({ error: "Conclua seu cadastro no Hub para acessar o painel." }, { status: 403 });
 
   const [saved, alerts, clientQuotesRaw] = await Promise.all([
-    db.select().from(favorites).where(eq(favorites.userId, user.userId)).orderBy(desc(favorites.createdAt)),
-    db.select().from(alertPreferences).where(eq(alertPreferences.userId, user.userId)),
-    db.select().from(quoteRequests).where(eq(quoteRequests.clientUserId, user.userId)).orderBy(desc(quoteRequests.createdAt)).limit(30),
+    db.select().from(favorites).where(eq(favorites.organizationId, organizationId)).orderBy(desc(favorites.createdAt)),
+    db.select().from(alertPreferences).where(eq(alertPreferences.organizationId, organizationId)),
+    db.select().from(quoteRequests).where(eq(quoteRequests.clientOrganizationId, organizationId)).orderBy(desc(quoteRequests.createdAt)).limit(30),
   ]);
   const clientQuoteIds = clientQuotesRaw.map((item) => item.id);
   const clientQuoteStats = clientQuoteIds.length
@@ -120,10 +122,11 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const user = await getApiUser();
-  if (!user) return Response.json({ error: "Faça login para continuar.", signIn: "/sign-in?return_to=/" }, { status: 401 });
+  const tenant = await getTenantContext();
+  if (!tenant) return Response.json({ error: "Faça login para continuar.", signIn: "/sign-in?return_to=/" }, { status: 401 });
+  const { user, organizationId } = tenant;
   const db = getDb();
-  const [profile] = await db.select().from(leads).where(eq(leads.authUserId, user.userId));
+  const [profile] = await db.select().from(leads).where(and(eq(leads.authUserId, user.userId), eq(leads.organizationId, organizationId)));
   if (!profile || profile.status !== "approved") return Response.json({ error: "Seu cadastro precisa estar aprovado." }, { status: 403 });
   const body = await request.json() as Record<string, unknown>;
   const action = String(body.action || "");
@@ -132,18 +135,18 @@ export async function POST(request: Request) {
     const entityType = String(body.entityType || "");
     const entityId = Number(body.entityId);
     if (!allowedFavoriteTypes.has(entityType) || !Number.isInteger(entityId) || entityId < 1) return Response.json({ error: "Favorito inválido." }, { status: 400 });
-    await db.insert(favorites).values({ userId: user.userId, entityType, entityId }).onConflictDoNothing();
-    if (entityType === "supplier") await db.insert(activityEvents).values({ actorUserId: user.userId, supplierId: entityId, kind: "favorite" });
+    await db.insert(favorites).values({ organizationId, userId: user.userId, entityType, entityId }).onConflictDoNothing();
+    if (entityType === "supplier") await db.insert(activityEvents).values({ actorOrganizationId: organizationId, actorUserId: user.userId, supplierId: entityId, kind: "favorite" });
     return Response.json({ ok: true });
   }
 
   if (action === "unfavorite") {
-    await db.delete(favorites).where(and(eq(favorites.userId, user.userId), eq(favorites.entityType, String(body.entityType)), eq(favorites.entityId, Number(body.entityId))));
+    await db.delete(favorites).where(and(eq(favorites.organizationId, organizationId), eq(favorites.entityType, String(body.entityType)), eq(favorites.entityId, Number(body.entityId))));
     return Response.json({ ok: true });
   }
 
   if (action === "alerts") {
-    const values = { userId: user.userId, categories: JSON.stringify(list(body.categories)), states: JSON.stringify(list(body.states)), contentTypes: JSON.stringify(list(body.contentTypes)), frequency: body.frequency === "off" ? "off" : "weekly", active: body.frequency !== "off", unsubscribeToken: crypto.randomUUID(), updatedAt: new Date().toISOString() };
+    const values = { organizationId, userId: user.userId, categories: JSON.stringify(list(body.categories)), states: JSON.stringify(list(body.states)), contentTypes: JSON.stringify(list(body.contentTypes)), frequency: body.frequency === "off" ? "off" : "weekly", active: body.frequency !== "off", unsubscribeToken: crypto.randomUUID(), updatedAt: new Date().toISOString() };
     await db.insert(alertPreferences).values(values).onConflictDoUpdate({ target: alertPreferences.userId, set: values });
     return Response.json({ ok: true });
   }
@@ -166,17 +169,19 @@ export async function POST(request: Request) {
     const entityId = Number(body.entityId);
     const reason = String(body.reason || "").trim();
     if (!allowedFavoriteTypes.has(entityType) || !Number.isInteger(entityId) || !reason) return Response.json({ error: "Informe o conteúdo e o motivo da denúncia." }, { status: 400 });
-    await db.insert(contentReports).values({ reporterUserId: user.userId, entityType, entityId, reason: reason.slice(0, 120), details: String(body.details || "").trim().slice(0, 1500) || null });
+    await db.insert(contentReports).values({ reporterOrganizationId: organizationId, reporterUserId: user.userId, entityType, entityId, reason: reason.slice(0, 120), details: String(body.details || "").trim().slice(0, 1500) || null });
     return Response.json({ ok: true }, { status: 201 });
   }
 
   if (action === "request_deletion") {
     const [existing] = await db.select().from(deletionRequests).where(and(eq(deletionRequests.userId, user.userId), eq(deletionRequests.status, "pending")));
-    if (!existing) await db.insert(deletionRequests).values({ userId:user.userId, email:user.email, reason:String(body.reason||"").trim().slice(0,800)||null });
+    if (!existing) await db.insert(deletionRequests).values({ organizationId, userId:user.userId, email:user.email, reason:String(body.reason||"").trim().slice(0,800)||null });
     return Response.json({ ok:true, message:"Solicitação registrada para análise segura." }, { status:201 });
   }
 
   if (action === "quote") {
+    const featureError = await requireFeature(organizationId, FEATURES.quotes);
+    if (featureError) return featureError;
     if (profile.role !== "client") return Response.json({ error: "A cotação deve ser criada por um perfil de cliente." }, { status: 403 });
     const supplierIds = normalizeIds(body.supplierIds).slice(0, 8);
     const category = normalizeText(body.category);
@@ -204,19 +209,19 @@ export async function POST(request: Request) {
     const oneHourAgo = new Date(Date.now() - 3600000).toISOString();
     const [{ total }] = await db.select({ total: sql<number>`count(*)` }).from(quoteRequests).where(and(eq(quoteRequests.clientUserId, user.userId), gte(quoteRequests.createdAt, oneHourAgo)));
     if (Number(total) >= 3) return Response.json({ error: "Limite temporário atingido. Aguarde antes de enviar outra cotação." }, { status: 429 });
-    const approved = await db.select({ id: leads.id }).from(leads).where(and(inArray(leads.id, supplierIds), eq(leads.role, "supplier"), eq(leads.status, "approved")));
+    const approved = await db.select({ id: leads.id, organizationId: leads.organizationId }).from(leads).where(and(inArray(leads.id, supplierIds), eq(leads.role, "supplier"), eq(leads.status, "approved")));
     if (!approved.length) return Response.json({ error: "Nenhum fornecedor selecionado está disponível." }, { status: 400 });
     const protocol = `HB-${new Date().getFullYear()}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
     const consentSnapshot = JSON.stringify({ version: "2026-08-24", consent: true, shared: ["nome", "telefone", "empresa_ou_instagram", "necessidade"], supplierIds: approved.map((item) => item.id), acceptedAt: new Date().toISOString() });
-    const [quote] = await db.insert(quoteRequests).values({ protocol, clientUserId: user.userId, category, application, quantity, city, state, deadline: deadlineText || null, notes: notes || null, budget: budget || null, urgency: urgency || null, integration: integration.length ? JSON.stringify(integration) : null, consentSnapshot }).returning();
+    const [quote] = await db.insert(quoteRequests).values({ clientOrganizationId: organizationId, protocol, clientUserId: user.userId, category, application, quantity, city, state, deadline: deadlineText || null, notes: notes || null, budget: budget || null, urgency: urgency || null, integration: integration.length ? JSON.stringify(integration) : null, consentSnapshot }).returning();
     // db.batch() exige uma tupla de tamanho fixo no tipo; um array montado dinamicamente (tamanho
     // varia com a quantidade de fornecedores escolhidos) nunca bate com essa assinatura. Além
     // disso, misturar inserts de tabelas diferentes (quoteRecipients e activityEvents) num mesmo
     // array faz o TypeScript tentar unificar os dois tipos já na montagem — por isso o array
     // precisa nascer tipado como `any[]`, e não só receber `as any` no ponto de uso.
     const batchStatements: any[] = [
-      ...approved.map((supplier) => db.insert(quoteRecipients).values({ quoteId: quote.id, supplierId: supplier.id })),
-      ...approved.map((supplier) => db.insert(activityEvents).values({ actorUserId: user.userId, supplierId: supplier.id, kind: "quote_request" })),
+      ...approved.map((supplier) => db.insert(quoteRecipients).values({ supplierOrganizationId: supplier.organizationId, quoteId: quote.id, supplierId: supplier.id })),
+      ...approved.map((supplier) => db.insert(activityEvents).values({ actorOrganizationId: organizationId, supplierOrganizationId: supplier.organizationId, actorUserId: user.userId, supplierId: supplier.id, kind: "quote_request" })),
     ];
     await db.batch(batchStatements as any);
     return Response.json({ ok: true, protocol }, { status: 201 });

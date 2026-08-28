@@ -39,6 +39,7 @@ yarn-error.log*
 /.wrangler-auth/
 /outputs/
 /work/
+/backups/
 
 # Codex temporary publishing artifacts
 /.codex-publish-temp/

@@ -23,5 +23,22 @@
       "binding": "PRODUCT_IMAGES",
       "bucket_name": "hub-brasil-product-images"
     }
-  ]
+  ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "ERROR_QUEUE",
+        "queue": "hub-brasil-errors"
+      }
+    ],
+    "consumers": [
+      {
+        "queue": "hub-brasil-errors",
+        "max_batch_size": 10,
+        "max_batch_timeout": 5,
+        "max_retries": 3,
+        "dead_letter_queue": "hub-brasil-errors-dlq"
+      }
+    ]
+  }
 }

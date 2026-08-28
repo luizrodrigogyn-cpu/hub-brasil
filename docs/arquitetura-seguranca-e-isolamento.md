@@ -2,6 +2,10 @@
 
 Data da revisão: 27/08/2026
 
+> Documento histórico da revisão inicial. Para o estado verificado após as
+> implementações e a conferência do painel Cloudflare, consulte
+> `docs/auditoria-360-2026-08-28.md`.
+
 Este documento descreve o estado atual do Hub Brasil e o estado-alvo necessário antes de ampliar o teste com clientes. Ele não substitui uma auditoria externa, mas define as regras que o código, o banco e a esteira devem cumprir.
 
 ## 1. Mapa do sistema
@@ -296,4 +300,3 @@ Dados pessoais como telefone, e-mail, endereço e CNPJ ainda são colunas legív
 1. Catálogo de módulos e feature flags.
 2. Organizações/`tenant_id` se o produto passar a suportar equipes empresariais.
 3. Criptografia de campo para PII caso o modelo de risco/compliance exija proteção além da criptografia automática do D1.
-
