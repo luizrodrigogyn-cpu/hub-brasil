@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { BRAZIL_STATES } from "../brazil-states";
+import { WhatsAppField } from "../whatsapp-field";
 
 type Installer = { id: number; name: string; city: string; state: string; specialties: string[]; serviceStates: string[]; description?: string | null; photoUrl?: string | null };
 const SPECIALTIES = ["Rastreador veicular", "Bloqueador", "Telemetria", "Videotelemetria", "Sensores e acessórios", "CAN / OBD", "Identificação de motorista", "Manutenção técnica"];
@@ -75,7 +76,7 @@ export default function InstallersPage() {
         <label>Foto profissional <small>opcional · JPG, PNG ou WebP de até 3 MB</small><input name="photo" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => { const file = event.target.files?.[0]; setPhotoPreview(file ? URL.createObjectURL(file) : null); }} /></label>
         {photoPreview && <img className="installer-photo-preview" src={photoPreview} alt="Prévia da foto profissional" />}
         <label className="consent"><input type="checkbox" name="photoConsent" /><span>Autorizo o Hub Brasil a exibir esta foto no meu perfil profissional. Obrigatório apenas se uma foto for enviada.</span></label>
-        <label>WhatsApp com DDD<input name="phone" required inputMode="tel" placeholder="(00) 00000-0000" /></label>
+        <WhatsAppField label="WhatsApp com DDD" />
         <div className="field-row"><label>Cidade<input name="city" required maxLength={100} /></label><label>UF<select name="state" required><option value="">Selecione</option>{BRAZIL_STATES.map((uf) => <option key={uf}>{uf}</option>)}</select></label></div>
         <fieldset className="solution-selector"><legend>Especialidades <small>selecione uma ou mais</small></legend>{SPECIALTIES.map((item) => <label className="check" key={item}><input type="checkbox" name="specialties" value={item} /> {item}</label>)}</fieldset>
         <fieldset className="solution-selector"><legend>Outras UFs atendidas <small>opcional</small></legend>{BRAZIL_STATES.map((uf) => <label className="check" key={uf}><input type="checkbox" name="serviceStates" value={uf} /> {uf}</label>)}</fieldset>

@@ -34,6 +34,17 @@ test("foto do instalador exige login, consentimento e imagem real", () => {
   assert.doesNotMatch(photo, /image\/svg\+xml/);
 });
 
+test("cadastros de fornecedor e instalador usam campo visual de WhatsApp", () => {
+  const field = readFileSync("app/whatsapp-field.tsx", "utf8");
+  const supplier = readFileSync("app/page.tsx", "utf8");
+  const installer = readFileSync("app/instaladores/page.tsx", "utf8");
+  assert.match(field, /whatsapp-icon/);
+  assert.match(field, /formatBrazilPhone/);
+  assert.match(field, /inputMode="tel"/);
+  assert.match(supplier, /<WhatsAppField/);
+  assert.match(installer, /<WhatsAppField/);
+});
+
 test("D1: apenas instaladores aprovados e consentidos entram no diretório", () => {
   const db = new DatabaseSync(":memory:");
   db.exec(`

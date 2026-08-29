@@ -2,6 +2,7 @@
 
 import { type ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { BRAZIL_STATES } from "./brazil-states";
+import { WhatsAppField } from "./whatsapp-field";
 
 // Os tipos oficiais da Cloudflare tipam Response.json() como `unknown` em vez de `any`;
 // este helper concentra a conversão explícita usada em todas as leituras de JSON do fetch.
@@ -1116,7 +1117,7 @@ export default function Home() {
             <form onSubmit={register}>
               <input type="hidden" name="role" value={registrationRole} />
               <label>Seu nome<input name="name" required placeholder="Como podemos chamar você?" /></label>
-              <label>Telefone / WhatsApp<input name="phone" required inputMode="tel" placeholder="(00) 00000-0000" /></label>
+              <WhatsAppField />
               <label>Endereço<input name="address" required placeholder="Rua, número, bairro e complemento" /></label>
               <div className="field-row"><label>Nome fantasia {registrationRole === "client" && <small>Opcional</small>}<input name="company" required={registrationRole === "supplier"} placeholder="Nome da empresa" /></label><label>Instagram <small>Opcional</small><input name="instagram" placeholder="@suaempresa" /></label></div>
               {registrationRole === "client" && <><label>CNPJ <small>Opcional</small><input name="cnpj" inputMode="numeric" placeholder="00.000.000/0000-00" /></label><label>Foto de perfil <small>Opcional · PNG, JPG ou WebP, até 3 MB</small><input name="profilePhoto" type="file" accept="image/png,image/jpeg,image/webp" /></label></>}
