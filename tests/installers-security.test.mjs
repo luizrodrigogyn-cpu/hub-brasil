@@ -18,6 +18,12 @@ test("WhatsApp só é liberado por rota autenticada e sem cache", () => {
   assert.match(contact, /eq\(installers\.status, "approved"\)/);
 });
 
+test("Worker impede enquadramento do site em páginas externas", () => {
+  const worker = readFileSync("worker/index.ts", "utf8");
+  assert.match(worker, /x-frame-options/);
+  assert.match(worker, /DENY/);
+});
+
 test("D1: apenas instaladores aprovados e consentidos entram no diretório", () => {
   const db = new DatabaseSync(":memory:");
   db.exec(`

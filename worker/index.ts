@@ -84,6 +84,7 @@ function withSecurityHeaders(response: Response, requestId: string): Response {
   const headers = new Headers(response.headers);
   if (!headers.has("x-content-type-options")) headers.set("x-content-type-options", "nosniff");
   if (!headers.has("referrer-policy")) headers.set("referrer-policy", "strict-origin-when-cross-origin");
+  if (!headers.has("x-frame-options")) headers.set("x-frame-options", "DENY");
   if (!headers.has("permissions-policy")) headers.set("permissions-policy", "camera=(), microphone=(), geolocation=()");
   if (!headers.has("strict-transport-security")) headers.set("strict-transport-security", "max-age=31536000");
   headers.set("x-request-id", requestId);
