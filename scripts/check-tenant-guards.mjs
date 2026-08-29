@@ -33,6 +33,13 @@ const leadSource = readFileSync("app/api/leads/route.ts", "utf8");
 for (const field of ["phoneEncrypted", "emailEncrypted", "addressEncrypted", "cnpjEncrypted", "instagramEncrypted"]) {
   if (!leadSource.includes(field)) failures.push(`leads: campo ${field} não é cifrado na gravação`);
 }
+const installerSource = readFileSync("app/api/installers/route.ts", "utf8");
+if (!installerSource.includes("phoneEncrypted") || !installerSource.includes("encryptPii(phone)")) failures.push("installers: WhatsApp não é cifrado na gravação");
+for (const forbidden of ["cpf", "budget", "payment", "address"]) {
+  if (new RegExp(`body\\.${forbidden}\\b`, "i").test(installerSource)) failures.push(`installers: campo proibido ${forbidden} encontrado no cadastro`);
+}
+const contactSource = readFileSync("app/api/installers/[id]/contact/route.ts", "utf8");
+if (!contactSource.includes("getApiUser")) failures.push("installers: liberação de WhatsApp sem autenticação");
 if (failures.length) {
   console.error(`Gate de isolamento reprovado:\n- ${failures.join("\n- ")}`);
   process.exit(1);

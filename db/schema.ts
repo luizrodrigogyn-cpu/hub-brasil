@@ -129,6 +129,41 @@ export const loginSessions = sqliteTable("login_sessions", {
   revokedAt: text("revoked_at"),
 }, (table) => ({ userSeenIdx: index("idx_login_sessions_user_seen").on(table.userId, table.lastSeenAt) }));
 
+export const installers = sqliteTable("installers", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  organizationId: text("organization_id").references(() => organizations.id),
+  ownerUserId: text("owner_user_id").notNull(),
+  name: text("name").notNull(),
+  phone: text("phone").notNull().default("[encrypted]"),
+  phoneEncrypted: text("phone_encrypted").notNull(),
+  city: text("city").notNull(),
+  state: text("state").notNull(),
+  serviceStates: text("service_states").notNull().default("[]"),
+  specialties: text("specialties").notNull().default("[]"),
+  description: text("description"),
+  status: text("status").notNull().default("pending"),
+  phoneVerifiedAt: text("phone_verified_at"),
+  contactConsent: integer("contact_consent", { mode: "boolean" }).notNull().default(true),
+  consentAt: text("consent_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => ({
+  ownerIdx: uniqueIndex("idx_installers_owner").on(table.ownerUserId),
+  locationIdx: index("idx_installers_status_location").on(table.status, table.state, table.city),
+  organizationIdx: index("idx_installers_organization").on(table.organizationId),
+}));
+
+export const installerContactEvents = sqliteTable("installer_contact_events", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  installerId: integer("installer_id").notNull().references(() => installers.id),
+  actorUserId: text("actor_user_id").notNull(),
+  kind: text("kind").notNull().default("whatsapp_revealed"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => ({
+  installerCreatedIdx: index("idx_installer_contacts_installer_created").on(table.installerId, table.createdAt),
+  actorCreatedIdx: index("idx_installer_contacts_actor_created").on(table.actorUserId, table.createdAt),
+}));
+
 export const hubScoreSnapshots = sqliteTable("hub_score_snapshots", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   supplierId: integer("supplier_id").notNull().references(() => leads.id),

@@ -1,10 +1,10 @@
 import { and, desc, eq, gte, isNotNull, sql } from "drizzle-orm";
 import { getDb } from "../../../../db";
-import { contentReports, creditLedger, creditWallets, deletionRequests, highlightActivations, leads, marketNeeds, moderationAudit, products, sectorNews, supplierEvents, supplierRatings, supplierUpdates, technicalArticles } from "../../../../db/schema";
+import { contentReports, creditLedger, creditWallets, deletionRequests, highlightActivations, installerContactEvents, installers, leads, marketNeeds, moderationAudit, products, sectorNews, supplierEvents, supplierRatings, supplierUpdates, technicalArticles } from "../../../../db/schema";
 import { getChatGPTUser } from "../../../chatgpt-auth";
 import { adminAccessState, isHubAdmin } from "../../../admin-auth";
 import { assignFounderMember, awardCredit, deleteSupplierCascade, ensureReferralCode, qualifyReferralIfReady, recomputeHubScore } from "../../../hub-credits";
-import { decryptLeadPii } from "../../../pii-crypto";
+import { decryptLeadPii, decryptPii } from "../../../pii-crypto";
 
 function adminErrorMessage(state: "denied" | "needs_2fa" | "granted") {
   return state === "needs_2fa" ? "Acesso restrito ao gestor. Conclua a verificação em duas etapas (2FA) na sua conta e faça login novamente." : "Acesso restrito ao gestor.";
@@ -14,8 +14,9 @@ export async function GET() {
   const state = adminAccessState(await getChatGPTUser());
   if (state !== "granted") return Response.json({ error: adminErrorMessage(state) }, { status: 403 });
   const db = getDb();
-  const [suppliers, productRows, events, needs, updates, articles, news, reports, deletions, audit] = await Promise.all([
+  const [suppliers, installerRows, productRows, events, needs, updates, articles, news, reports, deletions, audit] = await Promise.all([
     db.select().from(leads).where(eq(leads.role, "supplier")).orderBy(desc(leads.createdAt)),
+    db.select().from(installers).orderBy(desc(installers.createdAt)),
     db.select().from(products).orderBy(desc(products.createdAt)),
     db.select().from(supplierEvents).orderBy(desc(supplierEvents.createdAt)),
     db.select().from(marketNeeds).orderBy(desc(marketNeeds.createdAt)),
@@ -33,7 +34,8 @@ export async function GET() {
   const positiveRatings = await db.select({ supplierId: supplierRatings.supplierId, positiveTotal: sql<number>`count(*)` }).from(supplierRatings).where(and(gte(supplierRatings.stars, 4), isNotNull(supplierRatings.supplierId))).groupBy(supplierRatings.supplierId);
   const positiveMap = new Map(positiveRatings.map((item) => [item.supplierId, Number(item.positiveTotal)]));
   const suppliersWithRatings = await Promise.all(suppliers.map(async (item) => ({ ...(await decryptLeadPii(item)), positiveRatings: positiveMap.get(item.id) || 0 })));
-  return Response.json({ suppliers: suppliersWithRatings, products: productRows, events, needs, updates, articles, news, reports, deletions, audit, wallets, credits, highlights });
+  const installersWithPhone = await Promise.all(installerRows.map(async (item) => ({ ...item, phone: await decryptPii(item.phoneEncrypted) })));
+  return Response.json({ suppliers: suppliersWithRatings, installers: installersWithPhone, products: productRows, events, needs, updates, articles, news, reports, deletions, audit, wallets, credits, highlights });
 }
 
 export async function POST(request: Request) {
@@ -46,7 +48,13 @@ export async function POST(request: Request) {
   // cada chamada de eq(...) — motivo dos ~40 erros de tipo (TS2769) que existiam aqui.
   const id = Number(body.id);
   const db = getDb();
-  if (body.entity === "supplier") {
+  if (body.entity === "installer") {
+    if (body.action === "verify_phone") await db.update(installers).set({ phoneVerifiedAt: new Date().toISOString(), updatedAt: new Date().toISOString() }).where(eq(installers.id, id));
+    else if (body.action === "approve") { const [installer] = await db.select().from(installers).where(eq(installers.id, id)); if (!installer?.phoneVerifiedAt) return Response.json({ error: "Valide o WhatsApp antes de aprovar." }, { status: 400 }); await db.update(installers).set({ status: "approved", updatedAt: new Date().toISOString() }).where(eq(installers.id, id)); }
+    else if (body.action === "reject") await db.update(installers).set({ status: "rejected", updatedAt: new Date().toISOString() }).where(eq(installers.id, id));
+    else if (body.action === "edit_name") await db.update(installers).set({ name: String(body.value || "").trim().slice(0, 120), status: "pending", updatedAt: new Date().toISOString() }).where(eq(installers.id, id));
+    else if (body.action === "delete") { await db.delete(installerContactEvents).where(eq(installerContactEvents.installerId, id)); await db.delete(installers).where(eq(installers.id, id)); }
+  } else if (body.entity === "supplier") {
     if (body.action === "verify_phone") { await db.update(leads).set({ phoneVerifiedAt: new Date().toISOString() }).where(eq(leads.id, id)); await recomputeHubScore(db, id, "telefone_validado"); }
     else if (body.action === "confirm_cnpj") await db.update(leads).set({ cnpjValidationStatus: "manually_confirmed" }).where(eq(leads.id, id));
     else if (body.action === "grant_verified") {

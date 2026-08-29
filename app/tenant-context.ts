@@ -24,7 +24,7 @@ export async function getTenantContext(): Promise<TenantContext | null> {
   return { user, organizationId: membership.organizationId, membershipRole: membership.membershipRole, profile: profile || null, adminState: adminAccessState(user) };
 }
 
-export async function ensurePersonalOrganization(userId: string, displayName: string, kind: "client" | "supplier") {
+export async function ensurePersonalOrganization(userId: string, displayName: string, kind: "client" | "supplier" | "installer") {
   const db = getDb();
   const [current] = await db.select({ organizationId: organizationMembers.organizationId })
     .from(organizationMembers)

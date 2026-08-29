@@ -12,6 +12,7 @@ export async function GET() {
   const staticEntries = [
     urlEntry("/", "daily", "1.0"),
     urlEntry("/solucoes", "weekly", "0.9"),
+    urlEntry("/instaladores", "weekly", "0.9"),
     ...niches.map((niche) => urlEntry(`/solucoes/${niche.slug}`, "weekly", "0.8")),
     urlEntry("/privacidade", "yearly", "0.2"),
     urlEntry("/termos", "yearly", "0.2"),
