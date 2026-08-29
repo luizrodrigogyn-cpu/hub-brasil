@@ -31,6 +31,7 @@ function publicInstaller(row: typeof installers.$inferSelect) {
     specialties,
     serviceStates,
     description: row.description,
+    photoUrl: row.photoKey ? `/api/installer-photo?key=${encodeURIComponent(row.photoKey)}` : null,
     phonePreview: "WhatsApp protegido",
   };
 }

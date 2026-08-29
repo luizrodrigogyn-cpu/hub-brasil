@@ -141,6 +141,8 @@ export const installers = sqliteTable("installers", {
   serviceStates: text("service_states").notNull().default("[]"),
   specialties: text("specialties").notNull().default("[]"),
   description: text("description"),
+  photoKey: text("photo_key"),
+  photoConsentAt: text("photo_consent_at"),
   status: text("status").notNull().default("pending"),
   phoneVerifiedAt: text("phone_verified_at"),
   contactConsent: integer("contact_consent", { mode: "boolean" }).notNull().default(true),

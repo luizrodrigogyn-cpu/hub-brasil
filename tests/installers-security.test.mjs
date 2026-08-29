@@ -24,6 +24,16 @@ test("Worker impede enquadramento do site em páginas externas", () => {
   assert.match(worker, /DENY/);
 });
 
+test("foto do instalador exige login, consentimento e imagem real", () => {
+  const photo = readFileSync("app/api/installer-photo/route.ts", "utf8");
+  assert.match(photo, /getApiUser/);
+  assert.match(photo, /photoConsent/);
+  assert.match(photo, /matchesImageSignature/);
+  assert.match(photo, /installer-photos\//);
+  assert.match(photo, /status: "pending"/);
+  assert.doesNotMatch(photo, /image\/svg\+xml/);
+});
+
 test("D1: apenas instaladores aprovados e consentidos entram no diretório", () => {
   const db = new DatabaseSync(":memory:");
   db.exec(`

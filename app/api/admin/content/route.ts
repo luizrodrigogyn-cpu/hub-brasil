@@ -1,4 +1,5 @@
 import { and, desc, eq, gte, isNotNull, sql } from "drizzle-orm";
+import { env } from "cloudflare:workers";
 import { getDb } from "../../../../db";
 import { contentReports, creditLedger, creditWallets, deletionRequests, highlightActivations, installerContactEvents, installers, leads, marketNeeds, moderationAudit, products, sectorNews, supplierEvents, supplierRatings, supplierUpdates, technicalArticles } from "../../../../db/schema";
 import { getChatGPTUser } from "../../../chatgpt-auth";
@@ -53,7 +54,7 @@ export async function POST(request: Request) {
     else if (body.action === "approve") { const [installer] = await db.select().from(installers).where(eq(installers.id, id)); if (!installer?.phoneVerifiedAt) return Response.json({ error: "Valide o WhatsApp antes de aprovar." }, { status: 400 }); await db.update(installers).set({ status: "approved", updatedAt: new Date().toISOString() }).where(eq(installers.id, id)); }
     else if (body.action === "reject") await db.update(installers).set({ status: "rejected", updatedAt: new Date().toISOString() }).where(eq(installers.id, id));
     else if (body.action === "edit_name") await db.update(installers).set({ name: String(body.value || "").trim().slice(0, 120), status: "pending", updatedAt: new Date().toISOString() }).where(eq(installers.id, id));
-    else if (body.action === "delete") { await db.delete(installerContactEvents).where(eq(installerContactEvents.installerId, id)); await db.delete(installers).where(eq(installers.id, id)); }
+    else if (body.action === "delete") { const [installer] = await db.select({ photoKey: installers.photoKey }).from(installers).where(eq(installers.id, id)); await db.delete(installerContactEvents).where(eq(installerContactEvents.installerId, id)); await db.delete(installers).where(eq(installers.id, id)); if (installer?.photoKey) await env.PRODUCT_IMAGES.delete(installer.photoKey); }
   } else if (body.entity === "supplier") {
     if (body.action === "verify_phone") { await db.update(leads).set({ phoneVerifiedAt: new Date().toISOString() }).where(eq(leads.id, id)); await recomputeHubScore(db, id, "telefone_validado"); }
     else if (body.action === "confirm_cnpj") await db.update(leads).set({ cnpjValidationStatus: "manually_confirmed" }).where(eq(leads.id, id));
