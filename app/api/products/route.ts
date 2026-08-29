@@ -5,6 +5,7 @@ import { highlightActivations, leads, products } from "../../../db/schema";
 import { getApiUser } from "../../admin-auth";
 import { getTenantContext } from "../../tenant-context";
 import { FEATURES, requireFeature } from "../../features";
+import { decryptPii } from "../../pii-crypto";
 
 const arraySpecFields = new Set(["technology", "application", "features"]);
 const textSpecFields = new Set(["ip", "battery", "warranty"]);
@@ -67,12 +68,14 @@ export async function GET() {
     const supplierIds = viewer ? [...new Set(rows.map((item) => item.supplierId).filter((id): id is number => id != null))] : [];
     const legacyNames = viewer ? [...new Set(rows.filter((item) => item.supplierId == null).map((item) => item.supplierName).filter(Boolean))] : [];
     const [supplierRowsById, supplierRowsByName] = await Promise.all([
-      supplierIds.length ? db.select({ id: leads.id, phone: leads.phone, company: leads.company, name: leads.name }).from(leads).where(and(inArray(leads.id, supplierIds), eq(leads.role, "supplier"), eq(leads.status, "approved"))) : [],
-      legacyNames.length ? db.select({ id: leads.id, phone: leads.phone, company: leads.company, name: leads.name }).from(leads).where(and(or(inArray(leads.company, legacyNames), inArray(leads.name, legacyNames)), eq(leads.role, "supplier"), eq(leads.status, "approved"))) : [],
+      supplierIds.length ? db.select({ id: leads.id, phone: leads.phone, phoneEncrypted: leads.phoneEncrypted, company: leads.company, name: leads.name }).from(leads).where(and(inArray(leads.id, supplierIds), eq(leads.role, "supplier"), eq(leads.status, "approved"))) : [],
+      legacyNames.length ? db.select({ id: leads.id, phone: leads.phone, phoneEncrypted: leads.phoneEncrypted, company: leads.company, name: leads.name }).from(leads).where(and(or(inArray(leads.company, legacyNames), inArray(leads.name, legacyNames)), eq(leads.role, "supplier"), eq(leads.status, "approved"))) : [],
     ]);
-    const supplierById = new Map(supplierRowsById.map((supplier) => [supplier.id, supplier]));
+    const decryptedById = await Promise.all(supplierRowsById.map(async (supplier) => ({ ...supplier, phone: await decryptPii(supplier.phoneEncrypted || supplier.phone) })));
+    const decryptedByName = await Promise.all(supplierRowsByName.map(async (supplier) => ({ ...supplier, phone: await decryptPii(supplier.phoneEncrypted || supplier.phone) })));
+    const supplierById = new Map(decryptedById.map((supplier) => [supplier.id, supplier]));
     const supplierByName = new Map<string, { id: number; phone: string | null; company: string | null; name: string }>();
-    for (const supplier of supplierRowsByName) {
+    for (const supplier of decryptedByName) {
       if (supplier.company) supplierByName.set(supplier.company, supplier);
       if (supplier.name) supplierByName.set(supplier.name, supplier);
     }

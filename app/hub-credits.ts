@@ -157,7 +157,7 @@ export async function qualifyReferralIfReady(db: any, referredSupplierId: number
   const [referral] = await db.select().from(referrals).where(eq(referrals.referredSupplierId, referredSupplierId));
   if (!referral || referral.status === "qualified") return;
   const [supplier] = await db.select().from(leads).where(eq(leads.id, referredSupplierId));
-  if (!supplier || supplier.status !== "approved" || !supplier.phoneVerifiedAt || !supplier.cnpjNormalized || profileCompleteness(supplier as unknown as Record<string, unknown>) < 80) return;
+  if (!supplier || supplier.status !== "approved" || !supplier.phoneVerifiedAt || !(supplier.cnpjBlindIndex || supplier.cnpjNormalized) || profileCompleteness(supplier as unknown as Record<string, unknown>) < 80) return;
   const [[approvedProduct], [respondedQuote], [approvedUpdate], [needInterest]] = await Promise.all([
     db.select({ id: products.id }).from(products).where(and(eq(products.ownerUserId, supplier.authUserId || ""), eq(products.status, "approved"))).limit(1),
     db.select({ id: quoteRecipients.id }).from(quoteRecipients).where(and(eq(quoteRecipients.supplierId, supplier.id), eq(quoteRecipients.status, "responded"))).limit(1),

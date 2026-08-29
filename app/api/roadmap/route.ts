@@ -3,6 +3,7 @@ import { getDb } from "../../../db";
 import { activityEvents, alertPreferences, contentReports, creditLedger, creditWallets, deletionRequests, favorites, highlightActivations, leads, products, quoteRecipients, quoteRequests, referrals, supplierEvents } from "../../../db/schema";
 import { getTenantContext } from "../../tenant-context";
 import { FEATURES, requireFeature } from "../../features";
+import { decryptLeadPii } from "../../pii-crypto";
 import { activeHighlights, awardCredit, profileCompleteness, qualifyReferralIfReady, recomputeHubScore, ruleFor } from "../../hub-credits";
 import { isValidBrazilState, normalizeBrazilState } from "../../brazil-states";
 import { canManageClientQuote, canRespondToSupplierQuote } from "../../access-policy.mjs";
@@ -108,8 +109,9 @@ export async function GET() {
   const ledger = profile.role === "supplier" ? await db.select().from(creditLedger).where(eq(creditLedger.supplierId, profile.id)).orderBy(desc(creditLedger.createdAt)).limit(30) : [];
   const referralRows = profile.role === "supplier" ? await db.select().from(referrals).where(eq(referrals.referrerSupplierId, profile.id)) : [];
   const highlights = profile.role === "supplier" ? await activeHighlights(db, profile.id) : [];
+  const privateProfile = await decryptLeadPii(profile);
   return Response.json({
-    profile: { id: profile.id, name: profile.name, company: profile.company, role: profile.role, status: profile.status, verificationStatus: profile.verificationStatus, verifiedAt: profile.verifiedAt, phoneVerifiedAt: profile.phoneVerifiedAt, completeness, hubScore: profile.hubScore, founderMemberAt: profile.founderMemberAt, referralCode: profile.referralCode, phone: profile.phone, instagram: profile.instagram, website: profile.website, address: profile.address, city: profile.city, state: profile.state, description: profile.description, categories: JSON.parse(profile.categories || "[]"), serviceStates: JSON.parse(profile.serviceStates || "[]"), services: JSON.parse(profile.services || "[]"), serviceMode: profile.serviceMode, servesNationwide: profile.servesNationwide },
+    profile: { id: profile.id, name: profile.name, company: profile.company, role: profile.role, status: profile.status, verificationStatus: profile.verificationStatus, verifiedAt: profile.verifiedAt, phoneVerifiedAt: profile.phoneVerifiedAt, completeness, hubScore: profile.hubScore, founderMemberAt: profile.founderMemberAt, referralCode: profile.referralCode, phone: privateProfile.phone, instagram: privateProfile.instagram, website: profile.website, address: privateProfile.address, city: profile.city, state: profile.state, description: profile.description, categories: JSON.parse(profile.categories || "[]"), serviceStates: JSON.parse(profile.serviceStates || "[]"), services: JSON.parse(profile.services || "[]"), serviceMode: profile.serviceMode, servesNationwide: profile.servesNationwide },
     favorites: { suppliers: savedSuppliers, products: savedProducts, events: savedEvents },
     alerts: alerts[0] ? { ...alerts[0], categories: JSON.parse(alerts[0].categories || "[]"), states: JSON.parse(alerts[0].states || "[]"), contentTypes: JSON.parse(alerts[0].contentTypes || "[]") } : null,
     clientQuotes,

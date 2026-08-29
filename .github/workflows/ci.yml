@@ -66,6 +66,9 @@ jobs:
       - name: Impedir segredos no código
         run: npm run security:secrets
 
+      - name: Validar política de isolamento por organização
+        run: npm run security:tenant
+
       - name: Bloquear vulnerabilidades altas em produção
         run: npm run security:audit
 

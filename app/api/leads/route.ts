@@ -5,6 +5,7 @@ import { isValidCnpj, normalizeCnpj } from "../../hub-credits";
 import { isValidBrazilState, normalizeBrazilState } from "../../brazil-states";
 import { and, eq } from "drizzle-orm";
 import { ensurePersonalOrganization, getTenantContext } from "../../tenant-context";
+import { blindIndex, decryptLeadPii, encryptPii } from "../../pii-crypto";
 
 export async function POST(request: Request) {
   try {
@@ -28,6 +29,7 @@ export async function POST(request: Request) {
     const description = body.description?.trim() || null;
     const cnpj = body.cnpj?.trim() || null;
     const cnpjNormalized = cnpj ? normalizeCnpj(cnpj) : null;
+    const cnpjBlindIndex = await blindIndex(cnpjNormalized);
     const referralCode = body.referralCode?.trim().toUpperCase() || null;
     const logoConsent = body.logoConsent === "true";
     if (!name || !phone || !address) return Response.json({ error: "Preencha nome, telefone e endereço." }, { status: 400 });
@@ -40,19 +42,20 @@ export async function POST(request: Request) {
     const organizationId = await ensurePersonalOrganization(user.userId, company || name, role);
     const [current] = await db.select({ id: leads.id }).from(leads).where(eq(leads.authUserId, user.userId));
     if (role === "supplier" && cnpjNormalized) {
-      const [duplicate] = await db.select({ id: leads.id }).from(leads).where(eq(leads.cnpjNormalized, cnpjNormalized));
+      const [duplicate] = await db.select({ id: leads.id }).from(leads).where(eq(leads.cnpjBlindIndex, cnpjBlindIndex!));
       if (duplicate && duplicate.id !== current?.id) return Response.json({ error: "Este CNPJ já possui cadastro no Hub Brasil." }, { status: 409 });
     }
     const categories = role === "supplier" ? JSON.stringify(selectedCategories) : null;
-    const values = { name, phone, company, instagram, website, role, organizationId, authUserId: user.userId, email: user.email, address, status: role === "supplier" ? "pending" : "approved", category, categories, city, state, description, cnpj, cnpjNormalized, cnpjValidationStatus: cnpj ? "checksum_valid" : "not_informed", logoConsentAt: role === "supplier" && logoConsent ? new Date().toISOString() : null };
-    const [lead] = await db.insert(leads).values(values).onConflictDoUpdate({ target: leads.authUserId, set: { name, phone, company, instagram, website, role, email: user.email, address, category, categories, city, state, description, cnpj, cnpjNormalized, cnpjValidationStatus: cnpj ? "checksum_valid" : "not_informed", logoConsentAt: role === "supplier" && logoConsent ? new Date().toISOString() : null, status: role === "supplier" ? "pending" : "approved", phoneVerifiedAt: null } }).returning();
+    const encrypted = { phoneEncrypted: await encryptPii(phone), instagramEncrypted: await encryptPii(instagram), emailEncrypted: await encryptPii(user.email), addressEncrypted: await encryptPii(address), cnpjEncrypted: await encryptPii(cnpj) };
+    const values = { name, phone: "[encrypted]", ...encrypted, company, instagram: null, website, role, organizationId, authUserId: user.userId, email: null, address: null, status: role === "supplier" ? "pending" : "approved", category, categories, city, state, description, cnpj: null, cnpjNormalized: null, cnpjBlindIndex, cnpjValidationStatus: cnpj ? "checksum_valid" : "not_informed", logoConsentAt: role === "supplier" && logoConsent ? new Date().toISOString() : null };
+    const [lead] = await db.insert(leads).values(values).onConflictDoUpdate({ target: leads.authUserId, set: { name, phone: "[encrypted]", ...encrypted, company, instagram: null, website, role, email: null, address: null, category, categories, city, state, description, cnpj: null, cnpjNormalized: null, cnpjBlindIndex, cnpjValidationStatus: cnpj ? "checksum_valid" : "not_informed", logoConsentAt: role === "supplier" && logoConsent ? new Date().toISOString() : null, status: role === "supplier" ? "pending" : "approved", phoneVerifiedAt: null } }).returning();
     if (role === "supplier" && referralCode) {
       const [referrer] = await db.select().from(leads).where(eq(leads.referralCode, referralCode));
-      if (referrer && referrer.id !== lead.id && referrer.role === "supplier" && referrer.status === "approved" && referrer.cnpjNormalized !== cnpjNormalized) {
+      if (referrer && referrer.id !== lead.id && referrer.role === "supplier" && referrer.status === "approved" && referrer.cnpjBlindIndex !== cnpjBlindIndex) {
         await db.insert(referrals).values({ referrerSupplierId: referrer.id, referredSupplierId: lead.id, referralCode }).onConflictDoNothing();
       }
     }
-    return Response.json({ lead }, { status: 201 });
+    return Response.json({ lead: await decryptLeadPii(lead) }, { status: 201 });
   } catch { return Response.json({ error: "Não foi possível registrar o acesso." }, { status: 500 }); }
 }
 
@@ -79,7 +82,7 @@ export async function PATCH(request: Request) {
     if (!isValidBrazilState(state)) return Response.json({ error: "Informe uma UF brasileira válida (ex.: SP, RJ, MG)." }, { status: 400 });
     const categories = Array.isArray(body.categories) ? [...new Set(body.categories.map(String).map((item) => item.trim()).filter(Boolean))].slice(0, 12) : JSON.parse(profile.categories || "[]");
     if (!categories.length) return Response.json({ error: "Selecione ao menos uma solução." }, { status: 400 });
-    await db.update(leads).set({ company, phone, instagram, website, address, city, state, description, category: categories[0], categories: JSON.stringify(categories), updatedAt: new Date().toISOString() }).where(eq(leads.id, profile.id));
+    await db.update(leads).set({ company, phone: "[encrypted]", phoneEncrypted: await encryptPii(phone), instagram: null, instagramEncrypted: await encryptPii(instagram), website, address: null, addressEncrypted: await encryptPii(address), city, state, description, category: categories[0], categories: JSON.stringify(categories), updatedAt: new Date().toISOString() }).where(eq(leads.id, profile.id));
     return Response.json({ ok: true });
   } catch { return Response.json({ error: "Não foi possível salvar as alterações." }, { status: 500 }); }
 }

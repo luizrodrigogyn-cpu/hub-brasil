@@ -4,6 +4,7 @@ import { contentReports, creditLedger, creditWallets, deletionRequests, highligh
 import { getChatGPTUser } from "../../../chatgpt-auth";
 import { adminAccessState, isHubAdmin } from "../../../admin-auth";
 import { assignFounderMember, awardCredit, deleteSupplierCascade, ensureReferralCode, qualifyReferralIfReady, recomputeHubScore } from "../../../hub-credits";
+import { decryptLeadPii } from "../../../pii-crypto";
 
 function adminErrorMessage(state: "denied" | "needs_2fa" | "granted") {
   return state === "needs_2fa" ? "Acesso restrito ao gestor. Conclua a verificação em duas etapas (2FA) na sua conta e faça login novamente." : "Acesso restrito ao gestor.";
@@ -31,7 +32,7 @@ export async function GET() {
   // se a empresa for renomeada).
   const positiveRatings = await db.select({ supplierId: supplierRatings.supplierId, positiveTotal: sql<number>`count(*)` }).from(supplierRatings).where(and(gte(supplierRatings.stars, 4), isNotNull(supplierRatings.supplierId))).groupBy(supplierRatings.supplierId);
   const positiveMap = new Map(positiveRatings.map((item) => [item.supplierId, Number(item.positiveTotal)]));
-  const suppliersWithRatings = suppliers.map((item) => ({ ...item, positiveRatings: positiveMap.get(item.id) || 0 }));
+  const suppliersWithRatings = await Promise.all(suppliers.map(async (item) => ({ ...(await decryptLeadPii(item)), positiveRatings: positiveMap.get(item.id) || 0 })));
   return Response.json({ suppliers: suppliersWithRatings, products: productRows, events, needs, updates, articles, news, reports, deletions, audit, wallets, credits, highlights });
 }
 

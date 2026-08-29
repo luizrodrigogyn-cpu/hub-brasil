@@ -3,6 +3,7 @@ import { getDb } from "../../../../db";
 import { leads, moderationAudit } from "../../../../db/schema";
 import { getChatGPTUser } from "../../../chatgpt-auth";
 import { adminAccessState, isHubAdmin } from "../../../admin-auth";
+import { decryptLeadPii } from "../../../pii-crypto";
 
 // Neutraliza CSV/formula injection: um cadastro com nome/empresa começando com =, +, -, @, tab ou CR
 // vira uma fórmula "viva" quando o CSV é aberto no Excel/LibreOffice (ex.: =HYPERLINK(...) ou =cmd|...).
@@ -17,7 +18,8 @@ export async function GET() {
   const user = await getChatGPTUser();
   if (!isHubAdmin(user)) return new Response(adminAccessState(user) === "needs_2fa" ? "Acesso restrito ao gestor. Conclua a verificação em duas etapas (2FA) na sua conta e faça login novamente." : "Não autorizado", { status: 403 });
   const db = getDb();
-  const records = await db.select().from(leads).orderBy(desc(leads.createdAt));
+  const encryptedRecords = await db.select().from(leads).orderBy(desc(leads.createdAt));
+  const records = await Promise.all(encryptedRecords.map(decryptLeadPii));
   const rows = [["Perfil", "Status", "Telefone validado", "Nome", "Telefone", "Empresa", "Instagram", "Data"], ...records.map((lead) => [lead.role, lead.status, lead.phoneVerifiedAt ? "Sim" : "Não", lead.name, lead.phone, lead.company, lead.instagram, lead.createdAt])];
   const metadata = JSON.stringify({ format: "csv", recordCount: records.length, columns: rows[0] });
 

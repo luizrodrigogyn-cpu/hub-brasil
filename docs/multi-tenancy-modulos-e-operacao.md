@@ -12,6 +12,12 @@ O Hub Brasil passa a operar como **marketplace compartilhado com isolamento lóg
 
 O D1 usa SQLite e não oferece Row Level Security nativo como PostgreSQL. A barreira equivalente adotada é: contexto central de organização, filtros obrigatórios nas APIs, chaves estrangeiras, índices por organização e testes A/B com operações SQL reais.
 
+O gate `security:tenant` funciona como política RLS verificável no D1: nenhuma rota privada listada pode ser publicada sem `getTenantContext`, e nenhuma rota administrativa sem Gestor Master/2FA. O CI interrompe o deploy se uma dessas garantias for removida.
+
+## Dados pessoais e sessões
+
+Telefone, e-mail, endereço, CNPJ e Instagram são gravados em colunas cifradas com AES-256-GCM. A chave `PII_ENCRYPTION_KEY` existe apenas como secret do Worker. O índice determinístico do CNPJ contém somente SHA-256 normalizado para permitir detecção de duplicidade sem guardar o documento em texto aberto. `login_sessions` registra uma linha por sessão Clerk, permitindo contar usuários e sessões sem armazenar e-mail legível.
+
 ## Organizações
 
 - `organizations`: tenant lógico.

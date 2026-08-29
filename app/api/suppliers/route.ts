@@ -2,6 +2,7 @@ import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { activityEvents, highlightActivations, leads, products, quoteRecipients, supplierRatings } from "../../../db/schema";
 import { getApiUser } from "../../admin-auth";
+import { decryptPii } from "../../pii-crypto";
 
 function parsePriceTokens(text: string | null | undefined): number[] {
   if (!text) return [];
@@ -43,7 +44,8 @@ export async function GET() {
     const [viewer] = user ? await getDb().select({ id: leads.id, role: leads.role }).from(leads).where(and(eq(leads.authUserId, user.userId), eq(leads.status, "approved"))) : [];
     const revealedRows = viewer?.role === "client" ? await getDb().select({ supplierId: activityEvents.supplierId }).from(activityEvents).where(and(eq(activityEvents.actorUserId, user!.userId), eq(activityEvents.kind, "contact_revealed"))) : [];
     const revealedIds = new Set(revealedRows.map((row) => row.supplierId));
-    const rows = await getDb().select({ id: leads.id, name: leads.company, category: leads.category, categories: leads.categories, city: leads.city, state: leads.state, description: leads.description, logoKey: leads.logoKey, phone: leads.phone, instagram: leads.instagram, website: leads.website, verificationStatus: leads.verificationStatus, verifiedAt: leads.verifiedAt, hubScore: leads.hubScore, founderMemberAt: leads.founderMemberAt, serviceStates: leads.serviceStates, services: leads.services, serviceMode: leads.serviceMode, servesNationwide: leads.servesNationwide, updatedAt: leads.updatedAt, createdAt: leads.createdAt }).from(leads).where(and(eq(leads.status, "approved"), eq(leads.role, "supplier"), isNotNull(leads.phoneVerifiedAt)));
+    const encryptedRows = await getDb().select({ id: leads.id, name: leads.company, category: leads.category, categories: leads.categories, city: leads.city, state: leads.state, description: leads.description, logoKey: leads.logoKey, phone: leads.phone, phoneEncrypted: leads.phoneEncrypted, instagram: leads.instagram, instagramEncrypted: leads.instagramEncrypted, website: leads.website, verificationStatus: leads.verificationStatus, verifiedAt: leads.verifiedAt, hubScore: leads.hubScore, founderMemberAt: leads.founderMemberAt, serviceStates: leads.serviceStates, services: leads.services, serviceMode: leads.serviceMode, servesNationwide: leads.servesNationwide, updatedAt: leads.updatedAt, createdAt: leads.createdAt }).from(leads).where(and(eq(leads.status, "approved"), eq(leads.role, "supplier"), isNotNull(leads.phoneVerifiedAt)));
+    const rows = await Promise.all(encryptedRows.map(async (item) => ({ ...item, phone: await decryptPii(item.phoneEncrypted || item.phone), instagram: await decryptPii(item.instagramEncrypted || item.instagram) })));
     // Avaliações e produtos agora são agrupados por supplierId (estável) em vez do texto
     // supplierName salvo na linha — que fica desatualizado se a gestão renomear a empresa.
     const [ratings, responses, slaRows, priceRows, productCountRows] = await Promise.all([

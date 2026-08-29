@@ -70,13 +70,17 @@ export const leads = sqliteTable("leads", {
   organizationId: text("organization_id").references(() => organizations.id),
   name: text("name").notNull(),
   phone: text("phone").notNull(),
+  phoneEncrypted: text("phone_encrypted"),
   company: text("company"),
   instagram: text("instagram"),
+  instagramEncrypted: text("instagram_encrypted"),
   website: text("website"),
   role: text("role").notNull().default("client"),
   authUserId: text("auth_user_id"),
   email: text("email"),
+  emailEncrypted: text("email_encrypted"),
   address: text("address"),
+  addressEncrypted: text("address_encrypted"),
   profileImageKey: text("profile_image_key"),
   status: text("status").notNull().default("pending"),
   phoneVerifiedAt: text("phone_verified_at"),
@@ -88,6 +92,8 @@ export const leads = sqliteTable("leads", {
   logoKey: text("logo_key"),
   logoConsentAt: text("logo_consent_at"),
   cnpj: text("cnpj"),
+  cnpjEncrypted: text("cnpj_encrypted"),
+  cnpjBlindIndex: text("cnpj_blind_index"),
   cnpjNormalized: text("cnpj_normalized"),
   cnpjValidationStatus: text("cnpj_validation_status").notNull().default("not_informed"),
   hubScore: integer("hub_score").notNull().default(0),
@@ -113,6 +119,15 @@ export const leads = sqliteTable("leads", {
   supplierStateIdx: index("idx_leads_supplier_state").on(table.role, table.status, table.state),
   organizationIdx: index("idx_leads_organization").on(table.organizationId, table.role),
 }));
+
+export const loginSessions = sqliteTable("login_sessions", {
+  sessionId: text("session_id").primaryKey(),
+  userId: text("user_id").notNull(),
+  emailHash: text("email_hash"),
+  firstSeenAt: text("first_seen_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  lastSeenAt: text("last_seen_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  revokedAt: text("revoked_at"),
+}, (table) => ({ userSeenIdx: index("idx_login_sessions_user_seen").on(table.userId, table.lastSeenAt) }));
 
 export const hubScoreSnapshots = sqliteTable("hub_score_snapshots", {
   id: integer("id").primaryKey({ autoIncrement: true }),

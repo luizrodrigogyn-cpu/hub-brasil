@@ -2,6 +2,9 @@ import { createClerkClient } from "@clerk/backend";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { runtimeValue } from "./runtime-env";
+import { getDb } from "../db";
+import { loginSessions } from "../db/schema";
+import { blindIndex } from "./pii-crypto";
 
 export type ChatGPTUser = {
   userId: string;
@@ -37,6 +40,10 @@ export async function getChatGPTUser(): Promise<ChatGPTUser | null> {
     if (!email) return null;
     const fullName = [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(" ") || null;
     const factors = auth.factorVerificationAge;
+    if (auth.sessionId) {
+      const now = new Date().toISOString();
+      await getDb().insert(loginSessions).values({ sessionId: auth.sessionId, userId: auth.userId, emailHash: await blindIndex(email), lastSeenAt: now }).onConflictDoUpdate({ target: loginSessions.sessionId, set: { lastSeenAt: now } });
+    }
     return { userId: auth.userId, displayName: fullName || email, email, fullName, secondFactorVerified: Array.isArray(factors) && Number(factors[1]) >= 0 };
   } catch {
     return null;
