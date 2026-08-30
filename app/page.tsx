@@ -232,7 +232,6 @@ export default function Home() {
   }
 
   useEffect(() => {
-    const timer = window.setTimeout(() => setWelcomeOpen(true), 900);
     const search = new URLSearchParams(window.location.search);
     const requestedRole = search.get("cadastro");
     const referredBy = search.get("indicado");
@@ -280,7 +279,6 @@ export default function Home() {
         fetch("/api/roadmap").then((response) => response.ok ? readJson(response) : null).then((result) => result && setDashboard(result)).catch(() => {});
       }
     }).catch(() => {});
-    return () => window.clearTimeout(timer);
   }, []);
 
   useEffect(() => {
@@ -769,6 +767,13 @@ export default function Home() {
               <div className="hero-search-stage"><div className="search-box"><span aria-hidden="true">⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") setView("directory"); }} placeholder="Ex.: telemetria CAN para 300 caminhões" aria-label="Buscar" /><button onClick={() => setView("directory")}>Buscar</button></div><div className="suggestion-pills" aria-label="Sugestões de busca"><span>Buscas populares:</span><button onClick={() => { setCategory("Rastreadores"); setView("directory"); }}>Rastreador 4G</button><button onClick={() => { setCategory("Plataformas de rastreamento veicular"); setView("directory"); }}>Plataformas</button><button onClick={() => { setCategory("Videotelemetria"); setView("directory"); }}>Videotelemetria</button><button onClick={() => { setCategory("Conectividade M2M"); setView("directory"); }}>Chip M2M</button></div></div>
               <div className="intelligence-stats"><article><strong>{suppliers.length}+</strong><span>fornecedores</span></article><article><strong>{products.length}+</strong><span>produtos</span></article><article><strong>{solutionCategories.length}</strong><span>soluções</span></article></div>
             </aside>
+          </section>
+          <section className="value-strip" aria-label="Por que usar o Hub Brasil">
+            <div className="value-card"><span className="value-icon">⌕</span><span className="eyebrow">PARA QUEM BUSCA</span><h2>Encontre fornecedores qualificados com mais segurança.</h2><ul><li>Busca por necessidade, produto, empresa ou categoria</li><li>Compare confiança, região e portfólio</li><li>Conexão direta com fornecedores aprovados</li></ul><button className="primary" onClick={() => setView("directory")}>Começar a buscar →</button></div>
+            <div className="value-card"><span className="value-icon">↗</span><span className="eyebrow">PARA QUEM FORNECE</span><h2>Transforme visibilidade em oportunidades reais.</h2><ul><li>Perfil público com produtos, eventos e selos</li><li>Demandas com contexto do cliente</li><li>Indicadores de visualização e resposta</li></ul><button className="secondary-action" onClick={() => openRegistration("supplier")}>Cadastrar empresa →</button></div>
+          </section>
+          <section className="national-map-section">
+            <div className="national-map-heading"><span className="eyebrow">MAPA DO BRASIL</span><h2>Uma rede nacional de negócios em funcionamento</h2><p>Explore fornecedores, soluções e eventos por estado. Só entra no mapa o que passou pela curadoria.</p></div>
             <div className="map-panel" aria-label="Mapa ilustrativo de fornecedores no Brasil">
               <div className="map-grid"></div>
               <div className="brazil-map">
@@ -776,18 +781,15 @@ export default function Home() {
                 {suppliers.map((item) => { const [x,y] = mapPoint(item.state); const logoUrl = supplierLogoUrl(item.logoKey); return <button key={`supplier-${item.id}`} className={`map-pin ${logoUrl ? "logo" : ""} ${item.highlightedOnMap ? "hub-highlight" : ""}`} style={{ left: `${x}%`, top: `${y}%` }} onClick={() => showSupplier(item)} aria-label={`${item.highlightedOnMap ? "Destaque Hub, " : ""}Fornecedor ${item.name}, em ${item.city}`}>{logoUrl ? <img src={logoUrl} alt="" /> : <span>{item.initials}</span>}{item.highlightedOnMap && <i>★</i>}</button>; })}
                 {plottedEvents.map((item) => <button key={`event-${item.id}`} className={`event-pin ${selectedEvent?.id === item.id ? "selected" : ""}`} style={{ left: `${item.x}%`, top: `${item.y}%` }} onClick={() => setSelectedEvent(item)} aria-label={`Evento ${item.name}, em ${item.city}`} title={`${item.name} · ${item.city}/${item.state}`}><span>★</span></button>)}
               </div>
+              <div className="map-side-copy"><strong>Presença nacional</strong><p>Toque em um estado ou marcador para explorar o que está aprovado por lá.</p><ul><li>27 estados mapeados</li><li>Curadoria antes da publicação</li><li>Proximidade regional para instalação e suporte</li></ul></div>
               <span className="map-caption">FORNECEDORES E EVENTOS APROVADOS</span>
               {!selectedEvent && suppliers.length === 0 && events.length === 0 && <div className="map-empty"><strong>Mapa pronto para receber cadastros reais</strong><span>Fornecedores e eventos aparecerão aqui após aprovação.</span></div>}
               {selectedEvent && <div className="event-popover"><span className="event-date">{selectedEvent.displayDate}</span><div><small>PRÓXIMO EVENTO {selectedEvent.demo ? "· DEMONSTRAÇÃO" : ""}</small><strong>{selectedEvent.name}</strong><span>{selectedEvent.city}, {selectedEvent.state}</span></div><button onClick={() => setView("events")}>Ver →</button></div>}
               <a className="map-source" href="https://commons.wikimedia.org/wiki/File:Brazil_states_blank.png" target="_blank" rel="noreferrer">Mapa: Wikimedia Commons · CC BY-SA</a>
             </div>
           </section>
-          <section className="value-strip" aria-label="Por que usar o Hub Brasil">
-            <div className="value-card"><span className="eyebrow">PARA QUEM BUSCA FORNECEDOR</span><p>Menos risco, mais certeza: todo fornecedor aqui passou por curadoria de verdade, não por anúncio pago.</p></div>
-            <div className="value-card"><span className="eyebrow">PARA QUEM FORNECE</span><p>Pare de correr atrás de cliente. Leads qualificados chegam até você, com resposta em tempo real pelo Hub.</p></div>
-          </section>
+          <section className="trust-journey"><div className="national-map-heading"><span className="eyebrow">CONFIANÇA</span><h2>Negócios começam com confiança</h2><p>Do primeiro clique ao contato, cada etapa é clara para as duas partes.</p></div><div className="trust-journey-grid">{[["01","Descoberta","Encontre a solução certa"],["02","Curadoria","Confira empresas aprovadas"],["03","Conexão","Libere o contato com segurança"],["04","Conversa","Fale diretamente com o fornecedor"],["05","Avaliação","Compartilhe uma experiência real"]].map(([step,title,copy]) => <article key={step}><span>{step}</span><strong>{title}</strong><p>{copy}</p></article>)}</div></section>
           <section className="home-overview">
-            <div className="overview-stats"><article><strong>{suppliers.length}+</strong><span>Fornecedores</span></article><article><strong>{products.length}+</strong><span>Produtos</span></article><article><strong>{solutionCategories.length}</strong><span>Soluções</span></article><article><strong>{events.length}</strong><span>Eventos</span></article></div>
             <div className="home-section-heading"><div><span className="eyebrow">DESCUBRA A TECNOLOGIA CERTA</span><h2>Principais soluções</h2><p>Uma base organizada para encontrar tecnologia veicular com clareza.</p></div><button className="section-link" onClick={() => setView("solutions")}>Ver todas →</button></div>
             <div className="solution-preview">{solutionCategories.slice(0, 4).map((item) => <button key={item.name} onClick={() => { setCategory(item.name); setView("directory"); }}><span>{item.icon}</span><strong>{item.title}</strong><small>{item.description}</small></button>)}</div>
             <section className="audience-section" aria-labelledby="audience-heading"><span className="eyebrow">CONEXÃO PARA O SETOR</span><h2 id="audience-heading">Para quem é o Hub Brasil</h2><p className="audience-subhead">Dos dois lados do balcão: quem procura tecnologia encontra fornecedor validado; quem fornece encontra demanda real.</p><div className="audience-grid">{audienceGroups.map((item) => <span key={item}>ϟ {item}</span>)}</div></section>
