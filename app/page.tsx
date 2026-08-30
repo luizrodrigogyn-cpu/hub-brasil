@@ -207,28 +207,7 @@ export default function Home() {
   const [quoteFlowOpen, setQuoteFlowOpen] = useState(false);
   const [quoteDraft, setQuoteDraft] = useState<QuoteDraft>({ category: "", application: "", quantity: "1", city: "", state: "", deadline: "", notes: "", budget: "", urgency: "", integration: [], supplierIds: [], contactConsent: false });
   const [pendingContactSupplier, setPendingContactSupplier] = useState<Supplier | null>(null);
-  const [bootPhase, setBootPhase] = useState<"playing" | "leaving" | "done">("playing");
   const navigationMenuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (window.sessionStorage.getItem("hubBootShown")) { setBootPhase("done"); return; }
-    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const timer = window.setTimeout(() => setBootPhase("leaving"), reduceMotion ? 200 : 3400);
-    return () => window.clearTimeout(timer);
-  }, []);
-
-  useEffect(() => {
-    if (bootPhase !== "leaving") return;
-    const timer = window.setTimeout(() => {
-      setBootPhase("done");
-      window.sessionStorage.setItem("hubBootShown", "1");
-    }, 500);
-    return () => window.clearTimeout(timer);
-  }, [bootPhase]);
-
-  function skipBoot() {
-    setBootPhase("leaving");
-  }
 
   useEffect(() => {
     if (!navigationOpen) return;
@@ -723,26 +702,6 @@ export default function Home() {
 
   return (
     <div className="app-shell">
-      {bootPhase !== "done" && (
-        <div className={`boot-intro ${bootPhase === "leaving" ? "boot-intro-out" : ""}`} role="status" aria-label="Carregando Hub Brasil">
-          <div className="boot-grid"></div>
-          <div className="boot-lines">
-            <div>&gt; INICIALIZANDO REDE HUB BRASIL...</div>
-            <div>&gt; CONECTANDO FORNECEDORES APROVADOS...</div>
-            <div>&gt; SINCRONIZANDO 27 ESTADOS...</div>
-            <div>&gt; ACESSO LIBERADO</div>
-          </div>
-          <svg className="boot-radar" viewBox="0 0 200 200" aria-hidden="true">
-            <circle cx="100" cy="100" r="90" fill="none" stroke="#14263f" strokeWidth="1" />
-            <circle cx="100" cy="100" r="60" fill="none" stroke="#14263f" strokeWidth="1" />
-            <circle cx="100" cy="100" r="30" fill="none" stroke="#14263f" strokeWidth="1" />
-            <g className="boot-sweep"><path d="M100 100 L100 10 A90 90 0 0 1 163 37 Z" fill="url(#bootSweepGrad)" /></g>
-            <defs><linearGradient id="bootSweepGrad" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stopColor="#59c9ee" stopOpacity=".5" /><stop offset="1" stopColor="#59c9ee" stopOpacity="0" /></linearGradient></defs>
-          </svg>
-          <div className="boot-logo"><div className="boot-logo-name">HUB <em>BRASIL</em></div><div className="boot-logo-tag">CONECTANDO NEGÓCIOS</div></div>
-          <button className="boot-skip" type="button" onClick={skipBoot}>Pular →</button>
-        </div>
-      )}
       <header className="topbar">
         <button className="brand" onClick={() => navigateTo("map")} aria-label="Ir para o mapa do Hub Brasil">
           <span className="brand-mark"><span></span><span></span><span></span></span>
