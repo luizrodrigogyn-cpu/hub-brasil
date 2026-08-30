@@ -17,20 +17,35 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://hub.niviontech.com.br"),
-  title: "Hub Brasil — Tecnologia para rastreamento veicular",
-  description: "Encontre fornecedores validados, produtos especializados e conexões comerciais para o mercado de rastreamento veicular.",
+  title: "Hub Brasil | Fornecedores de rastreamento veicular",
+  description: "Encontre fornecedores de rastreamento veicular, telemetria, conectividade, plataformas, instaladores e produtos validados em todo o Brasil.",
+  keywords: ["Hub Brasil fornecedores de rastreamento", "fornecedores de rastreamento veicular", "telemetria veicular", "plataformas de rastreamento", "instaladores de rastreadores"],
+  alternates: { canonical: "/" },
+  robots: { index: true, follow: true },
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",
   },
   openGraph: {
-    title: "Hub Brasil — O marketplace do rastreamento veicular",
-    description: "Fornecedores validados, produtos especializados e eventos do setor em todo o Brasil.",
+    title: "Hub Brasil | Fornecedores de rastreamento veicular",
+    description: "Fornecedores de rastreamento, telemetria, conectividade, plataformas e instaladores validados em todo o Brasil.",
+    url: "/",
+    siteName: "Hub Brasil",
     images: [{ url: "/og.png", width: 1733, height: 909, alt: "Hub Brasil — O marketplace do rastreamento veicular" }],
     locale: "pt_BR",
     type: "website",
   },
-  twitter: { card: "summary_large_image", title: "Hub Brasil", description: "O marketplace do rastreamento veicular", images: ["/og.png"] },
+  twitter: { card: "summary_large_image", title: "Hub Brasil | Fornecedores de rastreamento", description: "Encontre fornecedores de rastreamento veicular, telemetria e conectividade em todo o Brasil.", images: ["/og.png"] },
+};
+
+const structuredData = {
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  name: "Hub Brasil",
+  alternateName: "Hub Brasil fornecedores de rastreamento",
+  url: "https://hub.niviontech.com.br/",
+  description: "Plataforma para encontrar fornecedores de rastreamento veicular, telemetria, conectividade e instaladores no Brasil.",
+  inLanguage: "pt-BR",
 };
 
 export default function RootLayout({
@@ -43,6 +58,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }} />
         <AuthProvider publishableKey={runtimeValue("CLERK_PUBLISHABLE_KEY")}>{children}</AuthProvider>
         <ErrorReporterButton />
       </body>
