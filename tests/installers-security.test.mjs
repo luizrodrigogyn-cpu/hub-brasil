@@ -57,6 +57,12 @@ test("lista de usuários fica restrita ao gestor e descriptografa o telefone no 
   assert.match(dashboard, /Usuário/);
 });
 
+test("instaladores ficam somente na lista própria do gestor", () => {
+  const api = readFileSync("app/api/admin/content/route.ts", "utf8");
+  assert.match(api, /const installerOwnerIds = new Set\(installerRows\.map\(\(item\) => item\.ownerUserId\)\)/);
+  assert.equal((api.match(/!installerOwnerIds\.has\(item\.authUserId\)/g) || []).length, 2);
+});
+
 test("D1: apenas instaladores aprovados e consentidos entram no diretório", () => {
   const db = new DatabaseSync(":memory:");
   db.exec(`
