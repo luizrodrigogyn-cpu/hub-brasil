@@ -86,7 +86,9 @@ function withSecurityHeaders(response: Response, requestId: string): Response {
   if (!headers.has("referrer-policy")) headers.set("referrer-policy", "strict-origin-when-cross-origin");
   if (!headers.has("x-frame-options")) headers.set("x-frame-options", "DENY");
   if (!headers.has("permissions-policy")) headers.set("permissions-policy", "camera=(), microphone=(), geolocation=()");
-  if (!headers.has("strict-transport-security")) headers.set("strict-transport-security", "max-age=31536000");
+  if (!headers.has("strict-transport-security")) headers.set("strict-transport-security", "max-age=31536000; includeSubDomains");
+  if (!headers.has("cross-origin-opener-policy")) headers.set("cross-origin-opener-policy", "same-origin");
+  if (!headers.has("cross-origin-resource-policy")) headers.set("cross-origin-resource-policy", "same-origin");
   headers.set("x-request-id", requestId);
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }

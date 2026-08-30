@@ -34,6 +34,25 @@ test("foto do instalador exige login, consentimento e imagem real", () => {
   assert.doesNotMatch(photo, /image\/svg\+xml/);
 });
 
+test("todos os uploads de imagem validam a assinatura real do arquivo", () => {
+  const profile = readFileSync("app/api/profile-photo/route.ts", "utf8");
+  const supplier = readFileSync("app/api/supplier-logo/route.ts", "utf8");
+  const helper = readFileSync("app/image-security.ts", "utf8");
+  assert.match(profile, /matchesImageSignature/);
+  assert.match(supplier, /matchesImageSignature/);
+  assert.match(helper, /image\/jpeg/);
+  assert.match(helper, /image\/png/);
+  assert.match(helper, /image\/webp/);
+  assert.doesNotMatch(helper, /image\/svg\+xml/);
+});
+
+test("rota pública de imagens entrega somente produto aprovado", () => {
+  const api = readFileSync("app/api/product-images/route.ts", "utf8");
+  assert.match(api, /eq\(products\.imageKey, key\)/);
+  assert.match(api, /eq\(products\.status, "approved"\)/);
+  assert.match(api, /private, no-store/);
+});
+
 test("cadastros de fornecedor e instalador usam campo visual de WhatsApp", () => {
   const field = readFileSync("app/whatsapp-field.tsx", "utf8");
   const supplier = readFileSync("app/page.tsx", "utf8");
