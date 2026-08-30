@@ -8,7 +8,7 @@ function readJson(response: Response): Promise<any> {
 }
 
 type Item = Record<string, string | number | null>;
-type Tab = "suppliers" | "installers" | "products" | "events" | "needs" | "updates" | "articles" | "news" | "reports" | "deletions" | "credits" | "audit" | "kpis";
+type Tab = "registrations" | "suppliers" | "installers" | "products" | "events" | "needs" | "updates" | "articles" | "news" | "reports" | "deletions" | "credits" | "audit" | "kpis";
 type Kpis = {
   timeToFirstProposal: { sampleSize: number; totalQuotes: number; avgHours: number | null; medianHours: number | null; under24hPct: number | null; goalHours: number };
   leadToProposalConversion: { sampleSize: number; responded: number; ratePct: number | null };
@@ -18,7 +18,7 @@ type Kpis = {
 };
 
 export default function AdminDashboard() {
-  const [data, setData] = useState<Record<Exclude<Tab, "kpis">, Item[]>>({ suppliers: [], installers: [], products: [], events: [], needs: [], updates: [], articles: [], news: [], reports: [], deletions: [], credits: [], audit: [] });
+  const [data, setData] = useState<Record<Exclude<Tab, "kpis">, Item[]>>({ registrations: [], suppliers: [], installers: [], products: [], events: [], needs: [], updates: [], articles: [], news: [], reports: [], deletions: [], credits: [], audit: [] });
   const [kpis, setKpis] = useState<Kpis | null>(null);
   const [tab, setTab] = useState<Tab>("suppliers");
   const [busy, setBusy] = useState("");
@@ -44,6 +44,7 @@ export default function AdminDashboard() {
   return <>
     <div className="admin-tabs">
       <button className={tab === "kpis" ? "active" : ""} onClick={() => setTab("kpis")}>KPIs</button>
+      <button className={tab === "registrations" ? "active" : ""} onClick={() => setTab("registrations")}>Usuários cadastrados</button>
       <button className={tab === "suppliers" ? "active" : ""} onClick={() => setTab("suppliers")}>Fornecedores {pending("suppliers") > 0 && <b>{pending("suppliers")}</b>}</button>
       <button className={tab === "installers" ? "active" : ""} onClick={() => setTab("installers")}>Instaladores {pending("installers") > 0 && <b>{pending("installers")}</b>}</button>
       <button className={tab === "products" ? "active" : ""} onClick={() => setTab("products")}>Produtos {pending("products") > 0 && <b>{pending("products")}</b>}</button>
@@ -85,7 +86,7 @@ export default function AdminDashboard() {
           <p className="kpi-empty">Não coletado hoje: não existe pergunta de satisfação em nenhum ponto da jornada. Precisaria de uma nova coleta de resposta antes de virar KPI.</p>
         </article>
       </>}
-    </div> : tab === "audit" ? <div className="table-wrap"><table><thead><tr><th>Gestor</th><th>Ação</th><th>Conteúdo</th><th>Data</th></tr></thead><tbody>{data.audit.map((item) => <tr key={item.id}><td>{item.adminEmail}</td><td>{item.action}</td><td>{item.entity} #{item.entityId}</td><td>{new Date(String(item.createdAt)).toLocaleString("pt-BR")}</td></tr>)}</tbody></table></div> : <><div className="admin-create-actions">{tab==="articles"&&<button className="primary" disabled={Boolean(busy)} onClick={createArticle}>＋ Novo artigo editorial</button>}{tab==="news"&&<button className="primary" disabled={Boolean(busy)} onClick={createNews}>＋ Adicionar notícia ao Radar</button>}</div>{tab === "installers" && data.installers.some((item) => item.photoKey) && <div className="installer-photo-review"><strong>Fotos para revisão</strong><div>{data.installers.filter((item) => item.photoKey).map((item) => <a key={item.id} href={`/api/installer-photo?key=${encodeURIComponent(String(item.photoKey))}`} target="_blank" rel="noreferrer"><img src={`/api/installer-photo?key=${encodeURIComponent(String(item.photoKey))}`} alt={`Foto enviada por ${item.name}`} /><span>{item.name}</span></a>)}</div></div>}<div className="moderation-list">
+    </div> : tab === "registrations" ? <div className="table-wrap"><table><thead><tr><th>Nome</th><th>Telefone</th><th>Categoria</th><th>Situação</th><th>Cadastro</th></tr></thead><tbody>{data.registrations.map((item) => <tr key={item.id}><td>{item.name}</td><td>{item.phone || "Não informado"}</td><td><span className={`registration-role ${item.role}`}>{item.role === "supplier" ? "Fornecedor" : "Usuário"}</span></td><td>{item.status === "approved" ? "Aprovado" : item.status === "rejected" ? "Reprovado" : "Pendente"}</td><td>{new Date(String(item.createdAt)).toLocaleDateString("pt-BR")}</td></tr>)}</tbody></table></div> : tab === "audit" ? <div className="table-wrap"><table><thead><tr><th>Gestor</th><th>Ação</th><th>Conteúdo</th><th>Data</th></tr></thead><tbody>{data.audit.map((item) => <tr key={item.id}><td>{item.adminEmail}</td><td>{item.action}</td><td>{item.entity} #{item.entityId}</td><td>{new Date(String(item.createdAt)).toLocaleString("pt-BR")}</td></tr>)}</tbody></table></div> : <><div className="admin-create-actions">{tab==="articles"&&<button className="primary" disabled={Boolean(busy)} onClick={createArticle}>＋ Novo artigo editorial</button>}{tab==="news"&&<button className="primary" disabled={Boolean(busy)} onClick={createNews}>＋ Adicionar notícia ao Radar</button>}</div>{tab === "installers" && data.installers.some((item) => item.photoKey) && <div className="installer-photo-review"><strong>Fotos para revisão</strong><div>{data.installers.filter((item) => item.photoKey).map((item) => <a key={item.id} href={`/api/installer-photo?key=${encodeURIComponent(String(item.photoKey))}`} target="_blank" rel="noreferrer"><img src={`/api/installer-photo?key=${encodeURIComponent(String(item.photoKey))}`} alt={`Foto enviada por ${item.name}`} /><span>{item.name}</span></a>)}</div></div>}<div className="moderation-list">
       {data[tab].length === 0 ? <div className="admin-empty">Nenhum conteúdo nesta seção.</div> : data[tab].map((item) => {
         const entity = tab === "suppliers" ? "supplier" : tab === "installers" ? "installer" : tab === "products" ? "product" : tab === "events" ? "event" : tab === "needs" ? "need" : tab === "updates" ? "update" : tab === "articles" ? "article" : tab === "news" ? "news" : tab === "deletions" ? "deletion" : tab === "credits" ? "credit" : "report";
         const title = tab === "credits" ? `Fornecedor #${item.supplierId}` : String(item.company || item.name || item.title || "Sem nome");

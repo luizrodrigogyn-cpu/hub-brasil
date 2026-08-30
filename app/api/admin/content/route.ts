@@ -15,8 +15,9 @@ export async function GET() {
   const state = adminAccessState(await getChatGPTUser());
   if (state !== "granted") return Response.json({ error: adminErrorMessage(state) }, { status: 403 });
   const db = getDb();
-  const [suppliers, installerRows, productRows, events, needs, updates, articles, news, reports, deletions, audit] = await Promise.all([
+  const [suppliers, registrationRows, installerRows, productRows, events, needs, updates, articles, news, reports, deletions, audit] = await Promise.all([
     db.select().from(leads).where(eq(leads.role, "supplier")).orderBy(desc(leads.createdAt)),
+    db.select({ id: leads.id, name: leads.name, company: leads.company, phone: leads.phone, phoneEncrypted: leads.phoneEncrypted, role: leads.role, status: leads.status, createdAt: leads.createdAt }).from(leads).orderBy(desc(leads.createdAt)),
     db.select().from(installers).orderBy(desc(installers.createdAt)),
     db.select().from(products).orderBy(desc(products.createdAt)),
     db.select().from(supplierEvents).orderBy(desc(supplierEvents.createdAt)),
@@ -35,8 +36,9 @@ export async function GET() {
   const positiveRatings = await db.select({ supplierId: supplierRatings.supplierId, positiveTotal: sql<number>`count(*)` }).from(supplierRatings).where(and(gte(supplierRatings.stars, 4), isNotNull(supplierRatings.supplierId))).groupBy(supplierRatings.supplierId);
   const positiveMap = new Map(positiveRatings.map((item) => [item.supplierId, Number(item.positiveTotal)]));
   const suppliersWithRatings = await Promise.all(suppliers.map(async (item) => ({ ...(await decryptLeadPii(item)), positiveRatings: positiveMap.get(item.id) || 0 })));
+  const registrations = await Promise.all(registrationRows.map(async (item) => ({ id: item.id, name: item.company || item.name, phone: await decryptPii(item.phoneEncrypted || item.phone), role: item.role, status: item.status, createdAt: item.createdAt })));
   const installersWithPhone = await Promise.all(installerRows.map(async (item) => ({ ...item, phone: await decryptPii(item.phoneEncrypted) })));
-  return Response.json({ suppliers: suppliersWithRatings, installers: installersWithPhone, products: productRows, events, needs, updates, articles, news, reports, deletions, audit, wallets, credits, highlights });
+  return Response.json({ suppliers: suppliersWithRatings, registrations, installers: installersWithPhone, products: productRows, events, needs, updates, articles, news, reports, deletions, audit, wallets, credits, highlights });
 }
 
 export async function POST(request: Request) {

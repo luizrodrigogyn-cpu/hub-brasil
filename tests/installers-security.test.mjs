@@ -45,6 +45,18 @@ test("cadastros de fornecedor e instalador usam campo visual de WhatsApp", () =>
   assert.match(installer, /<WhatsAppField/);
 });
 
+test("lista de usuários fica restrita ao gestor e descriptografa o telefone no servidor", () => {
+  const api = readFileSync("app/api/admin/content/route.ts", "utf8");
+  const dashboard = readFileSync("app/admin/AdminDashboard.tsx", "utf8");
+  assert.match(api, /adminAccessState/);
+  assert.match(api, /state !== "granted"/);
+  assert.match(api, /registrations/);
+  assert.match(api, /decryptPii\(item\.phoneEncrypted/);
+  assert.match(dashboard, /Usuários cadastrados/);
+  assert.match(dashboard, /Fornecedor/);
+  assert.match(dashboard, /Usuário/);
+});
+
 test("D1: apenas instaladores aprovados e consentidos entram no diretório", () => {
   const db = new DatabaseSync(":memory:");
   db.exec(`
