@@ -22,6 +22,7 @@ export const metadata: Metadata = {
   keywords: ["Hub Brasil fornecedores de rastreamento", "fornecedores de rastreamento veicular", "telemetria veicular", "plataformas de rastreamento", "instaladores de rastreadores"],
   alternates: { canonical: "/" },
   robots: { index: true, follow: true },
+  verification: { google: "6cJIz4RORtGme7filMzTomcYg3rjd_a3d1hkhSO7ZtM" },
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",
