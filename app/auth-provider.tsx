@@ -30,10 +30,23 @@ export default function AuthProvider({ children, publishableKey }: { children: R
   useEffect(() => {
     if (initialKey) return;
     let active = true;
-    fetch("/hb-init", { cache: "no-store" })
-      .then((response) => response.ok ? readJson(response) : null)
+    const loadPublicKey = async () => {
+      for (const endpoint of ["/api/auth/config", "/hb-init"]) {
+        try {
+          const response = await fetch(endpoint, { cache: "no-store" });
+          if (!response.ok) continue;
+          const data = await readJson(response);
+          const value = data?.publishableKey || data?.clerkPublishableKey;
+          if (typeof value === "string" && value.startsWith("pk_")) return value;
+        } catch {
+          // Tenta a rota de contingência abaixo.
+        }
+      }
+      return "";
+    };
+    loadPublicKey()
       .then((data) => {
-        if (active && typeof data?.clerkPublishableKey === "string" && data.clerkPublishableKey) setKey(data.clerkPublishableKey);
+        if (active && data) setKey(data);
       })
       .finally(() => { if (active) setReady(true); });
     return () => { active = false; };

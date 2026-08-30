@@ -752,16 +752,23 @@ export default function Home() {
       <main>
         {view === "map" && (
           <>
-          <section className="map-layout">
+          <section className="map-layout premium-home-hero">
             <div className="map-copy">
-              <span className="hero-kicker">✦ O ecossistema de networking</span>
+              <span className="hero-kicker"><i></i> Curadoria ativa · todo o Brasil</span>
               <h1>Encontre os melhores fornecedores de <em>rastreamento, telemetria e conectividade</em> em um só lugar.</h1>
-              <p>Conecte-se a fabricantes, integradores e fornecedores validados de todo o Brasil.</p>
-              <div className="hero-ctas"><button className="primary" onClick={() => setView("directory")}>Buscar fornecedor aprovado <span>→</span></button><button className="secondary-action" onClick={() => openRegistration("supplier")}>Sou fornecedor de rastreamento <span>→</span></button><a className="secondary-action" href="/instaladores">Encontrar instalador <span>→</span></a></div>
+              <p>Conecte-se a fabricantes, integradores e fornecedores qualificados de todo o Brasil.</p>
+              <div className="hero-ctas"><button className="primary" onClick={() => setView("directory")}>⌕ Buscar fornecedor <span>→</span></button><button className="secondary-action" onClick={() => openRegistration("supplier")}>Sou fornecedor <span>→</span></button><a className="secondary-action" href="/instaladores">Encontrar instalador <span>→</span></a></div>
               <p className="quality-promise"><span>✓</span> Aqui, o destaque do fornecedor é por qualidade!</p>
               <p className="quality-promise">{platformSlaLabel ? <><span>⏱</span> Receba propostas — fornecedores respondem em média em {platformSlaLabel}</> : <><span>⏱</span> Solicite cotação e fale com o fornecedor em 1 clique</>}</p>
               <p className="empty-note">Somente fornecedores e eventos aprovados pela gestão aparecem no mapa.</p>
             </div>
+            <aside className="hero-intelligence" aria-label="Busca inteligente do Hub Brasil">
+              <span className="intelligence-icon">⌕</span>
+              <h2>O que sua operação precisa hoje?</h2>
+              <p>Descreva a necessidade, o produto ou a empresa. A busca entende as duas coisas.</p>
+              <div className="hero-search-stage"><div className="search-box"><span aria-hidden="true">⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") setView("directory"); }} placeholder="Ex.: telemetria CAN para 300 caminhões" aria-label="Buscar" /><button onClick={() => setView("directory")}>Buscar</button></div><div className="suggestion-pills" aria-label="Sugestões de busca"><span>Buscas populares:</span><button onClick={() => { setCategory("Rastreadores"); setView("directory"); }}>Rastreador 4G</button><button onClick={() => { setCategory("Plataformas de rastreamento veicular"); setView("directory"); }}>Plataformas</button><button onClick={() => { setCategory("Videotelemetria"); setView("directory"); }}>Videotelemetria</button><button onClick={() => { setCategory("Conectividade M2M"); setView("directory"); }}>Chip M2M</button></div></div>
+              <div className="intelligence-stats"><article><strong>{suppliers.length}+</strong><span>fornecedores</span></article><article><strong>{products.length}+</strong><span>produtos</span></article><article><strong>{solutionCategories.length}</strong><span>soluções</span></article></div>
+            </aside>
             <div className="map-panel" aria-label="Mapa ilustrativo de fornecedores no Brasil">
               <div className="map-grid"></div>
               <div className="brazil-map">
@@ -774,7 +781,6 @@ export default function Home() {
               {selectedEvent && <div className="event-popover"><span className="event-date">{selectedEvent.displayDate}</span><div><small>PRÓXIMO EVENTO {selectedEvent.demo ? "· DEMONSTRAÇÃO" : ""}</small><strong>{selectedEvent.name}</strong><span>{selectedEvent.city}, {selectedEvent.state}</span></div><button onClick={() => setView("events")}>Ver →</button></div>}
               <a className="map-source" href="https://commons.wikimedia.org/wiki/File:Brazil_states_blank.png" target="_blank" rel="noreferrer">Mapa: Wikimedia Commons · CC BY-SA</a>
             </div>
-            <div className="hero-search-stage"><div className="search-box"><span aria-hidden="true">⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Busque por empresa, produto, categoria ou cidade" aria-label="Buscar" /><button onClick={() => setView("directory")}>Buscar</button></div><div className="suggestion-pills" aria-label="Sugestões de busca"><span>Comece por aqui:</span><button onClick={() => { setCategory("Rastreadores"); setView("directory"); }}>Rastreador 4G</button><button onClick={() => { setCategory("Plataformas de rastreamento veicular"); setView("directory"); }}>Plataforma de rastreamento</button><button onClick={() => { setCategory("Videotelemetria"); setView("directory"); }}>Videotelemetria</button><button onClick={() => { setCategory("Conectividade M2M"); setView("directory"); }}>Chip M2M</button></div></div>
           </section>
           <section className="value-strip" aria-label="Por que usar o Hub Brasil">
             <div className="value-card"><span className="eyebrow">PARA QUEM BUSCA FORNECEDOR</span><p>Menos risco, mais certeza: todo fornecedor aqui passou por curadoria de verdade, não por anúncio pago.</p></div>

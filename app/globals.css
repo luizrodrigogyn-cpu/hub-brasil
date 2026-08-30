@@ -355,3 +355,62 @@ body{font-family:var(--font-geist-sans),Arial,sans-serif;font-size:16px;line-hei
 .installer-photo-review{margin-bottom:18px;padding:18px;border:1px solid #294d7b;border-radius:14px;background:#0a1c36}.installer-photo-review>div{display:flex;flex-wrap:wrap;gap:14px;margin-top:12px}.installer-photo-review a{display:grid;gap:6px;color:#dce9ff;text-decoration:none;text-align:center;font-size:11px}.installer-photo-review img{width:72px;height:72px;border:2px solid #3972ad;border-radius:50%;object-fit:cover}
 .whatsapp-input{position:relative;display:block}.whatsapp-input .whatsapp-icon{position:absolute;z-index:1;left:11px;top:50%;width:25px;height:25px;display:grid;place-items:center;transform:translateY(-50%);border-radius:50%;background:#25d366;color:#fff;font-size:14px;font-weight:900;box-shadow:0 3px 9px rgba(37,211,102,.25)}.whatsapp-input input{padding-left:46px!important}
 .registration-role{display:inline-flex;border-radius:999px;padding:5px 9px;background:#173868;color:#a9c9ff;font-size:11px;font-weight:800}.registration-role.supplier{background:rgba(37,211,102,.1);color:#69dfa0}
+
+/* Hub Brasil 2026 — integração visual do novo conceito, preservando o produto real. */
+.premium-home-hero{position:relative;isolation:isolate;background:
+  radial-gradient(circle at 9% 4%,rgba(41,105,255,.25),transparent 32%),
+  radial-gradient(circle at 91% 9%,rgba(75,203,244,.13),transparent 28%),#071326}
+.premium-home-hero:before{content:"";position:absolute;z-index:-1;inset:0;background-image:linear-gradient(rgba(116,158,219,.055) 1px,transparent 1px),linear-gradient(90deg,rgba(116,158,219,.055) 1px,transparent 1px);background-size:44px 44px;mask-image:linear-gradient(to bottom,#000,transparent 82%)}
+.premium-home-hero .map-copy{align-self:center;padding-top:94px;padding-bottom:90px}
+.premium-home-hero .hero-kicker{border-color:rgba(117,221,255,.25);background:rgba(59,129,255,.08);color:#d8e8ff;box-shadow:inset 0 0 24px rgba(54,122,255,.05)}
+.premium-home-hero .hero-kicker i{width:7px;height:7px;border-radius:50%;background:#51d49d;box-shadow:0 0 0 5px rgba(81,212,157,.11),0 0 18px rgba(81,212,157,.6)}
+.premium-home-hero .map-copy h1{max-width:760px;font-weight:720;letter-spacing:-.052em}
+.premium-home-hero .map-copy h1 em{background:linear-gradient(100deg,#5a94ff 12%,#67daf2 88%);-webkit-background-clip:text;background-clip:text}
+.premium-home-hero .primary{border-radius:11px;padding:15px 20px;box-shadow:0 12px 34px rgba(32,100,255,.28)}
+.premium-home-hero .secondary-action{border-radius:11px;background:rgba(255,255,255,.025);backdrop-filter:blur(12px)}
+.hero-intelligence{position:relative;align-self:center;width:min(610px,calc(100% - 56px));margin:70px auto;padding:34px;border:1px solid rgba(168,198,241,.17);border-radius:22px;background:linear-gradient(145deg,rgba(17,44,82,.82),rgba(8,26,51,.86));box-shadow:0 30px 80px rgba(0,5,18,.36),inset 0 1px 0 rgba(255,255,255,.04);backdrop-filter:blur(18px)}
+.hero-intelligence:after{content:"";position:absolute;inset:-1px;border-radius:inherit;pointer-events:none;background:linear-gradient(135deg,rgba(106,199,255,.18),transparent 28%,transparent 72%,rgba(50,104,255,.14));mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude;padding:1px}
+.intelligence-icon{display:grid;place-items:center;width:48px;height:48px;border:1px solid rgba(101,192,255,.27);border-radius:14px;background:rgba(55,118,239,.16);color:#73d7f2;font-size:26px}
+.hero-intelligence h2{margin:20px 0 8px;color:#f5f8ff;font-size:clamp(25px,2.2vw,34px);letter-spacing:-.035em}
+.hero-intelligence>p{max-width:520px;margin:0;color:#9fb4d1;line-height:1.6}
+.hero-intelligence .hero-search-stage{display:block;padding:0;background:none}
+.hero-intelligence .search-box{width:100%;margin:26px 0 0;border-radius:13px;box-shadow:0 18px 45px rgba(1,8,24,.28),0 0 0 5px rgba(83,151,255,.045)}
+.hero-intelligence .search-box input{padding:17px 12px;font-size:15px}
+.hero-intelligence .search-box button{min-width:96px;padding:15px 18px}
+.hero-intelligence .suggestion-pills{justify-content:flex-start;margin:15px 0 0}
+.intelligence-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin-top:26px;padding-top:23px;border-top:1px solid rgba(178,204,239,.13)}
+.intelligence-stats article{display:grid;gap:4px;text-align:center;border-left:1px solid rgba(178,204,239,.1)}.intelligence-stats article:first-child{border-left:0}
+.intelligence-stats strong{font-size:30px;letter-spacing:-.04em}.intelligence-stats span{color:#8fa6c4;font-size:10px;text-transform:uppercase;letter-spacing:.12em}
+.premium-home-hero .map-panel{grid-column:1/-1;width:min(1180px,calc(100% - 48px));min-height:620px;margin:8px auto 84px;border:1px solid rgba(112,160,225,.22);border-radius:24px;background:radial-gradient(circle at 50% 48%,rgba(37,99,198,.22),transparent 35%),linear-gradient(145deg,rgba(10,34,65,.94),rgba(3,14,30,.98));box-shadow:0 26px 70px rgba(0,4,14,.28);overflow:hidden}
+.premium-home-hero .map-panel:before{content:"Explore o ecossistema por região";position:absolute;z-index:2;left:30px;top:27px;color:#dceaff;font-weight:750;font-size:16px;letter-spacing:-.01em}
+.premium-home-hero .map-caption{top:30px}
+.value-strip{background:#071326}
+.value-card{position:relative;overflow:hidden;border-color:rgba(153,190,239,.17);background:linear-gradient(145deg,rgba(17,44,82,.72),rgba(9,27,53,.8));box-shadow:0 20px 45px rgba(0,5,17,.2);transition:transform .3s,border-color .3s}
+.value-card:hover{transform:translateY(-3px);border-color:rgba(93,163,255,.45)}
+
+/* Clerk: nunca deixa uma tela vazia enquanto o formulário remoto inicializa. */
+.clerk-form-shell{position:relative;min-height:320px;display:grid;place-items:center}
+.clerk-form-shell>.cl-rootBox{position:relative;z-index:2;width:100%;display:flex;justify-content:center}
+.clerk-loading-card{position:absolute;inset:10px 0 0;display:grid;place-content:center;justify-items:center;gap:10px;padding:28px;border:1px dashed rgba(107,158,231,.38);border-radius:16px;background:rgba(4,17,39,.42);text-align:center;color:#eef5ff}.clerk-loading-card.static{position:relative;inset:auto;width:100%;min-height:300px}
+.clerk-form-shell:has(.cl-rootBox) .clerk-loading-card{display:none}
+.clerk-loading-card>span{width:31px;height:31px;border:3px solid rgba(112,162,239,.24);border-top-color:#62d1f2;border-radius:50%;animation:clerk-spin .9s linear infinite}
+.clerk-loading-card strong{font-size:15px}.clerk-loading-card small{color:#9eb2cf;line-height:1.5}
+.clerk-loading-card button,.auth-unavailable button{margin-top:6px;border:1px solid rgba(113,164,240,.48);border-radius:9px;background:#15366b;color:#fff;padding:10px 14px;font-weight:750;cursor:pointer}
+.auth-unavailable{display:grid;gap:8px}.auth-unavailable strong{color:#ffe8e2}.auth-unavailable span{color:#ffcdbf;font-size:13px}
+.manager-help{margin:18px 0 0!important;padding-top:16px;border-top:1px solid rgba(133,171,226,.18);font-size:12px;color:#93a9c8!important;text-align:center}.manager-help a{color:#71d5f1;font-weight:750}
+@keyframes clerk-spin{to{transform:rotate(360deg)}}
+
+@media(max-width:1050px){
+  .premium-home-hero{display:grid;grid-template-columns:1fr!important}
+  .premium-home-hero .map-copy{max-width:860px;margin:0 auto;padding:76px 28px 28px;text-align:center}
+  .premium-home-hero .map-copy h1,.premium-home-hero .map-copy>p{margin-left:auto;margin-right:auto}
+  .premium-home-hero .quality-promise{text-align:center!important}
+  .hero-intelligence{width:min(720px,calc(100% - 40px));margin:28px auto 58px}
+  .premium-home-hero .map-panel{grid-column:1;width:calc(100% - 40px);margin-bottom:60px}
+}
+@media(max-width:620px){
+  .premium-home-hero .map-copy{padding:56px 20px 22px}.premium-home-hero .map-copy h1{font-size:clamp(39px,12vw,54px);letter-spacing:-.045em}
+  .hero-intelligence{width:calc(100% - 28px);padding:23px;margin-bottom:42px}.hero-intelligence .search-box{align-items:stretch;flex-wrap:wrap;padding:8px}.hero-intelligence .search-box input{width:calc(100% - 42px)}.hero-intelligence .search-box button{width:100%}
+  .intelligence-stats strong{font-size:24px}.premium-home-hero .map-panel{width:calc(100% - 28px);min-height:510px;border-radius:18px}.premium-home-hero .map-panel:before{left:19px;top:20px;font-size:14px}.premium-home-hero .map-caption{display:none}
+  .clerk-form-shell{min-height:350px}.auth-card{padding:1.35rem}
+}
