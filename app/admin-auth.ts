@@ -12,14 +12,13 @@ function isAllowlistedAdmin(user: ChatGPTUser | null): user is ChatGPTUser {
 
 export type AdminAccessState = "denied" | "needs_2fa" | "granted";
 
-// Segunda camada real de proteção: a allowlist de e-mail sozinha não é
-// suficiente para liberar acesso administrativo. `secondFactorVerified`
-// vem do Clerk (factorVerificationAge) e só é true quando a sessão atual
-// passou de fato por verificação de segundo fator — não é só um texto de
-// aviso, é checado em código antes de qualquer leitura/escrita de admin.
+// O segundo fator pode ser reativado sem mudança de código definindo
+// ADMIN_REQUIRE_2FA=true. Enquanto a opção estiver ausente/desativada, o
+// gestor continua protegido pelo login do Clerk e pela allowlist de e-mails.
 export function adminAccessState(user: ChatGPTUser | null): AdminAccessState {
   if (!isAllowlistedAdmin(user)) return "denied";
-  if (!user.secondFactorVerified) return "needs_2fa";
+  const requireSecondFactor = runtimeValue("ADMIN_REQUIRE_2FA").toLowerCase() === "true";
+  if (requireSecondFactor && !user.secondFactorVerified) return "needs_2fa";
   return "granted";
 }
 
