@@ -82,6 +82,31 @@ test("instaladores ficam somente na lista própria do gestor", () => {
   assert.equal((api.match(/!installerOwnerIds\.has\(item\.authUserId\)/g) || []).length, 2);
 });
 
+test("fluxo de cadastro preserva o perfil instalador e retorna ao formulário", () => {
+  const signup = readFileSync("app/sign-up/page.tsx", "utf8");
+  const directory = readFileSync("app/instaladores/page.tsx", "utf8");
+  assert.match(signup, /"client" \| "supplier" \| "installer"/);
+  assert.match(signup, /Sou instalador/);
+  assert.match(signup, /initialRole === "instalador"/);
+  assert.match(directory, /perfil=instalador/);
+  assert.match(directory, /cadastro=aberto/);
+  assert.match(directory, /setFormOpen\(true\)/);
+});
+
+test("aceites do instalador são obrigatórios e versionados no servidor", () => {
+  const api = readFileSync("app/api/installers/route.ts", "utf8");
+  const form = readFileSync("app/instaladores/page.tsx", "utf8");
+  const migration = readFileSync("drizzle/0025_installer_consent_snapshot.sql", "utf8");
+  for (const consent of ["termsConsent", "privacyConsent", "noTransactionsConsent", "contactConsent"]) {
+    assert.match(api, new RegExp(consent));
+    assert.match(form, new RegExp(consent));
+  }
+  assert.match(api, /consentVersion/);
+  assert.match(api, /consentSnapshot/);
+  assert.match(migration, /consent_version/);
+  assert.match(migration, /consent_snapshot/);
+});
+
 test("D1: apenas instaladores aprovados e consentidos entram no diretório", () => {
   const db = new DatabaseSync(":memory:");
   db.exec(`

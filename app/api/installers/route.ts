@@ -66,14 +66,19 @@ export async function POST(request: Request) {
   const specialties = stringArray(body.specialties, SPECIALTIES, 8);
   const serviceStates = stringArray(body.serviceStates, undefined, 27).map(normalizeBrazilState).filter(isValidBrazilState);
   const contactConsent = body.contactConsent === true;
-  if (!name || !phone || !city || !state || !specialties.length || !contactConsent) return Response.json({ error: "Informe nome, WhatsApp, cidade, UF, especialidade e autorize a divulgação profissional." }, { status: 400 });
+  const termsConsent = body.termsConsent === true;
+  const privacyConsent = body.privacyConsent === true;
+  const noTransactionsConsent = body.noTransactionsConsent === true;
+  if (!name || !phone || !city || !state || !specialties.length || !contactConsent || !termsConsent || !privacyConsent || !noTransactionsConsent) return Response.json({ error: "Informe os dados obrigatórios e confirme todos os termos do cadastro profissional." }, { status: 400 });
   if (!/^\d{10,11}$/.test(phone.replace(/\D/g, ""))) return Response.json({ error: "Informe um WhatsApp brasileiro válido com DDD." }, { status: 400 });
   if (!isValidBrazilState(state)) return Response.json({ error: "Informe uma UF brasileira válida." }, { status: 400 });
   const organizationId = await ensurePersonalOrganization(user.userId, name, "installer");
   const now = new Date().toISOString();
   const phoneEncrypted = await encryptPii(phone);
   if (!phoneEncrypted) return Response.json({ error: "Não foi possível proteger o WhatsApp." }, { status: 500 });
-  const values = { organizationId, ownerUserId: user.userId, name, phone: "[encrypted]", phoneEncrypted, city, state, specialties: JSON.stringify(specialties), serviceStates: JSON.stringify(serviceStates), description, contactConsent: true, status: "pending", phoneVerifiedAt: null, updatedAt: now };
+  const consentVersion = "2026-08-30";
+  const consentSnapshot = JSON.stringify({ version: consentVersion, acceptedAt: now, terms: true, privacy: true, professionalPublication: true, authenticatedWhatsappRelease: true, noFinancialTransactions: true });
+  const values = { organizationId, ownerUserId: user.userId, name, phone: "[encrypted]", phoneEncrypted, city, state, specialties: JSON.stringify(specialties), serviceStates: JSON.stringify(serviceStates), description, contactConsent: true, consentAt: now, consentVersion, consentSnapshot, status: "pending", phoneVerifiedAt: null, updatedAt: now };
   const [installer] = await getDb().insert(installers).values(values).onConflictDoUpdate({ target: installers.ownerUserId, set: values }).returning({ id: installers.id, status: installers.status });
   return Response.json({ installer }, { status: 201 });
 }

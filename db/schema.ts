@@ -147,6 +147,8 @@ export const installers = sqliteTable("installers", {
   phoneVerifiedAt: text("phone_verified_at"),
   contactConsent: integer("contact_consent", { mode: "boolean" }).notNull().default(true),
   consentAt: text("consent_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  consentVersion: text("consent_version").notNull().default("2026-08-30"),
+  consentSnapshot: text("consent_snapshot").notNull().default("{}"),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 }, (table) => ({

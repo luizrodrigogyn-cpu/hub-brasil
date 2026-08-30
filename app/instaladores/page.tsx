@@ -11,6 +11,7 @@ async function readJson(response: Response): Promise<any> { return response.json
 export default function InstallersPage() {
   const [rows, setRows] = useState<Installer[]>([]);
   const [authenticated, setAuthenticated] = useState(false);
+  const [accountEmail, setAccountEmail] = useState("");
   const [query, setQuery] = useState("");
   const [state, setState] = useState("");
   const [specialty, setSpecialty] = useState("");
@@ -21,7 +22,13 @@ export default function InstallersPage() {
 
   useEffect(() => {
     Promise.all([fetch("/api/installers").then(readJson), fetch("/api/me", { cache: "no-store" }).then(readJson)])
-      .then(([directory, me]) => { setRows(directory.installers || []); setAuthenticated(Boolean(me.authenticated)); })
+      .then(([directory, me]) => {
+        const signedIn = Boolean(me.authenticated);
+        setRows(directory.installers || []);
+        setAuthenticated(signedIn);
+        setAccountEmail(signedIn ? String(me.user?.email || "") : "");
+        if (signedIn && new URLSearchParams(window.location.search).get("cadastro") === "aberto") setFormOpen(true);
+      })
       .catch(() => setMessage("Não foi possível carregar o diretório agora."));
   }, []);
 
@@ -36,7 +43,7 @@ export default function InstallersPage() {
     setBusy(true); setMessage("");
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
-    const response = await fetch("/api/installers", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: form.get("name"), phone: form.get("phone"), city: form.get("city"), state: form.get("state"), description: form.get("description"), specialties: form.getAll("specialties"), serviceStates: form.getAll("serviceStates"), contactConsent: form.get("contactConsent") === "on" }) });
+    const response = await fetch("/api/installers", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: form.get("name"), phone: form.get("phone"), city: form.get("city"), state: form.get("state"), description: form.get("description"), specialties: form.getAll("specialties"), serviceStates: form.getAll("serviceStates"), contactConsent: form.get("contactConsent") === "on", termsConsent: form.get("termsConsent") === "on", privacyConsent: form.get("privacyConsent") === "on", noTransactionsConsent: form.get("noTransactionsConsent") === "on" }) });
     const result = await readJson(response).catch(() => ({}));
     if (!response.ok) { setMessage(result.error || "Não foi possível enviar o cadastro."); setBusy(false); return; }
     const photo = form.get("photo");
@@ -59,7 +66,10 @@ export default function InstallersPage() {
     if (digits) window.open(`https://wa.me/55${digits}`, "_blank", "noopener,noreferrer");
   }
 
-  function closeForm() { setFormOpen(false); setPhotoPreview(null); }
+  function closeForm() {
+    setFormOpen(false); setPhotoPreview(null);
+    if (new URLSearchParams(window.location.search).has("cadastro")) window.history.replaceState({}, "", "/instaladores");
+  }
 
   return <main className="installers-page">
     <header className="installers-header"><a className="brand" href="/"><span className="brand-mark"><span></span><span></span><span></span></span><span className="brand-copy"><strong>Hub <b>Brasil</b></strong><small>CONECTANDO NEGÓCIOS</small></span></a><nav><a href="/">Início</a><a href="/sign-in?return_to=/instaladores">Entrar</a></nav></header>
@@ -71,8 +81,9 @@ export default function InstallersPage() {
     {message && <div className="toast" role="status">{message}</div>}
     {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions */}
     {formOpen && <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) closeForm(); }}><section className="access-modal installer-form" role="dialog" aria-modal="true" aria-labelledby="installer-form-title"><button className="modal-close" onClick={closeForm} aria-label="Fechar">×</button><span className="eyebrow">CADASTRO PROFISSIONAL</span><h2 id="installer-form-title">Quero aparecer no diretório</h2><p>Não solicitamos CPF, endereço residencial ou valores de serviço.</p>
-      {!authenticated ? <div className="installer-login"><p>Entre por código de e-mail antes de preencher o cadastro.</p><a className="primary full" href="/sign-in?return_to=/instaladores">Entrar com segurança →</a></div> : <form onSubmit={register}>
+      {!authenticated ? <div className="installer-login"><p>Entre por código de e-mail antes de preencher o cadastro.</p><a className="primary full" href={`/sign-up?perfil=instalador&return_to=${encodeURIComponent("/instaladores?cadastro=aberto")}`}>Entrar com segurança →</a></div> : <form onSubmit={register}>
         <label>Nome profissional ou empresa<input name="name" required maxLength={120} /></label>
+        <label>E-mail verificado<input value={accountEmail} readOnly aria-readonly="true" /><small>Este e-mail vem da sua conta segura e não será publicado no diretório.</small></label>
         <label>Foto profissional <small>opcional · JPG, PNG ou WebP de até 3 MB</small><input name="photo" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => { const file = event.target.files?.[0]; setPhotoPreview(file ? URL.createObjectURL(file) : null); }} /></label>
         {photoPreview && <img className="installer-photo-preview" src={photoPreview} alt="Prévia da foto profissional" />}
         <label className="consent"><input type="checkbox" name="photoConsent" /><span>Autorizo o Hub Brasil a exibir esta foto no meu perfil profissional. Obrigatório apenas se uma foto for enviada.</span></label>
@@ -81,7 +92,11 @@ export default function InstallersPage() {
         <fieldset className="solution-selector"><legend>Especialidades <small>selecione uma ou mais</small></legend>{SPECIALTIES.map((item) => <label className="check" key={item}><input type="checkbox" name="specialties" value={item} /> {item}</label>)}</fieldset>
         <fieldset className="solution-selector"><legend>Outras UFs atendidas <small>opcional</small></legend>{BRAZIL_STATES.map((uf) => <label className="check" key={uf}><input type="checkbox" name="serviceStates" value={uf} /> {uf}</label>)}</fieldset>
         <label>Apresentação <small>opcional</small><textarea name="description" rows={4} maxLength={800} placeholder="Experiência, serviços e região atendida" /></label>
-        <label className="consent"><input type="checkbox" name="contactConsent" required /><span>Autorizo a publicação do meu nome profissional, cidade, UF, especialidades e a liberação do WhatsApp para usuários autenticados que solicitarem contato.</span></label><label className="consent"><input type="checkbox" required /><span>Concordo com os <a href="/termos" target="_blank">Termos</a> e a <a href="/privacidade" target="_blank">Política de Privacidade</a>.</span></label><button className="primary full" disabled={busy}>{busy ? "Enviando…" : "Enviar para aprovação →"}</button>
+        <label className="consent"><input type="checkbox" name="contactConsent" required /><span>Autorizo a publicação do meu nome profissional, cidade, UF, especialidades e a liberação do WhatsApp somente para usuários autenticados que solicitarem contato.</span></label>
+        <label className="consent"><input type="checkbox" name="privacyConsent" required /><span>Li e concordo com a <a href="/privacidade" target="_blank" rel="noreferrer">Política de Privacidade</a> e com o tratamento dos dados informado, de acordo com a LGPD.</span></label>
+        <label className="consent"><input type="checkbox" name="termsConsent" required /><span>Li e concordo com os <a href="/termos" target="_blank" rel="noreferrer">Termos de Uso</a> do Hub Brasil.</span></label>
+        <label className="consent"><input type="checkbox" name="noTransactionsConsent" required /><span>Estou ciente de que o Hub Brasil não realiza orçamento, contratação, cobrança, pagamento ou qualquer transação financeira. Serviços, valores, garantias e responsabilidades são tratados diretamente entre as partes.</span></label>
+        <button className="primary full" disabled={busy}>{busy ? "Enviando…" : "Enviar para aprovação →"}</button>
       </form>}
     </section></div>}
   </main>;
