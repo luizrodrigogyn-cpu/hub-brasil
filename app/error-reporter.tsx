@@ -42,7 +42,7 @@ export default function ErrorReporterButton() {
     window.setTimeout(() => setState("idle"), 4000);
   }
 
-  return <button className="error-report-button" type="button" onClick={report} disabled={state === "sending"} aria-label="Reportar problema técnico">
-    {state === "sending" ? "Enviando…" : state === "sent" ? "Relato enviado ✓" : "Reportar problema"}
+  return <button className="error-report-button" type="button" onClick={report} disabled={state === "sending"} aria-label="Reportar problema técnico" title="Reportar problema">
+    <span aria-hidden="true">!</span><strong>{state === "sending" ? "Enviando…" : state === "sent" ? "Relato enviado ✓" : "Reportar problema"}</strong>
   </button>;
 }

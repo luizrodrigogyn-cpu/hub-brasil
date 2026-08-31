@@ -753,9 +753,10 @@ export default function Home() {
           <section className="map-layout premium-home-hero">
             <div className="map-copy">
               <span className="hero-kicker"><i></i> Curadoria ativa · todo o Brasil</span>
-              <h1>Encontre os melhores fornecedores de <em>rastreamento, telemetria e conectividade</em> em um só lugar.</h1>
-              <p>Conecte-se a fabricantes, integradores e fornecedores qualificados de todo o Brasil.</p>
-              <div className="hero-ctas"><button className="primary" onClick={() => setView("directory")}>⌕ Buscar fornecedor <span>→</span></button><button className="secondary-action" onClick={() => openRegistration("supplier")}>Sou fornecedor <span>→</span></button><a className="secondary-action" href="/instaladores">Encontrar instalador <span>→</span></a></div>
+              <h1>Encontre <em>tecnologia confiável</em> para sua operação.</h1>
+              <p>Fornecedores, produtos e instaladores de rastreamento, telemetria e IoT em todo o Brasil.</p>
+              <div className="hero-ctas"><button className="primary" onClick={() => setView("directory")}>⌕ Encontrar fornecedor <span>→</span></button><button className="secondary-action" onClick={() => openRegistration("supplier")}>Divulgar minha empresa <span>→</span></button></div>
+              <a className="installer-shortcut" href="/instaladores">Precisa de instalação? Encontre um profissional por região →</a>
               <p className="quality-promise"><span>✓</span> Aqui, o destaque do fornecedor é por qualidade!</p>
               <p className="quality-promise">{platformSlaLabel ? <><span>⏱</span> Receba propostas — fornecedores respondem em média em {platformSlaLabel}</> : <><span>⏱</span> Solicite cotação e fale com o fornecedor em 1 clique</>}</p>
               <p className="empty-note">Somente fornecedores e eventos aprovados pela gestão aparecem no mapa.</p>
@@ -765,13 +766,21 @@ export default function Home() {
               <h2>O que sua operação precisa hoje?</h2>
               <p>Descreva a necessidade, o produto ou a empresa. A busca entende as duas coisas.</p>
               <div className="hero-search-stage"><div className="search-box"><span aria-hidden="true">⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") setView("directory"); }} placeholder="Ex.: telemetria CAN para 300 caminhões" aria-label="Buscar" /><button onClick={() => setView("directory")}>Buscar</button></div><div className="suggestion-pills" aria-label="Sugestões de busca"><span>Buscas populares:</span><button onClick={() => { setCategory("Rastreadores"); setView("directory"); }}>Rastreador 4G</button><button onClick={() => { setCategory("Plataformas de rastreamento veicular"); setView("directory"); }}>Plataformas</button><button onClick={() => { setCategory("Videotelemetria"); setView("directory"); }}>Videotelemetria</button><button onClick={() => { setCategory("Conectividade M2M"); setView("directory"); }}>Chip M2M</button></div></div>
-              <div className="intelligence-stats"><article><strong>{suppliers.length}+</strong><span>fornecedores</span></article><article><strong>{products.length}+</strong><span>produtos</span></article><article><strong>{solutionCategories.length}</strong><span>soluções</span></article></div>
+              {(suppliers.length > 0 || products.length > 0) ? <div className="intelligence-stats">
+                {suppliers.length > 0 && <article><strong>{suppliers.length}+</strong><span>fornecedores</span></article>}
+                {products.length > 0 && <article><strong>{products.length}+</strong><span>produtos</span></article>}
+                <article><strong>{solutionCategories.length}</strong><span>soluções</span></article>
+              </div> : <div className="hero-trust-signals" aria-label="Compromissos de confiança"><span>✓ Perfis aprovados</span><span>✓ WhatsApp validado</span><span>✓ Contato direto</span></div>}
             </aside>
           </section>
           <section className="value-strip" aria-label="Por que usar o Hub Brasil">
             <div className="value-card"><span className="value-icon">⌕</span><span className="eyebrow">PARA QUEM BUSCA</span><h2>Encontre fornecedores qualificados com mais segurança.</h2><ul><li>Busca por necessidade, produto, empresa ou categoria</li><li>Compare confiança, região e portfólio</li><li>Conexão direta com fornecedores aprovados</li></ul><button className="primary" onClick={() => setView("directory")}>Começar a buscar →</button></div>
             <div className="value-card"><span className="value-icon">↗</span><span className="eyebrow">PARA QUEM FORNECE</span><h2>Transforme visibilidade em oportunidades reais.</h2><ul><li>Perfil público com produtos, eventos e selos</li><li>Demandas com contexto do cliente</li><li>Indicadores de visualização e resposta</li></ul><button className="secondary-action" onClick={() => openRegistration("supplier")}>Cadastrar empresa →</button></div>
           </section>
+          {suppliers.length > 0 && <section className="featured-suppliers" aria-labelledby="featured-suppliers-heading">
+            <div className="featured-suppliers-heading"><div><span className="eyebrow">EMPRESAS APROVADAS</span><h2 id="featured-suppliers-heading">Tecnologia com rosto, região e especialidade.</h2><p>Conheça empresas que já passaram pela curadoria do Hub Brasil.</p></div><button className="section-link" onClick={() => setView("directory")}>Ver todas →</button></div>
+            <div className="featured-supplier-grid">{suppliers.slice(0, 4).map((supplier) => <button key={supplier.id} onClick={() => showSupplier(supplier)}><span className={`featured-supplier-logo ${supplier.accent}`}>{supplierLogoUrl(supplier.logoKey) ? <img src={supplierLogoUrl(supplier.logoKey) || ""} alt="" /> : supplier.initials}</span><span className="featured-supplier-copy"><small>{supplier.city} · {supplier.state}</small><strong>{supplier.name}</strong>{supplierCategoryBadges(supplier)}</span><i>→</i></button>)}</div>
+          </section>}
           <section className="national-map-section">
             <div className="national-map-heading"><span className="eyebrow">MAPA DO BRASIL</span><h2>Uma rede nacional de negócios em funcionamento</h2><p>Explore fornecedores, soluções e eventos por estado. Só entra no mapa o que passou pela curadoria.</p></div>
             <div className="map-panel" aria-label="Mapa ilustrativo de fornecedores no Brasil">
@@ -793,7 +802,7 @@ export default function Home() {
             <div className="home-section-heading"><div><span className="eyebrow">DESCUBRA A TECNOLOGIA CERTA</span><h2>Principais soluções</h2><p>Uma base organizada para encontrar tecnologia veicular com clareza.</p></div><button className="section-link" onClick={() => setView("solutions")}>Ver todas →</button></div>
             <div className="solution-preview">{solutionCategories.slice(0, 4).map((item) => <button key={item.name} onClick={() => { setCategory(item.name); setView("directory"); }}><span>{item.icon}</span><strong>{item.title}</strong><small>{item.description}</small></button>)}</div>
             <section className="audience-section" aria-labelledby="audience-heading"><span className="eyebrow">CONEXÃO PARA O SETOR</span><h2 id="audience-heading">Para quem é o Hub Brasil</h2><p className="audience-subhead">Dos dois lados do balcão: quem procura tecnologia encontra fornecedor validado; quem fornece encontra demanda real.</p><div className="audience-grid">{audienceGroups.map((item) => <span key={item}>ϟ {item}</span>)}</div></section>
-            <div className="referral-card"><div><span className="eyebrow">FORTALEÇA O ECOSSISTEMA</span><h2>Indique o Hub aos seus parceiros do setor.</h2><p>Compartilhe o Hub com quem fornece soluções ou procura produtos e fornecedores. Ao entrar, cada pessoa escolhe se deseja se cadastrar como fornecedor ou usuário.</p></div><div className="referral-actions"><button className="primary" onClick={copyRegistrationLink}>Copiar link do Hub</button></div></div>
+            <div className="referral-card conversion-card"><div><span className="eyebrow">COMECE AGORA</span><h2>Pronto para encontrar a solução certa?</h2><p>Pesquise fornecedores aprovados ou compartilhe o Hub com quem movimenta o setor.</p></div><div className="referral-actions"><button className="primary" onClick={() => setView("directory")}>Começar agora</button><button className="secondary-action" onClick={copyRegistrationLink}>Indicar o Hub</button></div></div>
           </section>
           </>
         )}

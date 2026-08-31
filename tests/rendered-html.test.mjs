@@ -26,11 +26,11 @@ test("empacota a experiência do Hub Brasil", async () => {
   const bundle = (await Promise.all(files.map((file) => readFile(file, "utf8")))).join("\n");
 
   assert.match(bundle, /Hub Brasil/);
-  assert.match(bundle, /Encontre os melhores fornecedores/);
+  assert.match(bundle, /tecnologia confiável/);
   assert.match(bundle, /Fornecedores/);
   assert.match(bundle, /Videotelemetria/);
-  assert.match(bundle, /Indique o Hub aos seus parceiros do setor/);
-  assert.match(bundle, /Copiar link do Hub/);
+  assert.match(bundle, /Pronto para encontrar a solução certa/);
+  assert.match(bundle, /Indicar o Hub/);
   assert.match(bundle, /Para quem é o Hub Brasil/);
   assert.match(bundle, /Sobre o Hub/);
   assert.match(bundle, /Eventos/);
