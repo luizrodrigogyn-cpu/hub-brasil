@@ -420,6 +420,16 @@ body{font-family:var(--font-geist-sans),Arial,sans-serif;font-size:16px;line-hei
 .topbar .brand{color:#f4f8ff}.topbar .brand b{color:#67d6f3}.topbar .brand-copy small{color:#67d6f3}.topbar .desktop-nav{gap:3px;margin-left:42px}.topbar .desktop-nav button{padding:9px 11px;border-radius:8px;color:#9db0cb;font-size:13px}.topbar .desktop-nav button:hover{background:rgba(255,255,255,.055);color:#f4f8ff}.topbar .desktop-nav button.active{background:rgba(51,111,218,.18);box-shadow:none;color:#fff}.topbar .text-action{color:#d9e6f8}.topbar .primary.small{padding:10px 15px;border-radius:9px}
 .topbar .mobile-menu-toggle{border:1px solid rgba(160,190,231,.18);background:rgba(255,255,255,.045);color:#dce8f8;box-shadow:none}.topbar .mobile-menu-toggle:hover{border-color:rgba(103,189,246,.42);background:rgba(69,125,226,.13);color:#fff}
 
+/* O cabeçalho tem largura útil limitada mesmo em monitores muito largos.
+   Mantém cinco destinos principais à vista e reúne os demais no Menu em
+   qualquer desktop, sem depender da largura total do monitor. */
+@media(min-width:861px){
+  .topbar .desktop-nav button:nth-child(n+6){display:none}
+  .topbar .navigation-menu{display:block}
+  .topbar .mobile-menu-toggle{display:inline-flex;align-items:center;flex:0 0 auto}
+  .topbar .mobile-navigation{display:grid}
+}
+
 /* Na simulação de perfis pelo gestor, o botão de retorno ocupa mais espaço.
    Mantemos a navegação completa dentro de Menu para impedir sobreposição em
    monitores largos e evitamos repetir os atalhos do perfil simulado. */
