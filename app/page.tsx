@@ -700,7 +700,7 @@ export default function Home() {
 
   return (
     <div className="app-shell">
-      <header className="topbar">
+      <header className={`topbar${previewMode ? " preview-topbar" : ""}`}>
         <button className="brand" onClick={() => navigateTo("map")} aria-label="Ir para o mapa do Hub Brasil">
           <span className="brand-mark"><span></span><span></span><span></span></span>
           <span className="brand-copy"><strong>Hub <b>Brasil</b></strong><small>CONECTANDO NEGÓCIOS</small></span>
@@ -739,10 +739,10 @@ export default function Home() {
         </div>
         <div className="top-actions">
           {previewMode && <a className="preview-exit" href="/admin">↩ Voltar à Visão Gestor</a>}
-          {registered && <button className="admin-link" onClick={() => setView(userRole === "supplier" ? "supplier-dashboard" : "client-dashboard")}>{userRole === "supplier" ? "Painel da operação" : "Meus pedidos"}</button>}
+          {registered && !previewMode && <button className="admin-link" onClick={() => setView(userRole === "supplier" ? "supplier-dashboard" : "client-dashboard")}>{userRole === "supplier" ? "Painel da operação" : "Meus pedidos"}</button>}
           {registered ? <><span className="access-chip"><i></i>Acesso liberado</span>{!previewMode && <a className="text-action" href="/sign-out">Sair</a>}</> : <a className="text-action" href="/sign-in?return_to=/">Entrar</a>}
-          {userRole === "supplier" && <button className="text-action" onClick={() => setView("supplier-dashboard")}>Minha empresa</button>}
-          {userRole === "client" && <button className="text-action" onClick={() => setView("client-dashboard")}>Meus pedidos</button>}
+          {userRole === "supplier" && !previewMode && <button className="text-action" onClick={() => setView("supplier-dashboard")}>Minha empresa</button>}
+          {userRole === "client" && !previewMode && <button className="text-action" onClick={() => setView("client-dashboard")}>Meus pedidos</button>}
           <button className="primary small" onClick={() => openRegistration("supplier")}>Para fornecedores</button>
         </div>
       </header>
