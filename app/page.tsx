@@ -159,9 +159,12 @@ function supplierLogoUrl(key?: string | null) {
   return key ? `/api/supplier-logo?key=${encodeURIComponent(key)}` : null;
 }
 
-function mapPoint(state: string) {
+function mapPoint(state: string, occurrence = 0) {
   const points: Record<string, [number, number]> = { AC:[26,45],AM:[35,30],RR:[45,15],RO:[38,50],PA:[55,32],AP:[62,18],TO:[58,48],MA:[67,38],PI:[70,46],CE:[78,42],RN:[86,43],PB:[84,48],PE:[81,51],AL:[80,55],SE:[78,59],BA:[70,60],MT:[49,53],GO:[58,62],DF:[61,59],MS:[48,68],MG:[65,69],ES:[74,69],RJ:[70,76],SP:[59,76],PR:[55,83],SC:[56,89],RS:[51,95] };
-  return points[state] || [55, 55];
+  const [x, y] = points[state] || [55, 55];
+  const offsets: Array<[number, number]> = [[0,0],[4,-3],[-4,-3],[4,3],[-4,3],[0,5],[0,-5]];
+  const [offsetX, offsetY] = offsets[occurrence % offsets.length];
+  return [x + offsetX, y + offsetY] as [number, number];
 }
 
 export default function Home() {
@@ -796,7 +799,7 @@ export default function Home() {
               <div className="map-grid"></div>
               <div className="brazil-map">
                 <img src="/brazil-states-map.png" alt="Mapa geográfico do Brasil dividido por estados" />
-                {suppliers.map((item) => { const [x,y] = mapPoint(item.state); const logoUrl = supplierLogoUrl(item.logoKey); return <button key={`supplier-${item.id}`} className={`map-pin ${logoUrl ? "logo" : ""} ${item.highlightedOnMap ? "hub-highlight" : ""}`} style={{ left: `${x}%`, top: `${y}%` }} onClick={() => showSupplier(item)} aria-label={`${item.highlightedOnMap ? "Destaque Hub, " : ""}Fornecedor ${item.name}, em ${item.city}`}>{logoUrl ? <img src={logoUrl} alt="" /> : <span>{item.initials}</span>}{item.highlightedOnMap && <i>★</i>}</button>; })}
+                {suppliers.map((item, index) => { const stateOccurrence = suppliers.slice(0, index).filter((supplier) => supplier.state === item.state).length; const [x,y] = mapPoint(item.state, stateOccurrence); const logoUrl = supplierLogoUrl(item.logoKey); return <button key={`supplier-${item.id}`} className={`map-pin ${logoUrl ? "logo" : ""} ${item.highlightedOnMap ? "hub-highlight" : ""}`} style={{ left: `${x}%`, top: `${y}%` }} onClick={() => showSupplier(item)} aria-label={`${item.highlightedOnMap ? "Destaque Hub, " : ""}Fornecedor ${item.name}, em ${item.city}`}>{logoUrl ? <img src={logoUrl} alt="" /> : <span>{item.initials}</span>}{item.highlightedOnMap && <i>★</i>}</button>; })}
                 {plottedEvents.map((item) => <button key={`event-${item.id}`} className={`event-pin ${selectedEvent?.id === item.id ? "selected" : ""}`} style={{ left: `${item.x}%`, top: `${item.y}%` }} onClick={() => setSelectedEvent(item)} aria-label={`Evento ${item.name}, em ${item.city}`} title={`${item.name} · ${item.city}/${item.state}`}><span>★</span></button>)}
               </div>
               <div className="map-side-copy"><strong>Presença nacional</strong><p>Toque em um estado ou marcador para explorar o que está aprovado por lá.</p><ul><li>27 estados mapeados</li><li>Curadoria antes da publicação</li><li>Proximidade regional para instalação e suporte</li></ul></div>
