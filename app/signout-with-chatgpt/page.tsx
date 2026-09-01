@@ -6,7 +6,11 @@ import { useClerk } from "@clerk/react";
 
 function SignOutWithClerk() {
   const { signOut } = useClerk();
-  useEffect(() => { void signOut({ redirectUrl: "/" }); }, [signOut]);
+  useEffect(() => {
+    void signOut({ redirectUrl: "/" }).finally(() => {
+      window.location.replace("/");
+    });
+  }, [signOut]);
   return null;
 }
 

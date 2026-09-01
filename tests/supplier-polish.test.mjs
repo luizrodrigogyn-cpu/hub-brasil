@@ -4,6 +4,8 @@ import test from "node:test";
 
 const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
 const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+const signOutPage = await readFile(new URL("../app/sign-out/page.tsx", import.meta.url), "utf8");
+const legacySignOutPage = await readFile(new URL("../app/signout-with-chatgpt/page.tsx", import.meta.url), "utf8");
 
 test("cockpit apresenta skeleton acessível enquanto carrega dados reais", () => {
   assert.match(page, /dashboardLoading/);
@@ -34,4 +36,11 @@ test("navegação do fornecedor destaca um único painel e separa a saída", () 
   assert.match(page, />Para fornecedores<\/button>/);
   assert.match(css, /\.topbar \.supplier-control-link\{/);
   assert.match(css, /\.topbar \.sign-out-action\{/);
+});
+
+test("encerrar acesso sempre retorna para a página inicial", () => {
+  for (const page of [signOutPage, legacySignOutPage]) {
+    assert.match(page, /signOut\(\{ redirectUrl: "\/" \}\)/);
+    assert.match(page, /window\.location\.replace\("\/"\)/);
+  }
 });
