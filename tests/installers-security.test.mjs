@@ -149,3 +149,14 @@ test("mapa usa marcador em gota para a logo e separa fornecedores da mesma UF", 
   assert.match(css, /border-radius:50% 50% 50% 0/);
   assert.match(css, /object-fit:contain/);
 });
+
+test("clique no fornecedor do mapa abre previa com descricao e produtos", () => {
+  const page = readFileSync("app/page.tsx", "utf8");
+  const css = readFileSync("app/globals.css", "utf8");
+  assert.match(page, /selectedMapSupplier/);
+  assert.match(page, /supplier-map-popover/);
+  assert.match(page, /PRODUTOS E SOLUÇÕES/);
+  assert.match(page, /slice\(0, 3\)/);
+  assert.match(page, /Ver perfil e produtos/);
+  assert.match(css, /\.supplier-map-popover\{/);
+});
