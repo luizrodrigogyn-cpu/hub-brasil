@@ -1105,7 +1105,10 @@ export default function Home() {
           </section>
         </div>
       )}
-      {toast && <div className="toast" role="status">✓ {toast}</div>}
+      {toast && (() => {
+        const isError = /não foi possível|falha|preencha|informe|somente|apenas|identifique-se|confirme|indisponível/i.test(toast);
+        return <div className={`toast ${isError ? "error" : "success"}`} role={isError ? "alert" : "status"}><span aria-hidden="true">{isError ? "!" : "✓"}</span> {toast}</div>;
+      })()}
     </div>
   );
 }

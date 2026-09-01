@@ -56,7 +56,10 @@ export async function POST(request: Request) {
       }
     }
     return Response.json({ lead: await decryptLeadPii(lead) }, { status: 201 });
-  } catch { return Response.json({ error: "Não foi possível registrar o acesso." }, { status: 500 }); }
+  } catch (error) {
+    console.error("lead_registration_failed", error);
+    return Response.json({ error: "Não foi possível registrar o acesso." }, { status: 500 });
+  }
 }
 
 export async function PATCH(request: Request) {
