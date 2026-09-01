@@ -46,10 +46,11 @@ test("todos os uploads de imagem validam a assinatura real do arquivo", () => {
   assert.doesNotMatch(helper, /image\/svg\+xml/);
 });
 
-test("rota pública de imagens entrega somente produto aprovado", () => {
+test("rota de imagens mantém produto pendente privado e libera prévia apenas ao gestor", () => {
   const api = readFileSync("app/api/product-images/route.ts", "utf8");
   assert.match(api, /eq\(products\.imageKey, key\)/);
-  assert.match(api, /eq\(products\.status, "approved"\)/);
+  assert.match(api, /isHubAdmin/);
+  assert.match(api, /product\.status !== "approved" && !adminPreview/);
   assert.match(api, /private, no-store/);
 });
 
@@ -159,4 +160,17 @@ test("clique no fornecedor do mapa abre previa com descricao e produtos", () => 
   assert.match(page, /slice\(0, 3\)/);
   assert.match(page, /Ver perfil e produtos/);
   assert.match(css, /\.supplier-map-popover\{/);
+});
+
+test("gestor revisa fotos e aprova produtos em lote sem expor pendentes", () => {
+  const admin = readFileSync("app/admin/AdminDashboard.tsx", "utf8");
+  const api = readFileSync("app/api/admin/content/route.ts", "utf8");
+  const images = readFileSync("app/api/product-images/route.ts", "utf8");
+  assert.match(admin, /approveSelectedProducts/);
+  assert.match(admin, /Aprovar selecionados/);
+  assert.match(admin, /product-review-photo/);
+  assert.match(api, /approve_many/);
+  assert.match(api, /slice\(0, 50\)/);
+  assert.match(images, /isHubAdmin/);
+  assert.match(images, /private, no-store/);
 });
