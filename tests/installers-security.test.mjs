@@ -128,3 +128,15 @@ test("D1: apenas instaladores aprovados e consentidos entram no diretório", () 
   const rows = db.prepare("SELECT id,name,phone FROM installers WHERE status='approved' AND contact_consent=1").all();
   assert.deepEqual(rows.map((row) => ({ ...row })), [{ id: 1, name: "Aprovado", phone: "[encrypted]" }]);
 });
+
+test("gestor revisa logo e controla o destaque estadual do fornecedor no mapa", () => {
+  const admin = readFileSync("app/admin/AdminDashboard.tsx", "utf8");
+  const api = readFileSync("app/api/admin/content/route.ts", "utf8");
+  const suppliers = readFileSync("app/api/suppliers/route.ts", "utf8");
+  assert.match(admin, /api\/supplier-logo\?key=/);
+  assert.match(admin, /☆ Destacar/);
+  assert.match(admin, /remove_map_highlight/);
+  assert.match(api, /body\.action === "highlight_map"/);
+  assert.match(api, /state: supplier\.state/);
+  assert.match(suppliers, /highlightedOnMap: highlightMap\.has/);
+});

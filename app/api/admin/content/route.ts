@@ -36,9 +36,12 @@ export async function GET() {
   const positiveRatings = await db.select({ supplierId: supplierRatings.supplierId, positiveTotal: sql<number>`count(*)` }).from(supplierRatings).where(and(gte(supplierRatings.stars, 4), isNotNull(supplierRatings.supplierId))).groupBy(supplierRatings.supplierId);
   const positiveMap = new Map(positiveRatings.map((item) => [item.supplierId, Number(item.positiveTotal)]));
   const installerOwnerIds = new Set(installerRows.map((item) => item.ownerUserId));
+  const activeMapHighlights = new Map(highlights
+    .filter((item) => item.placement === "map" && item.status === "active" && new Date(item.endsAt).getTime() > Date.now())
+    .map((item) => [item.supplierId, item.id]));
   const suppliersWithRatings = await Promise.all(suppliers
     .filter((item) => !item.authUserId || !installerOwnerIds.has(item.authUserId))
-    .map(async (item) => ({ ...(await decryptLeadPii(item)), positiveRatings: positiveMap.get(item.id) || 0 })));
+    .map(async (item) => ({ ...(await decryptLeadPii(item)), positiveRatings: positiveMap.get(item.id) || 0, activeMapHighlightId: activeMapHighlights.get(item.id) || null })));
   const registrations = await Promise.all(registrationRows
     .filter((item) => !item.authUserId || !installerOwnerIds.has(item.authUserId))
     .map(async (item) => ({ id: item.id, name: item.company || item.name, phone: await decryptPii(item.phoneEncrypted || item.phone), role: item.role, status: item.status, createdAt: item.createdAt })));
@@ -75,6 +78,16 @@ export async function POST(request: Request) {
       await recomputeHubScore(db,id,"selo_verificado");
     }
     else if (body.action === "suspend_verified") await db.update(leads).set({ verificationStatus: "suspended", verifiedAt: null }).where(eq(leads.id, id));
+    else if (body.action === "highlight_map") {
+      const [supplier] = await db.select().from(leads).where(eq(leads.id, id));
+      if (!supplier || supplier.status !== "approved" || !supplier.phoneVerifiedAt || !supplier.state) return Response.json({ error: "Aprove o fornecedor, valide o WhatsApp e confirme a UF antes de destacá-lo." }, { status: 400 });
+      const now = new Date();
+      await db.update(highlightActivations).set({ status: "cancelled", cancelledAt: now.toISOString(), cancelledBy: admin.email, cancelReason: "Destaque substituído pela gestão" }).where(and(eq(highlightActivations.supplierId, id), eq(highlightActivations.placement, "map"), eq(highlightActivations.status, "active")));
+      const endsAt = new Date(now);
+      endsAt.setFullYear(endsAt.getFullYear() + 1);
+      await db.insert(highlightActivations).values({ supplierId: id, placement: "map", state: supplier.state, startsAt: now.toISOString(), endsAt: endsAt.toISOString(), creditCost: 0, status: "active" });
+    }
+    else if (body.action === "remove_map_highlight") await db.update(highlightActivations).set({ status: "cancelled", cancelledAt: new Date().toISOString(), cancelledBy: admin.email, cancelReason: "Destaque removido pela gestão" }).where(and(eq(highlightActivations.supplierId, id), eq(highlightActivations.placement, "map"), eq(highlightActivations.status, "active")));
     else if (body.action === "approve") { const [supplier] = await db.select().from(leads).where(eq(leads.id, id)); if (!supplier?.phoneVerifiedAt) return Response.json({ error: "Valide o telefone antes de aprovar." }, { status: 400 }); await db.update(leads).set({ status: "approved" }).where(eq(leads.id, id)); await ensureReferralCode(db,id); await awardCredit(db,{supplierId:id,ruleKey:"approved_verified",sourceType:"supplier",sourceId:id,idempotencyKey:`approved-verified:${id}`}); await assignFounderMember(db,id); await recomputeHubScore(db,id,"fornecedor_aprovado"); await qualifyReferralIfReady(db,id); }
     else if (body.action === "reject") await db.update(leads).set({ status: "rejected", verificationStatus: "unverified", verifiedAt: null }).where(eq(leads.id, id));
     else if (body.action === "edit_company") await db.update(leads).set({ company: String(body.value || "").trim() }).where(eq(leads.id, id));
