@@ -8,7 +8,7 @@ test("cockpit limita a home aos quatro indicadores comerciais", () => {
   for (const label of ["OPORTUNIDADES", "INTERAÇÕES", "TAXA DE RESPOSTA", "HUB CRÉDITOS"]) assert.ok(page.includes(label));
   const start = page.indexOf('className="cockpit-kpis"');
   const cockpitKpis = page.slice(start, page.indexOf('className="for-you-section"', start));
-  assert.equal((cockpitKpis.match(/<article>/g) || []).length, 4);
+  assert.equal((cockpitKpis.match(/<article(?:\s|>)/g) || []).length, 4);
 });
 
 test("Para você seleciona no máximo três ações prioritárias", () => {
