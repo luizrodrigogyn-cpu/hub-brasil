@@ -268,6 +268,13 @@ export default function Home() {
         window.location.replace("/admin");
         return;
       }
+      if (data.authenticated && !data.profile && !requestedPreview) {
+        // O Clerk pode manter a sessão válida mesmo quando o cadastro de perfil
+        // ainda não foi concluído. Nesse caso, voltar à tela de login cria um
+        // ciclo invisível; leve a pessoa diretamente à conclusão do cadastro.
+        setWelcomeOpen(false);
+        setRegisterOpen(true);
+      }
       if (data.profile) {
         setRegistered(true);
         setUserRole(data.profile.role);
