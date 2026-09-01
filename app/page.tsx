@@ -214,6 +214,7 @@ export default function Home() {
   const [previewMode, setPreviewMode] = useState<"client" | "supplier" | null>(null);
   const [dashboard, setDashboard] = useState<SupplierDashboardData>({});
   const [dashboardLoading, setDashboardLoading] = useState(false);
+  const supplierDashboardTracked = useRef(false);
   const [selectedOpportunity, setSelectedOpportunity] = useState<SupplierOpportunity | null>(null);
   const [platformSlaLabel, setPlatformSlaLabel] = useState<string | null>(null);
   const [quoteActionBusy, setQuoteActionBusy] = useState("");
@@ -329,6 +330,13 @@ export default function Home() {
       setRegisterOpen(true);
     }
   }, [selectedProduct, registered]);
+
+  useEffect(() => {
+    if (view === "supplier-dashboard" && userRole === "supplier" && !previewMode && !supplierDashboardTracked.current) {
+      supplierDashboardTracked.current = true;
+      trackSupplierJourney("supplier_dashboard_view");
+    }
+  }, [view, userRole, previewMode]);
 
   const filtered = useMemo(() => suppliers.filter((supplier) => {
     const matchesQuery = `${supplier.name} ${supplier.city} ${supplier.state}`.toLowerCase().includes(query.toLowerCase());
@@ -473,6 +481,7 @@ export default function Home() {
       setSupplierCompany(company);
       setSupplierApproved(false);
       setSupplierWelcome({ company, city: String(payload.city || createdLead?.city || ""), state: String(payload.state || createdLead?.state || ""), categories, logoUrl: uploadedLogoUrl });
+      trackSupplierJourney("supplier_registration_completed");
     }
     setRegisterOpen(false);
     setSupplierLogoSelected(false);
@@ -512,6 +521,7 @@ export default function Home() {
     if (allowedFields.includes("features") && productFormSpecs.features.length) specs.features = productFormSpecs.features;
     if (Object.keys(specs).length) form.set("specs", JSON.stringify(specs));
     try { const response = await fetch("/api/products", { method: "POST", body: form }); const data = await readJson(response); if (response.status === 401) { window.location.href = data.signIn; return; } if (!response.ok) { setToast(data.error); return; } } catch { setToast("Não foi possível enviar o produto."); return; }
+    trackSupplierJourney("supplier_product_created");
     if (preview) URL.revokeObjectURL(preview); setProductFormOpen(false); resetProductForm(); setView("supplier-dashboard"); setToast("Produto enviado para aprovação do gestor."); window.setTimeout(() => setToast(""), 3500);
   }
 
@@ -572,6 +582,21 @@ export default function Home() {
     setRegistrationRole(role);
     setSupplierLogoSelected(false);
     setRegisterOpen(true);
+    if (role === "supplier") trackSupplierJourney("supplier_registration_started");
+  }
+
+  function trackSupplierJourney(kind: string) {
+    fetch("/api/analytics", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ kind }) }).catch(() => {});
+  }
+
+  function openSupplierProductForm() {
+    trackSupplierJourney("supplier_product_started");
+    setProductFormOpen(true);
+  }
+
+  function openSupplierOpportunity(opportunity: SupplierOpportunity) {
+    trackSupplierJourney("supplier_opportunity_opened");
+    setSelectedOpportunity(opportunity);
   }
 
   async function loadMessages(conversationId?: number) {
@@ -865,9 +890,9 @@ export default function Home() {
             {dashboardLoading && <div className="cockpit-skeleton" role="status" aria-label="Carregando seu painel comercial"><div className="skeleton-line wide" /><div className="skeleton-kpis">{[0,1,2,3].map((item) => <span key={item} />)}</div><div className="skeleton-line" /><div className="skeleton-cards">{[0,1,2].map((item) => <span key={item} />)}</div><small>Preparando seus dados comerciais…</small></div>}
             {previewMode === "supplier" ? <div className="approval-banner"><strong>Modo de visualização</strong><span>Você está vendo a experiência do fornecedor. Ações de cadastro estão desativadas.</span></div> : !supplierApproved && <div className="approval-banner"><strong>Cadastro em análise</strong><span>Seu espaço comercial está pronto. As publicações serão liberadas após a curadoria da gestão.</span></div>}
             <div className="cockpit-kpis" aria-label="Indicadores comerciais principais"><article><span>OPORTUNIDADES</span><strong>{pendingSupplierOpportunities.length}</strong><small>{pendingSupplierOpportunities.length ? "aguardando sua atenção" : "nenhuma pendência agora"}</small></article><article><span>INTERAÇÕES</span><strong>{supplierInteractions}</strong><small>contatos e cliques no perfil</small></article><article><span>TAXA DE RESPOSTA</span><strong>{dashboard.supplierStats?.responseRate7d || 0}%</strong><small>nos últimos 7 dias</small></article><article className="credit-kpi"><span>HUB CRÉDITOS</span><strong>{Number(dashboard.credits?.wallet?.availableBalance || 0).toLocaleString("pt-BR")}</strong><small>{latestSupplierCredit ? `+${latestSupplierCredit.amount} · ${latestSupplierCredit.note || "Crédito recebido"}` : "saldo disponível"}</small><button onClick={() => setView("supplier-credits")}>Ver extrato →</button></article></div>
-            <section className="profile-progress-card" aria-label="Progresso do perfil da empresa"><div className="profile-progress-copy"><span className="eyebrow">SUA VITRINE</span><h2>Seu perfil está ficando completo</h2><p>Uma melhoria de cada vez, sem formulários longos.</p></div><strong>{supplierCompleteness}%</strong><div className="profile-progress-track"><i style={{ width: `${supplierCompleteness}%` }} /></div><div className="profile-progress-action"><div><small>PRÓXIMO PASSO</small><b>{supplierProfileNextAction.title}</b><span>{supplierProfileNextAction.copy}</span></div><button onClick={() => supplierProfileNextAction.kind === "product" ? setProductFormOpen(true) : setEditingCompany(true)}>{supplierProfileNextAction.action} <i>→</i></button></div></section>
-            <section className="for-you-section"><div className="cockpit-section-heading"><div><span className="eyebrow">PRIORIDADES</span><h2>Para você</h2></div><p>As ações mais importantes para gerar negócios agora.</p></div>{supplierPriorities.length ? <div className="for-you-grid">{supplierPriorities.map((priority) => <article key={priority.id} className={`priority-card ${priority.kind}`}><span>{priority.eyebrow}</span><h3>{priority.title}</h3><p>{priority.copy}</p><button onClick={() => { if (priority.opportunity) setSelectedOpportunity(priority.opportunity); else if (priority.kind === "product") setProductFormOpen(true); else if (priority.kind === "profile") setEditingCompany(true); else { const own = suppliers.find((item) => item.id === dashboard.profile?.id || item.name === supplierCompany); if (own) { setSelectedSupplier(own); setView("supplier"); } } }}>{priority.action} <i>→</i></button></article>)}</div> : <div className="cockpit-empty"><strong>Tudo em dia por aqui.</strong><p>Seu perfil está pronto para receber novas oportunidades.</p></div>}</section>
-            {supplierInsights.length > 0 && <section className="commercial-intelligence" aria-label="Recomendações comerciais"><div className="cockpit-section-heading"><div><span className="eyebrow">INTELIGÊNCIA COMERCIAL</span><h2>O Hub trabalhando por você</h2></div><p>Recomendações explicáveis, baseadas apenas nos seus dados reais.</p></div><div className="intelligence-grid">{supplierInsights.map((insight) => <article key={insight.id}><span>{insight.label}</span><h3>{insight.title}</h3><p>{insight.reason}</p><button onClick={() => { if (insight.opportunity) setSelectedOpportunity(insight.opportunity); else if (insight.kind === "product") setProductFormOpen(true); else setView("supplier-performance"); }}>{insight.action} <i>→</i></button></article>)}</div></section>}
+            <section className="profile-progress-card" aria-label="Progresso do perfil da empresa"><div className="profile-progress-copy"><span className="eyebrow">SUA VITRINE</span><h2>Seu perfil está ficando completo</h2><p>Uma melhoria de cada vez, sem formulários longos.</p></div><strong>{supplierCompleteness}%</strong><div className="profile-progress-track"><i style={{ width: `${supplierCompleteness}%` }} /></div><div className="profile-progress-action"><div><small>PRÓXIMO PASSO</small><b>{supplierProfileNextAction.title}</b><span>{supplierProfileNextAction.copy}</span></div><button onClick={() => supplierProfileNextAction.kind === "product" ? openSupplierProductForm() : setEditingCompany(true)}>{supplierProfileNextAction.action} <i>→</i></button></div></section>
+            <section className="for-you-section"><div className="cockpit-section-heading"><div><span className="eyebrow">PRIORIDADES</span><h2>Para você</h2></div><p>As ações mais importantes para gerar negócios agora.</p></div>{supplierPriorities.length ? <div className="for-you-grid">{supplierPriorities.map((priority) => <article key={priority.id} className={`priority-card ${priority.kind}`}><span>{priority.eyebrow}</span><h3>{priority.title}</h3><p>{priority.copy}</p><button onClick={() => { if (priority.opportunity) openSupplierOpportunity(priority.opportunity); else if (priority.kind === "product") openSupplierProductForm(); else if (priority.kind === "profile") setEditingCompany(true); else { const own = suppliers.find((item) => item.id === dashboard.profile?.id || item.name === supplierCompany); if (own) { setSelectedSupplier(own); setView("supplier"); } } }}>{priority.action} <i>→</i></button></article>)}</div> : <div className="cockpit-empty"><strong>Tudo em dia por aqui.</strong><p>Seu perfil está pronto para receber novas oportunidades.</p></div>}</section>
+            {supplierInsights.length > 0 && <section className="commercial-intelligence" aria-label="Recomendações comerciais"><div className="cockpit-section-heading"><div><span className="eyebrow">INTELIGÊNCIA COMERCIAL</span><h2>O Hub trabalhando por você</h2></div><p>Recomendações explicáveis, baseadas apenas nos seus dados reais.</p></div><div className="intelligence-grid">{supplierInsights.map((insight) => <article key={insight.id}><span>{insight.label}</span><h3>{insight.title}</h3><p>{insight.reason}</p><button onClick={() => { if (insight.opportunity) openSupplierOpportunity(insight.opportunity); else if (insight.kind === "product") openSupplierProductForm(); else setView("supplier-performance"); }}>{insight.action} <i>→</i></button></article>)}</div></section>}
             <section className="opportunity-feed" id="supplier-opportunities"><div className="cockpit-section-heading"><div><span className="eyebrow">NEGÓCIOS COMPATÍVEIS</span><h2>Oportunidades</h2></div><p>Ordenadas por urgência e compatibilidade com sua empresa.</p></div>{supplierOpportunities.length ? <div className="opportunity-list">{supplierOpportunities.map((opportunity) => { const hours = Math.max(0, Math.round((Date.now() - new Date(opportunity.createdAt).getTime()) / 3600000)); const received = hours < 1 ? "Recebida agora" : hours < 24 ? `Recebida há ${hours}h` : `Recebida há ${Math.round(hours / 24)} dia${Math.round(hours / 24) > 1 ? "s" : ""}`; return <article key={opportunity.id} className={opportunity.status === "sent" ? "pending" : "answered"}><div className="opportunity-score"><strong>{opportunity.match.score}%</strong><small>compatível</small></div><div className="opportunity-copy"><div><span className="status-pill">{opportunity.status === "sent" ? "NOVA OPORTUNIDADE" : opportunity.status === "responded" ? "RESPONDIDA" : "RECUSADA"}</span><small>{received}</small></div><h3>{opportunity.category}</h3><p>{opportunity.quantity ? `${opportunity.quantity} unidades · ` : ""}{[opportunity.city, opportunity.state].filter(Boolean).join(" · ") || "Localização a confirmar"}</p><small>{opportunity.application || "Aplicação a confirmar"}</small></div><button className="opportunity-open" onClick={() => setSelectedOpportunity(opportunity)}>Ver detalhes <span>→</span></button></article>; })}</div> : <div className="cockpit-empty"><strong>Sua próxima oportunidade aparecerá aqui.</strong><p>Enquanto isso, deixe seu perfil pronto para ser encontrado.</p><button onClick={() => setEditingCompany(true)}>Melhorar meu perfil</button></div>}</section>
             <nav className="cockpit-shortcuts" aria-label="Atalhos da empresa"><strong>Atalhos</strong><button onClick={() => setView("supplier-performance")}>Performance</button><button onClick={() => setView("supplier-credits")}>Hub Créditos</button><button disabled={!supplierApproved || Boolean(previewMode)} onClick={() => setProductFormOpen(true)}>＋ Produto</button><button disabled={!supplierApproved || Boolean(previewMode)} onClick={() => setEventFormOpen(true)}>＋ Evento</button><button onClick={() => setView("products")}>Ver catálogo</button></nav>
           </section>

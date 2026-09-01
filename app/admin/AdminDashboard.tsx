@@ -37,6 +37,7 @@ type Tab = "registrations" | "suppliers" | "installers" | "products" | "events" 
 type Kpis = {
   timeToFirstProposal: { sampleSize: number; totalQuotes: number; avgHours: number | null; medianHours: number | null; under24hPct: number | null; goalHours: number };
   leadToProposalConversion: { sampleSize: number; responded: number; ratePct: number | null };
+  supplierJourney: { periodDays: number; registrationStarted: number; registrationCompleted: number; registrationCompletionPct: number | null; dashboardViews: number; productStarts: number; productsCreated: number; opportunitiesOpened: number; baselineTotal: number };
   acceptedRateAvailable: boolean;
   churnAvailable: boolean;
   minSample: number;
@@ -101,6 +102,11 @@ export default function AdminDashboard() {
     </div>
     {tab === "kpis" ? <div className="kpi-panel">
       {!kpis ? <div className="admin-empty">Carregando…</div> : <>
+        <article className="kpi-card kpi-journey-card">
+          <h3>Jornada do fornecedor · últimos {kpis.supplierJourney.periodDays} dias</h3>
+          <small>Eventos funcionais sem conteúdo digitado, e-mail, telefone ou IP.</small>
+          <div className="kpi-numbers kpi-journey-numbers"><div><strong>{kpis.supplierJourney.registrationStarted}</strong><span>cadastros iniciados</span></div><div><strong>{kpis.supplierJourney.registrationCompleted}</strong><span>cadastros concluídos</span></div><div><strong>{kpis.supplierJourney.registrationCompletionPct === null ? "—" : `${kpis.supplierJourney.registrationCompletionPct}%`}</strong><span>conclusão{ kpis.supplierJourney.registrationCompletionPct === null ? " (amostra pequena)" : ""}</span></div><div><strong>{kpis.supplierJourney.dashboardViews}</strong><span>visitas ao cockpit</span></div><div><strong>{kpis.supplierJourney.productsCreated}</strong><span>produtos enviados</span></div><div><strong>{kpis.supplierJourney.opportunitiesOpened}</strong><span>oportunidades abertas</span></div></div>
+        </article>
         <article className="kpi-card">
           <h3>Tempo até a primeira proposta</h3>
           <small>Meta inicial: menos de {kpis.timeToFirstProposal.goalHours}h</small>

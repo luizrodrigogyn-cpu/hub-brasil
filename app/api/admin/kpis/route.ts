@@ -1,6 +1,6 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, sql } from "drizzle-orm";
 import { getDb } from "../../../../db";
-import { quoteRecipients, quoteRequests } from "../../../../db/schema";
+import { activityEvents, quoteRecipients, quoteRequests } from "../../../../db/schema";
 import { getChatGPTUser } from "../../../chatgpt-auth";
 import { adminAccessState } from "../../../admin-auth";
 
@@ -53,9 +53,31 @@ export async function GET() {
     ratePct: Math.round((leadsResponded / leadsTotal) * 100),
   } : { sampleSize: leadsTotal, responded: leadsResponded, ratePct: null };
 
+  const journeyKinds = ["supplier_registration_started", "supplier_registration_completed", "supplier_dashboard_view", "supplier_product_started", "supplier_product_created", "supplier_opportunity_opened"];
+  const since30d = new Date(Date.now() - 30 * 86400000).toISOString();
+  const journeyRows = await db.select({ kind: activityEvents.kind, total: sql<number>`count(*)` }).from(activityEvents)
+    .where(inArray(activityEvents.kind, journeyKinds)).groupBy(activityEvents.kind);
+  const journey30dRows = await db.select({ kind: activityEvents.kind, total: sql<number>`count(*)` }).from(activityEvents)
+    .where(and(inArray(activityEvents.kind, journeyKinds), gte(activityEvents.createdAt, since30d))).groupBy(activityEvents.kind);
+  const journey = Object.fromEntries(journeyRows.map((row) => [row.kind, Number(row.total || 0)]));
+  const journey30d = Object.fromEntries(journey30dRows.map((row) => [row.kind, Number(row.total || 0)]));
+  const registrationStarted = journey30d.supplier_registration_started || 0;
+  const registrationCompleted = journey30d.supplier_registration_completed || 0;
+
   return Response.json({
     timeToFirstProposal,
     leadToProposalConversion,
+    supplierJourney: {
+      periodDays: 30,
+      registrationStarted,
+      registrationCompleted,
+      registrationCompletionPct: registrationStarted >= MIN_SAMPLE ? Math.min(100, Math.round((registrationCompleted / registrationStarted) * 100)) : null,
+      dashboardViews: journey30d.supplier_dashboard_view || 0,
+      productStarts: journey30d.supplier_product_started || 0,
+      productsCreated: journey30d.supplier_product_created || 0,
+      opportunitiesOpened: journey30d.supplier_opportunity_opened || 0,
+      baselineTotal: Object.values(journey).reduce((sum, value) => sum + Number(value), 0),
+    },
     // Taxa de proposta aceita e churn de fornecedor por 30 dias: não medíveis hoje. O sistema
     // registra o pedido e a resposta do fornecedor, mas não captura se o cliente fechou negócio
     // (não existe um passo de "aceitar proposta"), nem um evento de cancelamento/inatividade do
