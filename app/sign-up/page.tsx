@@ -9,7 +9,7 @@ type RegistrationRole = "client" | "supplier" | "installer";
 function ClerkSignUpForm({ returnTo, afterSignUp }: { returnTo: string; afterSignUp: string }) {
   const { isLoaded } = useAuth();
   if (!isLoaded) return <div className="clerk-form-shell"><div className="clerk-loading-card static" role="status" aria-live="polite"><span></span><strong>Carregando o campo de e-mail…</strong><small>O cadastro seguro pode levar alguns segundos.</small><button type="button" onClick={() => window.location.reload()}>Atualizar cadastro</button></div></div>;
-  return <div className="clerk-form-shell loaded"><SignUp routing="hash" signInUrl={`/sign-in?return_to=${encodeURIComponent(returnTo)}`} forceRedirectUrl={afterSignUp} appearance={{ elements: { socialButtonsBlockButton: { display: "none" }, dividerRow: { display: "none" } } }} /></div>;
+  return <div className="clerk-form-shell loaded"><SignUp routing="hash" signInUrl={`/sign-in?return_to=${encodeURIComponent(returnTo)}`} forceRedirectUrl={afterSignUp} appearance={{ elements: { socialButtonsBlockButton: { display: "none" }, dividerRow: { display: "none" } } }} /><div className="clerk-loading-card" role="status" aria-live="polite"><span></span><strong>Carregando o campo de e-mail…</strong><small>Se ele não aparecer, atualize o cadastro.</small><button type="button" onClick={() => window.location.reload()}>Atualizar cadastro</button></div></div>;
 }
 
 export default function SignUpPage() {

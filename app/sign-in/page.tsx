@@ -1,12 +1,17 @@
 "use client";
 
 import { SignIn, useAuth } from "@clerk/react";
+import { useEffect } from "react";
 import { useClerkAvailability } from "../auth-provider";
 
 function ClerkSignInForm({ returnTo }: { returnTo: string }) {
-  const { isLoaded } = useAuth();
+  const { isLoaded, isSignedIn } = useAuth();
+  useEffect(() => {
+    if (isLoaded && isSignedIn) window.location.replace(returnTo);
+  }, [isLoaded, isSignedIn, returnTo]);
   if (!isLoaded) return <div className="clerk-form-shell"><div className="clerk-loading-card static" role="status" aria-live="polite"><span></span><strong>Carregando o campo de e-mail…</strong><small>Se o formulário não aparecer, atualize esta página.</small><button type="button" onClick={() => window.location.reload()}>Atualizar acesso</button></div></div>;
-  return <div className="clerk-form-shell loaded"><SignIn routing="hash" signUpUrl={`/sign-up?return_to=${encodeURIComponent(returnTo)}`} forceRedirectUrl={returnTo} appearance={{ elements: { socialButtonsBlockButton: { display: "none" }, dividerRow: { display: "none" } } }} /></div>;
+  if (isSignedIn) return <div className="clerk-form-shell"><div className="clerk-loading-card static" role="status" aria-live="polite"><span></span><strong>Acesso confirmado.</strong><small>Direcionando você para o Hub Brasil…</small><button type="button" onClick={() => window.location.replace(returnTo)}>Continuar</button></div></div>;
+  return <div className="clerk-form-shell loaded"><SignIn routing="hash" signUpUrl={`/sign-up?return_to=${encodeURIComponent(returnTo)}`} forceRedirectUrl={returnTo} appearance={{ elements: { socialButtonsBlockButton: { display: "none" }, dividerRow: { display: "none" } } }} /><div className="clerk-loading-card" role="status" aria-live="polite"><span></span><strong>Carregando o campo de e-mail…</strong><small>Se ele não aparecer, atualize o acesso.</small><button type="button" onClick={() => window.location.reload()}>Atualizar acesso</button></div></div>;
 }
 
 export default function SignInPage() {
