@@ -213,6 +213,7 @@ export default function Home() {
   const [referralCode, setReferralCode] = useState("");
   const [previewMode, setPreviewMode] = useState<"client" | "supplier" | null>(null);
   const [dashboard, setDashboard] = useState<SupplierDashboardData>({});
+  const [dashboardLoading, setDashboardLoading] = useState(false);
   const [selectedOpportunity, setSelectedOpportunity] = useState<SupplierOpportunity | null>(null);
   const [platformSlaLabel, setPlatformSlaLabel] = useState<string | null>(null);
   const [quoteActionBusy, setQuoteActionBusy] = useState("");
@@ -307,7 +308,8 @@ export default function Home() {
         setWelcomeOpen(false);
         refreshSuppliers();
         refreshProducts();
-        fetch("/api/roadmap").then((response) => response.ok ? readJson(response) : null).then((result) => result && setDashboard(result)).catch(() => {});
+        setDashboardLoading(true);
+        fetch("/api/roadmap").then((response) => response.ok ? readJson(response) : null).then((result) => result && setDashboard(result)).catch(() => {}).finally(() => setDashboardLoading(false));
       }
     }).catch(() => {});
   }, []);
@@ -528,12 +530,17 @@ export default function Home() {
     try {
       const response = await fetch("/api/roadmap", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "quote_response", quoteId, responseStatus }) });
       const data = await readJson(response).catch(() => ({}));
-      if (response.status === 401) { window.location.href = data.signIn; return; }
-      if (!response.ok) { setToast(data.error || "Não foi possível atualizar esta cotação."); window.setTimeout(() => setToast(""), 3500); return; }
+      if (response.status === 401) { window.location.href = data.signIn; return false; }
+      if (!response.ok) { setToast(data.error || "Não foi possível atualizar esta cotação."); window.setTimeout(() => setToast(""), 3500); return false; }
       const refreshed = await fetch("/api/roadmap").then((result) => result.ok ? readJson(result) : null).catch(() => null);
       if (refreshed) setDashboard(refreshed);
       setToast(responseStatus === "responded" ? "Cotação marcada como respondida." : "Cotação recusada.");
       window.setTimeout(() => setToast(""), 3000);
+      return true;
+    } catch {
+      setToast("Falha de conexão. A oportunidade continua disponível para você tentar novamente.");
+      window.setTimeout(() => setToast(""), 3500);
+      return false;
     } finally {
       setQuoteActionBusy("");
     }
@@ -850,11 +857,12 @@ export default function Home() {
 
       <main>
         {view === "supplier-dashboard" && (
-          <section className="supplier-cockpit">
+          <section className={`supplier-cockpit${dashboardLoading ? " is-loading" : ""}`} aria-busy={dashboardLoading}>
             <div className="cockpit-hero">
               <div><span className="eyebrow">COCKPIT COMERCIAL</span><h1>Olá, {supplierCompany || "sua empresa"}</h1><p>Veja o que está acontecendo com sua empresa no Hub.</p>{pendingSupplierOpportunities.length > 0 && <strong>Você tem {pendingSupplierOpportunities.length} nova{pendingSupplierOpportunities.length > 1 ? "s" : ""} oportunidade{pendingSupplierOpportunities.length > 1 ? "s" : ""}.</strong>}</div>
               <div className="cockpit-hero-actions">{pendingSupplierOpportunities.length > 0 && <button className="primary" onClick={() => document.getElementById("supplier-opportunities")?.scrollIntoView({ behavior: "smooth" })}>Ver oportunidades</button>}<button className="event-create" onClick={() => setEditingCompany(true)}>Editar empresa</button><button className="event-create" onClick={() => { setView("messages"); loadMessages(); }}>Mensagens</button></div>
             </div>
+            {dashboardLoading && <div className="cockpit-skeleton" role="status" aria-label="Carregando seu painel comercial"><div className="skeleton-line wide" /><div className="skeleton-kpis">{[0,1,2,3].map((item) => <span key={item} />)}</div><div className="skeleton-line" /><div className="skeleton-cards">{[0,1,2].map((item) => <span key={item} />)}</div><small>Preparando seus dados comerciais…</small></div>}
             {previewMode === "supplier" ? <div className="approval-banner"><strong>Modo de visualização</strong><span>Você está vendo a experiência do fornecedor. Ações de cadastro estão desativadas.</span></div> : !supplierApproved && <div className="approval-banner"><strong>Cadastro em análise</strong><span>Seu espaço comercial está pronto. As publicações serão liberadas após a curadoria da gestão.</span></div>}
             <div className="cockpit-kpis" aria-label="Indicadores comerciais principais"><article><span>OPORTUNIDADES</span><strong>{pendingSupplierOpportunities.length}</strong><small>{pendingSupplierOpportunities.length ? "aguardando sua atenção" : "nenhuma pendência agora"}</small></article><article><span>INTERAÇÕES</span><strong>{supplierInteractions}</strong><small>contatos e cliques no perfil</small></article><article><span>TAXA DE RESPOSTA</span><strong>{dashboard.supplierStats?.responseRate7d || 0}%</strong><small>nos últimos 7 dias</small></article><article className="credit-kpi"><span>HUB CRÉDITOS</span><strong>{Number(dashboard.credits?.wallet?.availableBalance || 0).toLocaleString("pt-BR")}</strong><small>{latestSupplierCredit ? `+${latestSupplierCredit.amount} · ${latestSupplierCredit.note || "Crédito recebido"}` : "saldo disponível"}</small><button onClick={() => setView("supplier-credits")}>Ver extrato →</button></article></div>
             <section className="profile-progress-card" aria-label="Progresso do perfil da empresa"><div className="profile-progress-copy"><span className="eyebrow">SUA VITRINE</span><h2>Seu perfil está ficando completo</h2><p>Uma melhoria de cada vez, sem formulários longos.</p></div><strong>{supplierCompleteness}%</strong><div className="profile-progress-track"><i style={{ width: `${supplierCompleteness}%` }} /></div><div className="profile-progress-action"><div><small>PRÓXIMO PASSO</small><b>{supplierProfileNextAction.title}</b><span>{supplierProfileNextAction.copy}</span></div><button onClick={() => supplierProfileNextAction.kind === "product" ? setProductFormOpen(true) : setEditingCompany(true)}>{supplierProfileNextAction.action} <i>→</i></button></div></section>
@@ -1177,7 +1185,7 @@ export default function Home() {
             <h2 id="opportunity-title">{selectedOpportunity.category}</h2>
             <div className="opportunity-detail-summary"><article><small>Quantidade</small><strong>{selectedOpportunity.quantity || "A confirmar"}</strong></article><article><small>Localização</small><strong>{[selectedOpportunity.city, selectedOpportunity.state].filter(Boolean).join(" / ") || "A confirmar"}</strong></article><article><small>Prazo</small><strong>{selectedOpportunity.deadline ? new Date(`${selectedOpportunity.deadline}T12:00:00`).toLocaleDateString("pt-BR") : "A confirmar"}</strong></article></div>
             <div className="opportunity-detail-copy"><small>Aplicação</small><p>{selectedOpportunity.application || "Não informada"}</p><small>Necessidade</small><p>{selectedOpportunity.notes || "O cliente não adicionou observações."}</p></div>
-            <div className="opportunity-detail-actions">{selectedOpportunity.status === "sent" ? <><button className="primary" disabled={Boolean(quoteActionBusy)} onClick={() => { respondQuote(selectedOpportunity.id, "responded"); setSelectedOpportunity(null); }}>{quoteActionBusy ? "Registrando…" : "Tenho interesse"}</button><button className="ghost" disabled={Boolean(quoteActionBusy)} onClick={() => { if (window.confirm("Recusar esta oportunidade?")) { respondQuote(selectedOpportunity.id, "declined"); setSelectedOpportunity(null); } }}>Agora não</button></> : <span className="quote-outcome responded">{selectedOpportunity.status === "responded" ? "✓ Interesse registrado" : "Oportunidade recusada"}</span>}</div>
+            <div className="opportunity-detail-actions">{selectedOpportunity.status === "sent" ? <><button className="primary" disabled={Boolean(quoteActionBusy)} onClick={async () => { if (await respondQuote(selectedOpportunity.id, "responded")) setSelectedOpportunity(null); }}>{quoteActionBusy ? "Registrando…" : "Tenho interesse"}</button><button className="ghost" disabled={Boolean(quoteActionBusy)} onClick={async () => { if (window.confirm("Recusar esta oportunidade?") && await respondQuote(selectedOpportunity.id, "declined")) setSelectedOpportunity(null); }}>Agora não</button></> : <span className="quote-outcome responded">{selectedOpportunity.status === "responded" ? "✓ Interesse registrado" : "Oportunidade recusada"}</span>}</div>
           </section>
         </div>
       )}
