@@ -864,19 +864,18 @@ export default function Home() {
             <button onClick={() => navigateTo("about")}>Sobre o Hub</button>
             <button onClick={() => navigateTo("how-it-works")}>Como funciona</button>
             <button onClick={() => { openQuoteRequest(); setNavigationOpen(false); }}>Solicitar cotação</button>
-            {userRole === "supplier" && <button onClick={() => navigateTo("supplier-dashboard")}>Minha empresa</button>}
+            {userRole === "supplier" && <button className="supplier-control-link" onClick={() => navigateTo("supplier-dashboard")}>Painel de controle</button>}
             {userRole === "client" && <button onClick={() => navigateTo("client-dashboard")}>Meus pedidos</button>}
             {!registered && <a href="/sign-in?return_to=/">Entrar</a>}
-            {registered && !previewMode && <a href="/sign-out">Sair</a>}
+            {registered && !previewMode && <a className="sign-out-action" href="/sign-out">Sair</a>}
           </nav>}
         </div>
         <div className="top-actions">
           {previewMode && <a className="preview-exit" href="/admin">↩ Voltar à Visão Gestor</a>}
-          {registered && !previewMode && <button className="admin-link" onClick={() => setView(userRole === "supplier" ? "supplier-dashboard" : "client-dashboard")}>{userRole === "supplier" ? "Painel da operação" : "Meus pedidos"}</button>}
-          {registered ? <><span className="access-chip"><i></i>Acesso liberado</span>{!previewMode && <a className="text-action" href="/sign-out">Sair</a>}</> : <a className="text-action" href="/sign-in?return_to=/">Entrar</a>}
-          {userRole === "supplier" && !previewMode && <button className="text-action" onClick={() => setView("supplier-dashboard")}>Minha empresa</button>}
+          {registered && !previewMode && <button className={`admin-link${userRole === "supplier" ? " supplier-control-link" : ""}`} onClick={() => setView(userRole === "supplier" ? "supplier-dashboard" : "client-dashboard")}>{userRole === "supplier" ? "Painel de controle" : "Meus pedidos"}</button>}
+          {registered ? <><span className="access-chip"><i></i>Acesso liberado</span>{!previewMode && <a className="text-action sign-out-action" href="/sign-out">Sair</a>}</> : <a className="text-action" href="/sign-in?return_to=/">Entrar</a>}
           {userRole === "client" && !previewMode && <button className="text-action" onClick={() => setView("client-dashboard")}>Meus pedidos</button>}
-          <button className="primary small" onClick={() => setView("supplier-entry")}>Para fornecedores</button>
+          {!registered && <button className="primary small" onClick={() => setView("supplier-entry")}>Para fornecedores</button>}
         </div>
       </header>
 

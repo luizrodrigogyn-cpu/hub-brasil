@@ -24,3 +24,14 @@ test("acabamento responde ao mobile e respeita movimento reduzido", () => {
   assert.match(css, /:focus-visible\{/);
   assert.match(css, /@keyframes toast-arrival/);
 });
+
+test("navegação do fornecedor destaca um único painel e separa a saída", () => {
+  assert.doesNotMatch(page, />Minha empresa</);
+  assert.match(page, /className="supplier-control-link"/);
+  assert.match(page, />Painel de controle<\/button>/);
+  assert.match(page, /sign-out-action/);
+  assert.match(page, /\{!registered && <button className="primary small"/);
+  assert.match(page, />Para fornecedores<\/button>/);
+  assert.match(css, /\.topbar \.supplier-control-link\{/);
+  assert.match(css, /\.topbar \.sign-out-action\{/);
+});
