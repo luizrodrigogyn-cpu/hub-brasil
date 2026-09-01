@@ -1,0 +1,115 @@
+.product-preview-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(2, 11, 24, .78);
+  backdrop-filter: blur(8px);
+}
+
+.product-preview-modal {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(280px, .85fr) minmax(320px, 1.15fr);
+  width: min(920px, 100%);
+  max-height: 88vh;
+  overflow: auto;
+  border: 1px solid #315b89;
+  border-radius: 20px;
+  background: #091d38;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, .55);
+}
+
+.product-preview-media {
+  display: grid;
+  min-height: 420px;
+  place-items: center;
+  overflow: hidden;
+  background: #fff;
+  color: #7188a5;
+}
+
+.product-preview-media img {
+  width: 100%;
+  height: 100%;
+  max-height: 620px;
+  object-fit: contain;
+}
+
+.product-preview-details {
+  display: grid;
+  align-content: start;
+  gap: 13px;
+  padding: 38px 34px;
+  color: #dce9f9;
+}
+
+.product-preview-details > small {
+  color: #5bd6f5;
+  font-weight: 800;
+  letter-spacing: .12em;
+}
+
+.product-preview-details h2,
+.product-preview-details p {
+  margin: 0;
+}
+
+.product-preview-details h2 {
+  font-size: clamp(28px, 4vw, 42px);
+}
+
+.product-preview-details p {
+  color: #a9bdd5;
+  line-height: 1.55;
+}
+
+.product-preview-specs {
+  display: grid;
+  gap: 7px;
+  padding: 14px;
+  border: 1px solid #294e78;
+  border-radius: 10px;
+  background: #07172d;
+}
+
+.product-preview-specs pre {
+  margin: 0;
+  overflow: auto;
+  color: #b9cae0;
+  font: inherit;
+  white-space: pre-wrap;
+}
+
+.product-preview-details a {
+  color: #62d9f7;
+  font-weight: 750;
+}
+
+.product-preview-close {
+  position: absolute;
+  z-index: 2;
+  top: 12px;
+  right: 14px;
+  width: 38px;
+  height: 38px;
+  border: 1px solid #45698f;
+  border-radius: 50%;
+  background: #0b2546;
+  color: #fff;
+  font-size: 26px;
+}
+
+.product-preview-button {
+  border-color: #3c79bb !important;
+  color: #7cddf7 !important;
+}
+
+@media (max-width: 760px) {
+  .product-preview-backdrop { padding: 12px; }
+  .product-preview-modal { grid-template-columns: 1fr; }
+  .product-preview-media { min-height: 240px; max-height: 36vh; }
+  .product-preview-details { padding: 25px 20px; }
+}
