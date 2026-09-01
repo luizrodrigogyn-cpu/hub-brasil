@@ -145,6 +145,9 @@ test("gestor revisa logo e controla o destaque estadual do fornecedor no mapa", 
 test("mapa usa marcador em gota para a logo e separa fornecedores da mesma UF", () => {
   const page = readFileSync("app/page.tsx", "utf8");
   const css = readFileSync("app/globals.css", "utf8");
+  assert.match(page, /suppliers\.filter\(\(supplier\) => supplier\.highlightedOnMap === true\)/);
+  assert.match(page, /highlightedMapSuppliers\.map/);
+  assert.doesNotMatch(page, /\{suppliers\.map\(\(item, index\) => \{ const stateOccurrence/);
   assert.match(page, /stateOccurrence/);
   assert.match(page, /mapPoint\(item\.state, stateOccurrence\)/);
   assert.match(css, /border-radius:50% 50% 50% 0/);

@@ -345,6 +345,13 @@ export default function Home() {
     return matchesQuery && matchesCategory && matchesState;
   }), [suppliers, query, category, stateFilter]);
 
+  // O diretório lista todas as empresas aprovadas. O mapa é uma vitrine separada e
+  // exibe somente quem recebeu destaque explícito da gestão.
+  const highlightedMapSuppliers = useMemo(
+    () => suppliers.filter((supplier) => supplier.highlightedOnMap === true),
+    [suppliers],
+  );
+
   const plottedEvents = useMemo(() => {
     const eventsByState = new Map<string, HubEvent[]>();
     events.forEach((item) => eventsByState.set(item.state, [...(eventsByState.get(item.state) || []), item]));
@@ -951,7 +958,7 @@ export default function Home() {
               <a className="installer-shortcut" href="/instaladores">Precisa de instalação? Encontre um profissional por região →</a>
               <p className="quality-promise"><span>✓</span> Aqui, o destaque do fornecedor é por qualidade!</p>
               <p className="quality-promise">{platformSlaLabel ? <><span>⏱</span> Receba propostas — fornecedores respondem em média em {platformSlaLabel}</> : <><span>⏱</span> Solicite cotação e fale com o fornecedor em 1 clique</>}</p>
-              <p className="empty-note">Somente fornecedores e eventos aprovados pela gestão aparecem no mapa.</p>
+              <p className="empty-note">Somente fornecedores destacados e eventos aprovados pela gestão aparecem no mapa.</p>
             </div>
             <aside className="hero-intelligence" aria-label="Busca inteligente do Hub Brasil">
               <span className="intelligence-icon">⌕</span>
@@ -974,17 +981,17 @@ export default function Home() {
             <div className="featured-supplier-grid">{suppliers.slice(0, 4).map((supplier) => <button key={supplier.id} onClick={() => showSupplier(supplier)}><span className={`featured-supplier-logo ${supplier.accent}`}>{supplierLogoUrl(supplier.logoKey) ? <img src={supplierLogoUrl(supplier.logoKey) || ""} alt="" /> : supplier.initials}</span><span className="featured-supplier-copy"><small>{supplier.city} · {supplier.state}</small><strong>{supplier.name}</strong>{supplierCategoryBadges(supplier)}</span><i>→</i></button>)}</div>
           </section>}
           <section className="national-map-section">
-            <div className="national-map-heading"><span className="eyebrow">MAPA DO BRASIL</span><h2>Uma rede nacional de negócios em funcionamento</h2><p>Explore fornecedores, soluções e eventos por estado. Só entra no mapa o que passou pela curadoria.</p></div>
+            <div className="national-map-heading"><span className="eyebrow">MAPA DO BRASIL</span><h2>Uma rede nacional de negócios em funcionamento</h2><p>Explore os fornecedores destacados pela gestão e os eventos aprovados em cada estado.</p></div>
             <div className="map-panel" aria-label="Mapa ilustrativo de fornecedores no Brasil">
               <div className="map-grid"></div>
               <div className="brazil-map">
                 <img src="/brazil-states-map.png" alt="Mapa geográfico do Brasil dividido por estados" />
-                {suppliers.map((item, index) => { const stateOccurrence = suppliers.slice(0, index).filter((supplier) => supplier.state === item.state).length; const [x,y] = mapPoint(item.state, stateOccurrence); const logoUrl = supplierLogoUrl(item.logoKey); return <button key={`supplier-${item.id}`} className={`map-pin ${logoUrl ? "logo" : ""} ${item.highlightedOnMap ? "hub-highlight" : ""} ${selectedMapSupplier?.id === item.id ? "selected" : ""}`} style={{ left: `${x}%`, top: `${y}%` }} onClick={() => { setSelectedMapSupplier(item); setSelectedEvent(null); }} aria-label={`${item.highlightedOnMap ? "Destaque Hub, " : ""}Fornecedor ${item.name}, em ${item.city}`}>{logoUrl ? <img src={logoUrl} alt="" /> : <span>{item.initials}</span>}{item.highlightedOnMap && <i>★</i>}</button>; })}
+                {highlightedMapSuppliers.map((item, index) => { const stateOccurrence = highlightedMapSuppliers.slice(0, index).filter((supplier) => supplier.state === item.state).length; const [x,y] = mapPoint(item.state, stateOccurrence); const logoUrl = supplierLogoUrl(item.logoKey); return <button key={`supplier-${item.id}`} className={`map-pin ${logoUrl ? "logo" : ""} hub-highlight ${selectedMapSupplier?.id === item.id ? "selected" : ""}`} style={{ left: `${x}%`, top: `${y}%` }} onClick={() => { setSelectedMapSupplier(item); setSelectedEvent(null); }} aria-label={`Destaque Hub, fornecedor ${item.name}, em ${item.city}`}>{logoUrl ? <img src={logoUrl} alt="" /> : <span>{item.initials}</span>}<i>★</i></button>; })}
                 {plottedEvents.map((item) => <button key={`event-${item.id}`} className={`event-pin ${selectedEvent?.id === item.id ? "selected" : ""}`} style={{ left: `${item.x}%`, top: `${item.y}%` }} onClick={() => { setSelectedEvent(item); setSelectedMapSupplier(null); }} aria-label={`Evento ${item.name}, em ${item.city}`} title={`${item.name} · ${item.city}/${item.state}`}><span>★</span></button>)}
               </div>
               <div className="map-side-copy"><strong>Presença nacional</strong><p>Toque em um estado ou marcador para explorar o que está aprovado por lá.</p><ul><li>27 estados mapeados</li><li>Curadoria antes da publicação</li><li>Proximidade regional para instalação e suporte</li></ul></div>
-              <span className="map-caption">FORNECEDORES E EVENTOS APROVADOS</span>
-              {!selectedEvent && !selectedMapSupplier && suppliers.length === 0 && events.length === 0 && <div className="map-empty"><strong>Mapa pronto para receber cadastros reais</strong><span>Fornecedores e eventos aparecerão aqui após aprovação.</span></div>}
+              <span className="map-caption">FORNECEDORES DESTACADOS E EVENTOS APROVADOS</span>
+              {!selectedEvent && !selectedMapSupplier && highlightedMapSuppliers.length === 0 && events.length === 0 && <div className="map-empty"><strong>Mapa pronto para receber novos destaques</strong><span>Fornecedores aparecerão aqui somente quando forem destacados pela gestão.</span></div>}
               {selectedEvent && <div className="event-popover"><span className="event-date">{selectedEvent.displayDate}</span><div><small>PRÓXIMO EVENTO {selectedEvent.demo ? "· DEMONSTRAÇÃO" : ""}</small><strong>{selectedEvent.name}</strong><span>{selectedEvent.city}, {selectedEvent.state}</span></div><button onClick={() => setView("events")}>Ver →</button></div>}
               {selectedMapSupplier && <div className="supplier-map-popover"><button className="supplier-map-close" onClick={() => setSelectedMapSupplier(null)} aria-label="Fechar prévia">×</button><div className="supplier-map-popover-head"><span className="supplier-map-popover-logo">{supplierLogoUrl(selectedMapSupplier.logoKey) ? <img src={supplierLogoUrl(selectedMapSupplier.logoKey) || ""} alt={`Logo de ${selectedMapSupplier.name}`} /> : selectedMapSupplier.initials}</span><div><small>EMPRESA APROVADA · {selectedMapSupplier.city}/{selectedMapSupplier.state}</small><strong>{selectedMapSupplier.name}</strong></div></div><p>{selectedMapSupplier.description || "Fornecedor aprovado no Hub Brasil."}</p><div className="supplier-map-products"><small>PRODUTOS E SOLUÇÕES</small>{registered ? <><div>{products.filter((product) => product.supplierId != null ? product.supplierId === selectedMapSupplier.id : product.supplierName === selectedMapSupplier.name).slice(0, 3).map((product) => <span key={product.id}>{product.name}</span>)}</div>{products.filter((product) => product.supplierId != null ? product.supplierId === selectedMapSupplier.id : product.supplierName === selectedMapSupplier.name).length === 0 && <span>{(selectedMapSupplier.categories?.length ? selectedMapSupplier.categories : [selectedMapSupplier.category]).slice(0, 3).map(displayCategory).join(" · ")}</span>}</> : <span>Cadastre-se para ver produtos, detalhes e WhatsApp.</span>}</div><button className="supplier-map-profile" onClick={() => showSupplier(selectedMapSupplier)}>{registered ? "Ver perfil e produtos →" : "Cadastre-se para ver produtos e WhatsApp →"}</button></div>}
               <a className="map-source" href="https://commons.wikimedia.org/wiki/File:Brazil_states_blank.png" target="_blank" rel="noreferrer">Mapa: Wikimedia Commons · CC BY-SA</a>
