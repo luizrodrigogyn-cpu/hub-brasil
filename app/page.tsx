@@ -48,6 +48,15 @@ type HubEvent = { id: number; name: string; supplier: string; venue: string; cit
 type ProductSpecs = { technology?: string[]; ip?: string; battery?: string; warranty?: string; anatel?: boolean; application?: string[]; features?: string[] };
 type Product = { id: number; supplierId?: number | null; supplierName: string; supplierPhone?: string | null; name: string; category: string; technicalDetails: string; highlighted?: boolean; imageUrl?: string | null; specs?: ProductSpecs | null; manualUrl?: string | null; averagePrice?: string | null };
 type SectorNews = { id: number; title: string; summary: string; category: string; sourceName: string; sourceUrl: string; imageUrl?: string | null; publishedAt: string };
+type SupplierOpportunity = { id: number; protocol: string; category: string; application: string; quantity?: string | number | null; city?: string | null; state?: string | null; deadline?: string | null; notes?: string | null; status: string; createdAt: string; isNewLead?: boolean };
+type SupplierDashboardData = {
+  supplierMetrics?: Record<string, number>;
+  supplierQuotes?: SupplierOpportunity[];
+  supplierStats?: { totalReceived:number; totalResponded:number; acceptanceRate:number; newLeads:number; quoteRequests7d:number; quoteResponses7d:number; responseRate7d:number; avgResponseMinutes7d:number|null; quoteRequests30d:number } | null;
+  clientQuotes?: Array<{ id:number; protocol:string; category:string; application:string; city:string; state:string; status:string; createdAt:string; recipientsTotal:number; recipientsResponded:number; recipientsDeclined:number; recipientsCompleted:number }>;
+  profile?: { id?:number; address?:string|null; city?:string|null; state?:string|null; phone?:string|null; instagram?:string|null; website?:string|null; description?:string|null; categories?:string[]; serviceStates?:string[]; completeness?:number; hubScore?:number };
+  credits?: { wallet?: { availableBalance?: number; totalEarned?: number; totalUsed?: number } } | null;
+};
 
 const solutionCategories = [
   { name: "Rastreadores", title: "Rastreadores veiculares", icon: "◎", description: "GPS, 2G, 4G e LTE para veículos, frotas e cargas." },
@@ -118,23 +127,28 @@ const quoteBudgetOptions = ["Econômico", "Intermediário", "Avançado"] as cons
 const quoteUrgencyOptions = ["Imediata", "Até 15 dias", "Sem pressa"] as const;
 const quoteIntegrationOptions = ["API", "Planilha / exportação", "Nenhuma integração necessária"] as const;
 
-function matchScore(supplier: Supplier, draft: QuoteDraft): { score: number; reasons: string[] } {
+function calculateCommercialMatch(input: { wantedCategory?: string | null; wantedCity?: string | null; wantedState?: string | null; supplierCategories?: string[]; supplierCity?: string | null; supplierState?: string | null; serviceStates?: string[]; responseRate?: number | null; qualityScore?: number | null }): { score: number; reasons: string[] } {
   let score = 0;
   const reasons: string[] = [];
-  const wantedCategory = draft.category.replace(/\s+/g, " ").trim().toLowerCase();
-  const supplierCategories = (supplier.categories?.length ? supplier.categories : [supplier.category]).map((item) => displayCategory(item).toLowerCase());
+  const wantedCategory = String(input.wantedCategory || "").replace(/\s+/g, " ").trim().toLowerCase();
+  const supplierCategories = (input.supplierCategories || []).map((item) => displayCategory(item).toLowerCase());
   if (wantedCategory && supplierCategories.some((item) => item.includes(wantedCategory) || wantedCategory.includes(item))) { score += 45; reasons.push("mesma especialidade"); }
-  const wantedState = draft.state.trim().toUpperCase();
+  const wantedState = String(input.wantedState || "").trim().toUpperCase();
   if (wantedState) {
-    if (supplier.state === wantedState) {
+    if (input.supplierState === wantedState) {
       score += 25; reasons.push(`atende ${wantedState}`);
-      if (draft.city && supplier.city && supplier.city.toLowerCase() === draft.city.trim().toLowerCase()) { score += 10; reasons.push("mesma cidade"); }
-    } else if (supplier.serviceStates?.includes(wantedState)) { score += 20; reasons.push(`cobertura em ${wantedState}`); }
+      if (input.wantedCity && input.supplierCity && input.supplierCity.toLowerCase() === input.wantedCity.trim().toLowerCase()) { score += 10; reasons.push("mesma cidade"); }
+    } else if (input.serviceStates?.includes(wantedState)) { score += 20; reasons.push(`cobertura em ${wantedState}`); }
   }
-  const responseRate = typeof supplier.quoteResponses === "number" && typeof supplier.quoteRequests === "number" && supplier.quoteRequests > 0 ? supplier.quoteResponses / supplier.quoteRequests : null;
+  const responseRate = input.responseRate ?? null;
   if (responseRate !== null) { score += Math.round(responseRate * 20); if (responseRate >= 0.6) reasons.push("alta taxa de resposta"); }
-  if (typeof supplier.qualityScore === "number") score += Math.round((supplier.qualityScore / 100) * 10);
+  if (typeof input.qualityScore === "number") score += Math.round((input.qualityScore / 100) * 10);
   return { score: Math.max(0, Math.min(100, score)), reasons };
+}
+
+function matchScore(supplier: Supplier, draft: QuoteDraft): { score: number; reasons: string[] } {
+  const responseRate = typeof supplier.quoteResponses === "number" && typeof supplier.quoteRequests === "number" && supplier.quoteRequests > 0 ? supplier.quoteResponses / supplier.quoteRequests : null;
+  return calculateCommercialMatch({ wantedCategory: draft.category, wantedCity: draft.city, wantedState: draft.state, supplierCategories: supplier.categories?.length ? supplier.categories : [supplier.category], supplierCity: supplier.city, supplierState: supplier.state, serviceStates: supplier.serviceStates, responseRate, qualityScore: supplier.qualityScore });
 }
 
 function displayCategory(category: string) {
@@ -196,7 +210,8 @@ export default function Home() {
   const [newsCategory, setNewsCategory] = useState("Todos");
   const [referralCode, setReferralCode] = useState("");
   const [previewMode, setPreviewMode] = useState<"client" | "supplier" | null>(null);
-  const [dashboard, setDashboard] = useState<{ supplierMetrics?: Record<string, number>; supplierQuotes?: Array<{ id:number; protocol:string; category:string; application:string; status:string; createdAt:string; isNewLead?:boolean }>; supplierStats?: { totalReceived:number; totalResponded:number; acceptanceRate:number; newLeads:number; quoteRequests7d:number; quoteResponses7d:number; responseRate7d:number; avgResponseMinutes7d:number|null; quoteRequests30d:number } | null; clientQuotes?: Array<{ id:number; protocol:string; category:string; application:string; city:string; state:string; status:string; createdAt:string; recipientsTotal:number; recipientsResponded:number; recipientsDeclined:number; recipientsCompleted:number }>; profile?: { address?:string|null; city?:string|null; state?:string|null; phone?:string|null; instagram?:string|null; website?:string|null; description?:string|null; categories?:string[] } }>({});
+  const [dashboard, setDashboard] = useState<SupplierDashboardData>({});
+  const [selectedOpportunity, setSelectedOpportunity] = useState<SupplierOpportunity | null>(null);
   const [platformSlaLabel, setPlatformSlaLabel] = useState<string | null>(null);
   const [quoteActionBusy, setQuoteActionBusy] = useState("");
   // Guarda contra duplo-clique/duplo-submit e contra falha de rede silenciosa nos 3 formularios
@@ -719,6 +734,31 @@ export default function Home() {
     window.setTimeout(()=>setToast(""),3500);
   }
 
+  const supplierOpportunities = (dashboard.supplierQuotes || []).map((opportunity) => {
+    const responseRate = dashboard.supplierStats?.totalReceived ? (dashboard.supplierStats.totalResponded / dashboard.supplierStats.totalReceived) : null;
+    const match = calculateCommercialMatch({
+      wantedCategory: opportunity.category,
+      wantedCity: opportunity.city,
+      wantedState: opportunity.state,
+      supplierCategories: dashboard.profile?.categories,
+      supplierCity: dashboard.profile?.city,
+      supplierState: dashboard.profile?.state,
+      serviceStates: dashboard.profile?.serviceStates,
+      responseRate,
+      qualityScore: dashboard.profile?.hubScore,
+    });
+    return { ...opportunity, match };
+  }).sort((a, b) => Number(b.status === "sent") - Number(a.status === "sent") || b.match.score - a.match.score || new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const pendingSupplierOpportunities = supplierOpportunities.filter((item) => item.status === "sent");
+  const supplierInteractions = (dashboard.supplierMetrics?.whatsapp_click || 0) + (dashboard.supplierMetrics?.website_click || 0) + (dashboard.supplierMetrics?.contact_revealed || 0);
+  const supplierProducts = products.filter((product) => product.supplierId === dashboard.profile?.id || product.supplierName === supplierCompany);
+  const supplierRating = ratings[supplierCompany];
+  const supplierPriorities = [
+    pendingSupplierOpportunities[0] ? { id: `opportunity-${pendingSupplierOpportunities[0].id}`, kind: "opportunity", eyebrow: "🔥 Nova oportunidade", title: `${pendingSupplierOpportunities[0].category}${pendingSupplierOpportunities[0].quantity ? ` · ${pendingSupplierOpportunities[0].quantity} unidades` : ""}`, copy: [pendingSupplierOpportunities[0].city, pendingSupplierOpportunities[0].state].filter(Boolean).join(" · "), action: "Ver oportunidade", opportunity: pendingSupplierOpportunities[0] } : null,
+    supplierProducts.length === 0 ? { id: "first-product", kind: "product", eyebrow: "Complete sua vitrine", title: "Publique o primeiro item da sua vitrine", copy: "Leva aproximadamente 1 minuto.", action: "Adicionar produto" } : (dashboard.profile?.completeness || 0) < 100 ? { id: "profile", kind: "profile", eyebrow: "Uma melhoria rápida", title: "Seu perfil pode ficar mais completo", copy: `${dashboard.profile?.completeness || 0}% concluído`, action: "Melhorar perfil" } : null,
+    supplierRating?.total ? { id: "rating", kind: "rating", eyebrow: "★ Sua reputação no Hub", title: `${supplierRating.average.toFixed(1)} de 5`, copy: `${supplierRating.total} avaliação${supplierRating.total > 1 ? "ões" : ""} recebida${supplierRating.total > 1 ? "s" : ""}.`, action: "Ver perfil" } : null,
+  ].filter(Boolean).slice(0, 3) as Array<{ id:string; kind:string; eyebrow:string; title:string; copy:string; action:string; opportunity?: typeof supplierOpportunities[number] }>;
+
   return (
     <div className="app-shell">
       <header className={`topbar${previewMode ? " preview-topbar" : ""}`}>
@@ -769,6 +809,19 @@ export default function Home() {
       </header>
 
       <main>
+        {view === "supplier-dashboard" && (
+          <section className="supplier-cockpit">
+            <div className="cockpit-hero">
+              <div><span className="eyebrow">COCKPIT COMERCIAL</span><h1>Olá, {supplierCompany || "sua empresa"}</h1><p>Veja o que está acontecendo com sua empresa no Hub.</p>{pendingSupplierOpportunities.length > 0 && <strong>Você tem {pendingSupplierOpportunities.length} nova{pendingSupplierOpportunities.length > 1 ? "s" : ""} oportunidade{pendingSupplierOpportunities.length > 1 ? "s" : ""}.</strong>}</div>
+              <div className="cockpit-hero-actions">{pendingSupplierOpportunities.length > 0 && <button className="primary" onClick={() => document.getElementById("supplier-opportunities")?.scrollIntoView({ behavior: "smooth" })}>Ver oportunidades</button>}<button className="event-create" onClick={() => setEditingCompany(true)}>Editar empresa</button><button className="event-create" onClick={() => { setView("messages"); loadMessages(); }}>Mensagens</button></div>
+            </div>
+            {previewMode === "supplier" ? <div className="approval-banner"><strong>Modo de visualização</strong><span>Você está vendo a experiência do fornecedor. Ações de cadastro estão desativadas.</span></div> : !supplierApproved && <div className="approval-banner"><strong>Cadastro em análise</strong><span>Seu espaço comercial está pronto. As publicações serão liberadas após a curadoria da gestão.</span></div>}
+            <div className="cockpit-kpis" aria-label="Indicadores comerciais principais"><article><span>OPORTUNIDADES</span><strong>{pendingSupplierOpportunities.length}</strong><small>{pendingSupplierOpportunities.length ? "aguardando sua atenção" : "nenhuma pendência agora"}</small></article><article><span>INTERAÇÕES</span><strong>{supplierInteractions}</strong><small>contatos e cliques no perfil</small></article><article><span>TAXA DE RESPOSTA</span><strong>{dashboard.supplierStats?.responseRate7d || 0}%</strong><small>nos últimos 7 dias</small></article><article><span>HUB CRÉDITOS</span><strong>{Number(dashboard.credits?.wallet?.availableBalance || 0).toLocaleString("pt-BR")}</strong><small>saldo disponível</small></article></div>
+            <section className="for-you-section"><div className="cockpit-section-heading"><div><span className="eyebrow">PRIORIDADES</span><h2>Para você</h2></div><p>As ações mais importantes para gerar negócios agora.</p></div>{supplierPriorities.length ? <div className="for-you-grid">{supplierPriorities.map((priority) => <article key={priority.id} className={`priority-card ${priority.kind}`}><span>{priority.eyebrow}</span><h3>{priority.title}</h3><p>{priority.copy}</p><button onClick={() => { if (priority.opportunity) setSelectedOpportunity(priority.opportunity); else if (priority.kind === "product") setProductFormOpen(true); else if (priority.kind === "profile") setEditingCompany(true); else { const own = suppliers.find((item) => item.id === dashboard.profile?.id || item.name === supplierCompany); if (own) { setSelectedSupplier(own); setView("supplier"); } } }}>{priority.action} <i>→</i></button></article>)}</div> : <div className="cockpit-empty"><strong>Tudo em dia por aqui.</strong><p>Seu perfil está pronto para receber novas oportunidades.</p></div>}</section>
+            <section className="opportunity-feed" id="supplier-opportunities"><div className="cockpit-section-heading"><div><span className="eyebrow">NEGÓCIOS COMPATÍVEIS</span><h2>Oportunidades</h2></div><p>Ordenadas por urgência e compatibilidade com sua empresa.</p></div>{supplierOpportunities.length ? <div className="opportunity-list">{supplierOpportunities.map((opportunity) => { const hours = Math.max(0, Math.round((Date.now() - new Date(opportunity.createdAt).getTime()) / 3600000)); const received = hours < 1 ? "Recebida agora" : hours < 24 ? `Recebida há ${hours}h` : `Recebida há ${Math.round(hours / 24)} dia${Math.round(hours / 24) > 1 ? "s" : ""}`; return <article key={opportunity.id} className={opportunity.status === "sent" ? "pending" : "answered"}><div className="opportunity-score"><strong>{opportunity.match.score}%</strong><small>compatível</small></div><div className="opportunity-copy"><div><span className="status-pill">{opportunity.status === "sent" ? "NOVA OPORTUNIDADE" : opportunity.status === "responded" ? "RESPONDIDA" : "RECUSADA"}</span><small>{received}</small></div><h3>{opportunity.category}</h3><p>{opportunity.quantity ? `${opportunity.quantity} unidades · ` : ""}{[opportunity.city, opportunity.state].filter(Boolean).join(" · ") || "Localização a confirmar"}</p><small>{opportunity.application || "Aplicação a confirmar"}</small></div><button className="opportunity-open" onClick={() => setSelectedOpportunity(opportunity)}>Ver detalhes <span>→</span></button></article>; })}</div> : <div className="cockpit-empty"><strong>Sua próxima oportunidade aparecerá aqui.</strong><p>Enquanto isso, deixe seu perfil pronto para ser encontrado.</p><button onClick={() => setEditingCompany(true)}>Melhorar meu perfil</button></div>}</section>
+            <nav className="cockpit-shortcuts" aria-label="Atalhos da empresa"><strong>Atalhos</strong><button disabled={!supplierApproved || Boolean(previewMode)} onClick={() => setProductFormOpen(true)}>＋ Produto</button><button disabled={!supplierApproved || Boolean(previewMode)} onClick={() => setEventFormOpen(true)}>＋ Evento</button><button onClick={() => setView("products")}>Ver catálogo</button></nav>
+          </section>
+        )}
         {view === "supplier-entry" && (
           <section className="supplier-entry-page">
             <div className="supplier-entry-glow" aria-hidden="true"></div>
@@ -1056,6 +1109,19 @@ export default function Home() {
       {editingCompany && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setEditingCompany(false); }}><section className="access-modal event-form company-editor" role="dialog" aria-modal="true"><button className="modal-close" onClick={() => setEditingCompany(false)} aria-label="Fechar">×</button><span className="eyebrow">MINHA EMPRESA</span><h2>Editar informações da empresa</h2><p>Esses dados compõem seu perfil público após a aprovação da gestão.</p><form onSubmit={saveCompany}><label>Nome da empresa<input name="company" defaultValue={supplierCompany} required /></label><div className="field-row"><label>Telefone / WhatsApp<input name="phone" defaultValue={dashboard.profile?.phone || ""} required /></label><label>Instagram<input name="instagram" defaultValue={dashboard.profile?.instagram || ""} /></label></div><label>Site da empresa <small>Opcional</small><input name="website" type="url" defaultValue={dashboard.profile?.website || ""} placeholder="https://www.suaempresa.com.br" /></label><label>Endereço<input name="address" defaultValue={dashboard.profile?.address || ""} required placeholder="Rua, número, bairro e complemento" /></label><div className="field-row"><label>Cidade<input name="city" defaultValue={dashboard.profile?.city || ""} required /></label><label>Estado<select name="state" required defaultValue={dashboard.profile?.state || ""}><option value="">UF</option>{BRAZIL_STATES.map((state) => <option key={state}>{state}</option>)}</select></label></div><fieldset className="solution-selector"><legend>Soluções oferecidas <small>Escolha uma ou mais.</small></legend>{solutionCategories.map((item) => <label className="check" key={item.name}><input name="categories" type="checkbox" value={item.name} defaultChecked={(dashboard.profile?.categories || []).includes(item.name)} />{item.title}</label>)}</fieldset><label>Sobre a empresa<textarea name="description" rows={4} defaultValue={dashboard.profile?.description || ""} placeholder="Especialidades, diferenciais e informações relevantes" /></label><button className="primary full" type="submit" disabled={formBusy}>{formBusy ? "Salvando…" : "Salvar informações →"}</button></form></section></div>}
 
       {eventFormOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setEventFormOpen(false); }}><section className="access-modal event-form" role="dialog" aria-modal="true" aria-labelledby="event-form-title"><button className="modal-close" onClick={() => setEventFormOpen(false)} aria-label="Fechar">×</button><span className="eyebrow">ÁREA DO FORNECEDOR</span><h2 id="event-form-title">Cadastrar novo evento</h2><p>Após a revisão, o evento aparecerá na agenda e como um ponto especial no mapa.</p><form onSubmit={createEvent}><label>Nome do evento<input name="name" required placeholder="Ex.: Encontro de Integradores" /></label><div className="field-row"><label>Data<input name="date" type="date" required /></label><label>Local<input name="venue" required placeholder="Centro de eventos" /></label></div><div className="field-row"><label>Cidade<input name="city" required placeholder="São Paulo" /></label><label>Estado<select name="state" required><option value="">Selecione</option>{BRAZIL_STATES.map((state) => <option key={state}>{state}</option>)}</select></label></div><label>Link para inscrição<input name="link" type="url" required placeholder="https://seusite.com/inscricao" /></label><label>Descrição<textarea name="description" rows={3} placeholder="Conte brevemente sobre o evento" /></label><button className="primary full" type="submit">Enviar evento para publicação <span>→</span></button></form></section></div>}
+
+      {selectedOpportunity && (
+        <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedOpportunity(null); }}>
+          <section className="access-modal opportunity-detail" role="dialog" aria-modal="true" aria-labelledby="opportunity-title">
+            <button className="modal-close" onClick={() => setSelectedOpportunity(null)} aria-label="Fechar">×</button>
+            <span className="eyebrow">OPORTUNIDADE {selectedOpportunity.protocol}</span>
+            <h2 id="opportunity-title">{selectedOpportunity.category}</h2>
+            <div className="opportunity-detail-summary"><article><small>Quantidade</small><strong>{selectedOpportunity.quantity || "A confirmar"}</strong></article><article><small>Localização</small><strong>{[selectedOpportunity.city, selectedOpportunity.state].filter(Boolean).join(" / ") || "A confirmar"}</strong></article><article><small>Prazo</small><strong>{selectedOpportunity.deadline ? new Date(`${selectedOpportunity.deadline}T12:00:00`).toLocaleDateString("pt-BR") : "A confirmar"}</strong></article></div>
+            <div className="opportunity-detail-copy"><small>Aplicação</small><p>{selectedOpportunity.application || "Não informada"}</p><small>Necessidade</small><p>{selectedOpportunity.notes || "O cliente não adicionou observações."}</p></div>
+            <div className="opportunity-detail-actions">{selectedOpportunity.status === "sent" ? <><button className="primary" disabled={Boolean(quoteActionBusy)} onClick={() => { respondQuote(selectedOpportunity.id, "responded"); setSelectedOpportunity(null); }}>{quoteActionBusy ? "Registrando…" : "Tenho interesse"}</button><button className="ghost" disabled={Boolean(quoteActionBusy)} onClick={() => { if (window.confirm("Recusar esta oportunidade?")) { respondQuote(selectedOpportunity.id, "declined"); setSelectedOpportunity(null); } }}>Agora não</button></> : <span className="quote-outcome responded">{selectedOpportunity.status === "responded" ? "✓ Interesse registrado" : "Oportunidade recusada"}</span>}</div>
+          </section>
+        </div>
+      )}
 
       {selectedProduct && (
         <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedProduct(null); }}>
