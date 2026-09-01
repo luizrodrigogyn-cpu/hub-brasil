@@ -31,7 +31,7 @@ function parseStringArray(value: string | null | undefined): string[] {
   }
 }
 
-// Resposta varia por sessão (telefone revelado, contatos, nome real x "Fornecedor protegido").
+// Resposta varia por sessão: o nome comercial é público; contatos e detalhes continuam protegidos.
 // Só é seguro colocar em cache compartilhado/edge quando não há viewer autenticado — caso
 // contrário um visitante anônimo poderia herdar dados de outra pessoa da borda.
 function cacheHeaders(personalized: boolean) {
@@ -103,7 +103,7 @@ export async function GET() {
       // ("resposta rápida" com 1 cotação respondida em 100% não é sinal confiável).
       const fastResponder = quoteRequests >= 3 && responseRate >= 0.6;
       const base = { ...item, phone: contactRevealed ? item.phone : null, instagram: contactRevealed ? item.instagram : instagramPreview, contactRevealed, categories, phonePreview, qualityScore, qualityReasons, quoteRequests, quoteResponses, responseRate, highlightedOnMap: highlightMap.has(`${item.id}:map`), highlightedInSearch: highlightMap.has(`${item.id}:search`), founderMember: Boolean(item.founderMemberAt), serviceStates: parsedServiceStates, services: parseStringArray(item.services), slaLabel, priceRangeLabel, productCount, serviceAreaLabel, newSupplier, fastResponder };
-      return viewer ? base : { id: item.id, name: "Fornecedor protegido", category: item.category, city: item.city, state: item.state, description: "Cadastre-se gratuitamente para conhecer esta empresa e acessar seus contatos.", logoKey: item.logoKey, phone: null, instagram: null, website: null, contactRevealed: false, phonePreview, qualityScore, qualityReasons, highlightedOnMap: highlightMap.has(`${item.id}:map`), highlightedInSearch: highlightMap.has(`${item.id}:search`), slaLabel, priceRangeLabel, productCount, serviceAreaLabel, newSupplier, fastResponder };
+      return viewer ? base : { id: item.id, name: item.name, category: item.category, city: item.city, state: item.state, description: "Cadastre-se gratuitamente para conhecer os produtos, detalhes da empresa e acessar o WhatsApp.", logoKey: item.logoKey, phone: null, instagram: null, website: null, contactRevealed: false, phonePreview, qualityScore, qualityReasons, highlightedOnMap: highlightMap.has(`${item.id}:map`), highlightedInSearch: highlightMap.has(`${item.id}:search`), slaLabel, priceRangeLabel, productCount, serviceAreaLabel, newSupplier, fastResponder };
     }).sort((a,b) => Number((b as { highlightedInSearch?: boolean }).highlightedInSearch) - Number((a as { highlightedInSearch?: boolean }).highlightedInSearch) || b.qualityScore - a.qualityScore || Number(a.id) - Number(b.id));
     return Response.json({ suppliers: ranked, rankingExplanation: "Ordem baseada em verificação, completude, atualização, avaliações elegíveis e taxa de resposta. Pagamentos não alteram a posição.", platformSlaLabel }, { headers: cacheHeaders(Boolean(viewer)) });
   } catch { return Response.json({ suppliers: [] }); }

@@ -84,7 +84,7 @@ export async function GET() {
       let specs: unknown = null;
       if (item.specs) { try { specs = JSON.parse(item.specs); } catch { specs = null; } }
       const currentName = supplier ? supplier.company || supplier.name : item.supplierName;
-      return { id: item.id, supplierId: viewer ? supplier?.id || null : null, supplierName: viewer ? currentName : "Fornecedor protegido", supplierPhone: viewer ? supplier?.phone || null : null, name: item.name, category: item.category, technicalDetails: viewer ? item.technicalDetails : "", highlighted: highlighted.has(item.id), imageUrl: item.imageKey ? `/api/product-images?key=${encodeURIComponent(item.imageKey)}` : null, specs, manualUrl: item.manualUrl || null, averagePrice: item.averagePrice || null };
+      return { id: item.id, supplierId: item.supplierId || supplier?.id || null, supplierName: currentName, supplierPhone: viewer ? supplier?.phone || null : null, name: item.name, category: item.category, technicalDetails: viewer ? item.technicalDetails : "", highlighted: highlighted.has(item.id), imageUrl: item.imageKey ? `/api/product-images?key=${encodeURIComponent(item.imageKey)}` : null, specs: viewer ? specs : null, manualUrl: viewer ? item.manualUrl || null : null, averagePrice: viewer ? item.averagePrice || null : null };
     });
     return Response.json({ products: visibleProducts }, { headers: cacheHeaders(Boolean(viewer)) });
   } catch { return Response.json({ products: [] }); }

@@ -151,14 +151,22 @@ test("mapa usa marcador em gota para a logo e separa fornecedores da mesma UF", 
   assert.match(css, /object-fit:contain/);
 });
 
-test("clique no fornecedor do mapa abre previa com descricao e produtos", () => {
+test("mapa exibe empresa, mas protege produtos e WhatsApp ate o cadastro", () => {
   const page = readFileSync("app/page.tsx", "utf8");
   const css = readFileSync("app/globals.css", "utf8");
+  const suppliers = readFileSync("app/api/suppliers/route.ts", "utf8");
+  const products = readFileSync("app/api/products/route.ts", "utf8");
   assert.match(page, /selectedMapSupplier/);
   assert.match(page, /supplier-map-popover/);
   assert.match(page, /PRODUTOS E SOLUÇÕES/);
   assert.match(page, /slice\(0, 3\)/);
   assert.match(page, /Ver perfil e produtos/);
+  assert.match(page, /registered \? "Ver perfil e produtos →" : "Cadastre-se para ver produtos e WhatsApp →"/);
+  assert.match(page, /Cadastre-se para ver produtos, detalhes e WhatsApp/);
+  assert.match(suppliers, /return viewer \? base : \{ id: item\.id, name: item\.name/);
+  assert.match(suppliers, /phone: null, instagram: null, website: null/);
+  assert.match(products, /supplierPhone: viewer \? supplier\?\.phone \|\| null : null/);
+  assert.match(products, /specs: viewer \? specs : null/);
   assert.match(css, /\.supplier-map-popover\{/);
 });
 
