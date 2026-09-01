@@ -200,6 +200,7 @@ export default function Home() {
   const [supplierCompany, setSupplierCompany] = useState("");
   const [supplierApproved, setSupplierApproved] = useState(false);
   const [productFormOpen, setProductFormOpen] = useState(false);
+  const [productDetailsOpen, setProductDetailsOpen] = useState(false);
   const [productFormCategory, setProductFormCategory] = useState("");
   const [productFormSpecs, setProductFormSpecs] = useState<{ technology: string[]; ip: string; battery: string; warranty: string; anatel: boolean; application: string[]; features: string[] }>({ technology: [], ip: "", battery: "", warranty: "", anatel: false, application: [], features: [] });
   const [products, setProducts] = useState<Product[]>([]);
@@ -487,6 +488,7 @@ export default function Home() {
 
   function resetProductForm() {
     setProductFormCategory("");
+    setProductDetailsOpen(false);
     setProductFormSpecs({ technology: [], ip: "", battery: "", warranty: "", anatel: false, application: [], features: [] });
   }
 
@@ -753,6 +755,12 @@ export default function Home() {
   const supplierInteractions = (dashboard.supplierMetrics?.whatsapp_click || 0) + (dashboard.supplierMetrics?.website_click || 0) + (dashboard.supplierMetrics?.contact_revealed || 0);
   const supplierProducts = products.filter((product) => product.supplierId === dashboard.profile?.id || product.supplierName === supplierCompany);
   const supplierRating = ratings[supplierCompany];
+  const supplierCompleteness = Math.max(0, Math.min(100, dashboard.profile?.completeness || 0));
+  const supplierProfileNextAction = supplierProducts.length === 0
+    ? { title: "Cadastre seu primeiro produto", copy: "Leva aproximadamente 1 minuto.", action: "Adicionar produto", kind: "product" }
+    : supplierCompleteness < 85
+      ? { title: "Conte um pouco mais sobre sua empresa", copy: "Uma descrição curta ajuda clientes a entenderem seus diferenciais.", action: "Completar perfil", kind: "profile" }
+      : { title: "Informe os estados atendidos", copy: "Amplie sua presença nas buscas regionais.", action: "Atualizar cobertura", kind: "profile" };
   const supplierPriorities = [
     pendingSupplierOpportunities[0] ? { id: `opportunity-${pendingSupplierOpportunities[0].id}`, kind: "opportunity", eyebrow: "🔥 Nova oportunidade", title: `${pendingSupplierOpportunities[0].category}${pendingSupplierOpportunities[0].quantity ? ` · ${pendingSupplierOpportunities[0].quantity} unidades` : ""}`, copy: [pendingSupplierOpportunities[0].city, pendingSupplierOpportunities[0].state].filter(Boolean).join(" · "), action: "Ver oportunidade", opportunity: pendingSupplierOpportunities[0] } : null,
     supplierProducts.length === 0 ? { id: "first-product", kind: "product", eyebrow: "Complete sua vitrine", title: "Publique o primeiro item da sua vitrine", copy: "Leva aproximadamente 1 minuto.", action: "Adicionar produto" } : (dashboard.profile?.completeness || 0) < 100 ? { id: "profile", kind: "profile", eyebrow: "Uma melhoria rápida", title: "Seu perfil pode ficar mais completo", copy: `${dashboard.profile?.completeness || 0}% concluído`, action: "Melhorar perfil" } : null,
@@ -817,6 +825,7 @@ export default function Home() {
             </div>
             {previewMode === "supplier" ? <div className="approval-banner"><strong>Modo de visualização</strong><span>Você está vendo a experiência do fornecedor. Ações de cadastro estão desativadas.</span></div> : !supplierApproved && <div className="approval-banner"><strong>Cadastro em análise</strong><span>Seu espaço comercial está pronto. As publicações serão liberadas após a curadoria da gestão.</span></div>}
             <div className="cockpit-kpis" aria-label="Indicadores comerciais principais"><article><span>OPORTUNIDADES</span><strong>{pendingSupplierOpportunities.length}</strong><small>{pendingSupplierOpportunities.length ? "aguardando sua atenção" : "nenhuma pendência agora"}</small></article><article><span>INTERAÇÕES</span><strong>{supplierInteractions}</strong><small>contatos e cliques no perfil</small></article><article><span>TAXA DE RESPOSTA</span><strong>{dashboard.supplierStats?.responseRate7d || 0}%</strong><small>nos últimos 7 dias</small></article><article><span>HUB CRÉDITOS</span><strong>{Number(dashboard.credits?.wallet?.availableBalance || 0).toLocaleString("pt-BR")}</strong><small>saldo disponível</small></article></div>
+            <section className="profile-progress-card" aria-label="Progresso do perfil da empresa"><div className="profile-progress-copy"><span className="eyebrow">SUA VITRINE</span><h2>Seu perfil está ficando completo</h2><p>Uma melhoria de cada vez, sem formulários longos.</p></div><strong>{supplierCompleteness}%</strong><div className="profile-progress-track"><i style={{ width: `${supplierCompleteness}%` }} /></div><div className="profile-progress-action"><div><small>PRÓXIMO PASSO</small><b>{supplierProfileNextAction.title}</b><span>{supplierProfileNextAction.copy}</span></div><button onClick={() => supplierProfileNextAction.kind === "product" ? setProductFormOpen(true) : setEditingCompany(true)}>{supplierProfileNextAction.action} <i>→</i></button></div></section>
             <section className="for-you-section"><div className="cockpit-section-heading"><div><span className="eyebrow">PRIORIDADES</span><h2>Para você</h2></div><p>As ações mais importantes para gerar negócios agora.</p></div>{supplierPriorities.length ? <div className="for-you-grid">{supplierPriorities.map((priority) => <article key={priority.id} className={`priority-card ${priority.kind}`}><span>{priority.eyebrow}</span><h3>{priority.title}</h3><p>{priority.copy}</p><button onClick={() => { if (priority.opportunity) setSelectedOpportunity(priority.opportunity); else if (priority.kind === "product") setProductFormOpen(true); else if (priority.kind === "profile") setEditingCompany(true); else { const own = suppliers.find((item) => item.id === dashboard.profile?.id || item.name === supplierCompany); if (own) { setSelectedSupplier(own); setView("supplier"); } } }}>{priority.action} <i>→</i></button></article>)}</div> : <div className="cockpit-empty"><strong>Tudo em dia por aqui.</strong><p>Seu perfil está pronto para receber novas oportunidades.</p></div>}</section>
             <section className="opportunity-feed" id="supplier-opportunities"><div className="cockpit-section-heading"><div><span className="eyebrow">NEGÓCIOS COMPATÍVEIS</span><h2>Oportunidades</h2></div><p>Ordenadas por urgência e compatibilidade com sua empresa.</p></div>{supplierOpportunities.length ? <div className="opportunity-list">{supplierOpportunities.map((opportunity) => { const hours = Math.max(0, Math.round((Date.now() - new Date(opportunity.createdAt).getTime()) / 3600000)); const received = hours < 1 ? "Recebida agora" : hours < 24 ? `Recebida há ${hours}h` : `Recebida há ${Math.round(hours / 24)} dia${Math.round(hours / 24) > 1 ? "s" : ""}`; return <article key={opportunity.id} className={opportunity.status === "sent" ? "pending" : "answered"}><div className="opportunity-score"><strong>{opportunity.match.score}%</strong><small>compatível</small></div><div className="opportunity-copy"><div><span className="status-pill">{opportunity.status === "sent" ? "NOVA OPORTUNIDADE" : opportunity.status === "responded" ? "RESPONDIDA" : "RECUSADA"}</span><small>{received}</small></div><h3>{opportunity.category}</h3><p>{opportunity.quantity ? `${opportunity.quantity} unidades · ` : ""}{[opportunity.city, opportunity.state].filter(Boolean).join(" · ") || "Localização a confirmar"}</p><small>{opportunity.application || "Aplicação a confirmar"}</small></div><button className="opportunity-open" onClick={() => setSelectedOpportunity(opportunity)}>Ver detalhes <span>→</span></button></article>; })}</div> : <div className="cockpit-empty"><strong>Sua próxima oportunidade aparecerá aqui.</strong><p>Enquanto isso, deixe seu perfil pronto para ser encontrado.</p><button onClick={() => setEditingCompany(true)}>Melhorar meu perfil</button></div>}</section>
             <nav className="cockpit-shortcuts" aria-label="Atalhos da empresa"><strong>Atalhos</strong><button disabled={!supplierApproved || Boolean(previewMode)} onClick={() => setProductFormOpen(true)}>＋ Produto</button><button disabled={!supplierApproved || Boolean(previewMode)} onClick={() => setEventFormOpen(true)}>＋ Evento</button><button onClick={() => setView("products")}>Ver catálogo</button></nav>
@@ -964,9 +973,9 @@ export default function Home() {
         {view === "supplier" && selectedSupplier && (
           <section className="profile-page">
             <button className="back" onClick={() => setView("directory")}>← Voltar aos fornecedores</button>
-            <div className="profile-hero">
+            <div className="profile-hero premium-profile-hero">
               <div className={`supplier-logo large ${selectedSupplier.accent}`}>{supplierLogoUrl(selectedSupplier.logoKey) ? <img src={supplierLogoUrl(selectedSupplier.logoKey) || ""} alt="" /> : selectedSupplier.initials}</div>
-              <div><span className="verified">{selectedSupplier.verificationStatus === "verified" ? "◆ Fornecedor verificado" : "Fornecedor aprovado"}</span>{selectedSupplier.founderMember && <span className="verified">🏅 Membro Fundador</span>}{selectedSupplier.fastResponder && <span className="verified badge-fast">⚡ Resposta rápida</span>}{selectedSupplier.newSupplier && <span className="verified badge-new">🆕 Novo no Hub</span>}<h1>{selectedSupplier.name}</h1><p>{displayCategory(selectedSupplier.category)} · {selectedSupplier.city}, {selectedSupplier.state}</p>{selectedSupplier.verifiedAt && <small>Verificado em {new Date(selectedSupplier.verifiedAt).toLocaleDateString("pt-BR")}</small>}</div>
+              <div className="premium-profile-identity"><div className="premium-profile-badges"><span className="verified">{selectedSupplier.verificationStatus === "verified" ? "◆ Fornecedor verificado" : "Fornecedor aprovado"}</span>{selectedSupplier.founderMember && <span className="verified">🏅 Membro Fundador</span>}{selectedSupplier.fastResponder && <span className="verified badge-fast">⚡ Resposta rápida</span>}{selectedSupplier.newSupplier && <span className="verified badge-new">🆕 Novo no Hub</span>}</div><h1>{selectedSupplier.name}</h1><p>{selectedSupplier.description}</p><div className="premium-profile-meta"><span>⌖ {selectedSupplier.city}, {selectedSupplier.state}</span><span>★ {ratings[selectedSupplier.name] ? `${ratings[selectedSupplier.name].average.toFixed(1)} (${ratings[selectedSupplier.name].total})` : "Nova no Hub"}</span></div><div className="premium-profile-categories">{(selectedSupplier.categories?.length ? selectedSupplier.categories : [selectedSupplier.category]).slice(0, 5).map((item) => <span key={item}>{displayCategory(item)}</span>)}</div>{selectedSupplier.verifiedAt && <small>Verificado em {new Date(selectedSupplier.verifiedAt).toLocaleDateString("pt-BR")}</small>}</div>
               <div className="profile-actions"><button className="event-create" onClick={() => { const url=`${window.location.origin}/fornecedor/${selectedSupplier.id}`; if(navigator.share) navigator.share({title:selectedSupplier.name,url}).catch(()=>{}); else navigator.clipboard.writeText(url).then(()=>{setToast("Link do perfil copiado.");window.setTimeout(()=>setToast(""),3000)}); }}>Compartilhar perfil</button>{userRole === "supplier" && <button className="event-create" onClick={() => setEventFormOpen(true)}>＋ Cadastrar evento</button>}</div>
             </div>
             <ol className="discovery-trail">
@@ -1162,15 +1171,18 @@ export default function Home() {
           <section className="access-modal event-form" role="dialog" aria-modal="true">
             <button className="modal-close" onClick={() => { setProductFormOpen(false); resetProductForm(); }} aria-label="Fechar">×</button>
             <span className="eyebrow">ÁREA DO FORNECEDOR</span>
-            <h2>Cadastrar produto</h2>
-            <p>Destaque as informações que ajudam o cliente a identificar a solução adequada.</p>
+            <h2>Cadastre um produto em 1 minuto</h2>
+            <p>Comece pelo essencial. Você poderá enriquecer a ficha técnica agora ou depois.</p>
             <form onSubmit={createProduct}>
-              <label>Foto do produto<input name="photo" type="file" accept="image/jpeg,image/png,image/webp" required /></label>
+              <div className="quick-product-step"><span>1</span><div><strong>Vitrine essencial</strong><small>Somente quatro informações para começar.</small></div></div>
+              <label>Foto do produto <small>Opcional · JPG, PNG ou WebP</small><input name="photo" type="file" accept="image/jpeg,image/png,image/webp" /></label>
               <label>Nome do produto<input name="name" required placeholder="Ex.: Rastreador 4G LTE" /></label>
               <label>Categoria<select name="category" required value={productFormCategory} onChange={(event) => setProductFormCategory(event.target.value)}><option value="">Selecione</option>{solutionCategories.map((item) => <option key={item.name}>{item.name}</option>)}</select></label>
-              <label>Especificações técnicas<textarea name="technicalDetails" rows={4} required placeholder="Tecnologia, alimentação, conectividade, homologações e demais especificações" /></label>
-              <label>Aplicação<textarea name="application" rows={3} required placeholder="Para quais veículos, operações ou necessidades este produto é indicado?" /></label>
-              <label>Diferenciais<textarea name="differentials" rows={3} required placeholder="Recursos, benefícios e diferenciais da solução" /></label>
+              <label>Descrição curta<textarea name="shortDescription" rows={3} required maxLength={500} placeholder="O que é este produto e para quem ele é indicado?" /></label>
+              <button className="product-details-toggle" type="button" aria-expanded={productDetailsOpen} onClick={() => setProductDetailsOpen((open) => !open)}><span><strong>Quer deixar este produto mais completo?</strong><small>Ficha técnica, aplicações, diferenciais, manual e certificações são opcionais.</small></span><i>{productDetailsOpen ? "−" : "+"}</i></button>
+              {productDetailsOpen && <div className="product-optional-details"><label>Especificações técnicas <small>Opcional</small><textarea name="technicalDetails" rows={4} placeholder="Tecnologia, alimentação, conectividade e homologações" /></label>
+              <label>Aplicação <small>Opcional</small><textarea name="application" rows={3} placeholder="Para quais veículos, operações ou necessidades este produto é indicado?" /></label>
+              <label>Diferenciais <small>Opcional</small><textarea name="differentials" rows={3} placeholder="Recursos, benefícios e diferenciais da solução" /></label>
               {Boolean(productFormCategory && (productSpecFields[productFormCategory] || []).length) && (
                 <div className="spec-fields">
                   <div className="spec-fields-head"><strong>Ficha técnica (opcional)</strong><span>Ajuda o cliente a comparar com outros produtos — preencha só o que fizer sentido. Nada aqui é obrigatório.</span></div>
@@ -1197,9 +1209,9 @@ export default function Home() {
                   )}
                 </div>
               )}
-              <label>Manual técnico — link para download (opcional)<input name="manualUrl" type="url" placeholder="https://... (PDF, Google Drive etc.)" /></label>
+              <label>Manual técnico — link para download <small>Opcional</small><input name="manualUrl" type="url" placeholder="https://... (PDF, Google Drive etc.)" /></label></div>}
               <p className="commercial-notice">Preços, disponibilidade, frete e condições comerciais serão tratados diretamente com o cliente.</p>
-              <button className="primary full" type="submit">Enviar produto para aprovação <span>→</span></button>
+              <button className="primary full" type="submit">Publicar para revisão <span>→</span></button>
             </form>
           </section>
         </div>

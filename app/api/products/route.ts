@@ -110,17 +110,19 @@ export async function POST(request: Request) {
       imageKey = `${crypto.randomUUID()}-${photo.name.replace(/[^a-zA-Z0-9._-]/g, "-")}`;
       await env.PRODUCT_IMAGES.put(imageKey, await photo.arrayBuffer(), { httpMetadata: { contentType: photo.type } });
     }
+    const shortDescription = String(form.get("shortDescription") || "").trim();
     const specifications = String(form.get("technicalDetails") || "").trim();
     const application = String(form.get("application") || "").trim();
     const differentials = String(form.get("differentials") || "").trim();
-    const technicalDetails = `ESPECIFICAÇÕES TÉCNICAS\n${specifications}\n\nAPLICAÇÃO\n${application}\n\nDIFERENCIAIS\n${differentials}`;
+    const technicalSections = [shortDescription, specifications && `ESPECIFICAÇÕES TÉCNICAS\n${specifications}`, application && `APLICAÇÃO\n${application}`, differentials && `DIFERENCIAIS\n${differentials}`].filter(Boolean);
+    const technicalDetails = technicalSections.join("\n\n");
     const rawSpecs = String(form.get("specs") || "").trim();
     const specs = normalizeSpecs(rawSpecs);
     const rawManualUrl = String(form.get("manualUrl") || "").trim();
     let manualUrl: string | null = null;
     if (rawManualUrl) { try { const parsed = new URL(rawManualUrl); if ((parsed.protocol === "http:" || parsed.protocol === "https:") && parsed.toString().length <= 2_048) manualUrl = parsed.toString(); } catch { manualUrl = null; } }
     const values = { organizationId, supplierId: supplier.id, supplierName: supplier.company || supplier.name, name: String(form.get("name") || "").trim(), category: String(form.get("category") || "").trim(), technicalDetails, averagePrice: null, imageKey, specs, manualUrl, ownerUserId: user.userId, status: "pending" };
-    if (!values.name || !values.category || !specifications || !application || !differentials) return Response.json({ error: "Preencha especificações, aplicação e diferenciais." }, { status: 400 });
+    if (!values.name || !values.category || !shortDescription) return Response.json({ error: "Preencha nome, categoria e uma descrição curta." }, { status: 400 });
     const [product] = await getDb().insert(products).values(values).returning();
     return Response.json({ product, pending: true }, { status: 201 });
   } catch { return Response.json({ error: "Não foi possível cadastrar o produto." }, { status: 500 }); }
