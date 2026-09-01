@@ -1030,7 +1030,7 @@ export default function Home() {
             {selectedProduct.averagePrice && <div className="price-box"><small>Referência de preço informada pelo fornecedor</small><strong>{selectedProduct.averagePrice}</strong></div>}
             <h3>Informações do produto</h3>
             <p>{selectedProduct.technicalDetails}</p>
-            {selectedProduct.manualUrl && <a className="manual-link" href={selectedProduct.manualUrl} target="_blank" rel="noreferrer">📄 Baixar manual técnico</a>}
+            {selectedProduct.manualUrl && <div className="document-actions" aria-label="Documento técnico do produto"><a className="document-action secondary" href={selectedProduct.manualUrl} target="_blank" rel="noopener noreferrer">Visualizar PDF ↗</a><a className="document-action" href={selectedProduct.manualUrl} download target="_blank" rel="noopener noreferrer">Baixar documento ↓</a></div>}
             <p className="commercial-notice">Preços, disponibilidade, frete e condições comerciais devem ser confirmados diretamente com o fornecedor.</p>
             <button className="primary full quote-button" onClick={() => { setSelectedProduct(null); openQuoteRequestFromProduct(selectedProduct); }}>Solicitar cotação estruturada <span>→</span></button></div>
           </section>

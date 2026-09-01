@@ -183,6 +183,11 @@ test("gestor revisa fotos e aprova produtos em lote sem expor pendentes", () => 
   assert.match(admin, /Descrição técnica/);
   assert.match(admin, /Homologado ANATEL/);
   assert.match(admin, /Manual técnico/);
+  assert.match(admin, /Visualizar PDF/);
+  assert.match(admin, /Baixar documento/);
+  const page = readFileSync("app/page.tsx", "utf8");
+  assert.match(page, /Visualizar PDF/);
+  assert.match(page, /Baixar documento/);
   assert.match(api, /approve_many/);
   assert.match(api, /slice\(0, 50\)/);
   assert.match(api, /product\.supplierId/);
