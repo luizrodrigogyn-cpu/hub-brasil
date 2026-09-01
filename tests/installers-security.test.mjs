@@ -171,6 +171,8 @@ test("gestor revisa fotos e aprova produtos em lote sem expor pendentes", () => 
   assert.match(admin, /product-review-photo/);
   assert.match(api, /approve_many/);
   assert.match(api, /slice\(0, 50\)/);
+  assert.match(api, /product\.supplierId/);
+  assert.match(api, /supplierId: supplier\.id/);
   assert.match(images, /isHubAdmin/);
   assert.match(images, /private, no-store/);
 });
