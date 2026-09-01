@@ -179,7 +179,10 @@ test("gestor revisa fotos e aprova produtos em lote sem expor pendentes", () => 
   assert.match(admin, /product-review-photo/);
   assert.match(admin, /setPreviewProduct/);
   assert.match(admin, /PRÉVIA PARA A GESTÃO/);
-  assert.match(admin, /Descrição técnica:/);
+  assert.match(admin, /parseProductSpecs/);
+  assert.match(admin, /Descrição técnica/);
+  assert.match(admin, /Homologado ANATEL/);
+  assert.match(admin, /Manual técnico/);
   assert.match(api, /approve_many/);
   assert.match(api, /slice\(0, 50\)/);
   assert.match(api, /product\.supplierId/);
