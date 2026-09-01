@@ -207,6 +207,7 @@ export default function Home() {
   const [quoteFlowOpen, setQuoteFlowOpen] = useState(false);
   const [quoteDraft, setQuoteDraft] = useState<QuoteDraft>({ category: "", application: "", quantity: "1", city: "", state: "", deadline: "", notes: "", budget: "", urgency: "", integration: [], supplierIds: [], contactConsent: false });
   const [pendingContactSupplier, setPendingContactSupplier] = useState<Supplier | null>(null);
+  const [productNudgeOpen, setProductNudgeOpen] = useState(false);
   const navigationMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -442,9 +443,10 @@ export default function Home() {
       setSupplierCompany(company);
       setSupplierApproved(false);
       setView("supplier-dashboard");
+      setProductNudgeOpen(true);
     }
     setRegisterOpen(false);
-    setToast(registrationRole === "supplier" ? "Cadastro enviado. O gestor validará seu telefone e sua empresa." : "Acesso liberado. Bem-vindo ao Hub Brasil!");
+    setToast(registrationRole === "supplier" ? "Perfil criado. Você já pode preparar seu catálogo enquanto a gestão conclui a revisão." : "Acesso liberado. Bem-vindo ao Hub Brasil!");
     if (selectedSupplier && registrationRole === "client") setView("supplier");
     window.setTimeout(() => setToast(""), 3500);
   }
@@ -917,6 +919,19 @@ export default function Home() {
         <button className={view === "news" ? "active" : ""} onClick={() => setView("news")}><span>◉</span>Radar</button>
         <button onClick={() => setRegisterOpen(true)}><span>◎</span>Conta</button>
       </nav>
+
+      {productNudgeOpen && (
+        <div className="modal-backdrop catalog-nudge-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setProductNudgeOpen(false); }}>
+          <section className="access-modal catalog-nudge" role="dialog" aria-modal="true" aria-labelledby="catalog-nudge-title">
+            <button className="modal-close" onClick={() => setProductNudgeOpen(false)} aria-label="Fechar">×</button>
+            <span className="eyebrow">PRÓXIMO PASSO</span>
+            <h2 id="catalog-nudge-title">Deixe seu perfil mais completo →</h2>
+            <p>Cadastre agora seu primeiro produto. Ele ficará salvo para revisão e será publicado depois da aprovação da gestão.</p>
+            <button className="primary full" onClick={() => { setProductNudgeOpen(false); setProductFormOpen(true); }}>Cadastrar primeiro produto <span>→</span></button>
+            <button className="event-create" onClick={() => setProductNudgeOpen(false)}>Fazer isso depois</button>
+          </section>
+        </div>
+      )}
 
       {quoteFlowOpen && (
         <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setQuoteFlowOpen(false); }}>

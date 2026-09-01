@@ -53,6 +53,15 @@ test("rota pública de imagens entrega somente produto aprovado", () => {
   assert.match(api, /private, no-store/);
 });
 
+test("fornecedor pendente prepara produtos sem publicá-los antes da gestão", () => {
+  const api = readFileSync("app/api/products/route.ts", "utf8");
+  const page = readFileSync("app/page.tsx", "utf8");
+  assert.match(api, /supplier\.status === "rejected"/);
+  assert.match(api, /status: "pending"/);
+  assert.match(page, /Cadastrar primeiro produto/);
+  assert.match(page, /será publicado depois da aprovação da gestão/);
+});
+
 test("cadastros de fornecedor e instalador usam campo visual de WhatsApp", () => {
   const field = readFileSync("app/whatsapp-field.tsx", "utf8");
   const supplier = readFileSync("app/page.tsx", "utf8");

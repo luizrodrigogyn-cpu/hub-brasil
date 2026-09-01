@@ -98,7 +98,9 @@ export async function POST(request: Request) {
     const featureError = await requireFeature(organizationId, FEATURES.directory);
     if (featureError) return featureError;
     const [supplier] = await getDb().select().from(leads).where(and(eq(leads.authUserId, user.userId), eq(leads.organizationId, organizationId), eq(leads.role, "supplier")));
-    if (!supplier || supplier.status !== "approved" || !supplier.phoneVerifiedAt) return Response.json({ error: "Seu fornecedor precisa ter telefone validado e cadastro aprovado pelo gestor." }, { status: 403 });
+    // O fornecedor pode preparar o catálogo logo após concluir o cadastro.
+    // O produto nasce como pendente e nunca aparece publicamente antes da revisão da gestão.
+    if (!supplier || supplier.status === "rejected") return Response.json({ error: "Seu cadastro de fornecedor não está habilitado para enviar produtos." }, { status: 403 });
     const form = await request.formData();
     const photo = form.get("photo");
     let imageKey: string | null = null;
