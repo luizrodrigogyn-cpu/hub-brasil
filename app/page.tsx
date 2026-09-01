@@ -168,7 +168,7 @@ function mapPoint(state: string, occurrence = 0) {
 }
 
 export default function Home() {
-  const [view, setView] = useState<"map" | "solutions" | "directory" | "supplier" | "events" | "products" | "news" | "about" | "supplier-dashboard" | "client-dashboard" | "how-it-works" | "messages">("map");
+  const [view, setView] = useState<"map" | "solutions" | "directory" | "supplier" | "supplier-entry" | "events" | "products" | "news" | "about" | "supplier-dashboard" | "client-dashboard" | "how-it-works" | "messages">("map");
   const [registered, setRegistered] = useState(false);
   const [registerOpen, setRegisterOpen] = useState(false);
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
@@ -212,6 +212,8 @@ export default function Home() {
   const [quoteDraft, setQuoteDraft] = useState<QuoteDraft>({ category: "", application: "", quantity: "1", city: "", state: "", deadline: "", notes: "", budget: "", urgency: "", integration: [], supplierIds: [], contactConsent: false });
   const [pendingContactSupplier, setPendingContactSupplier] = useState<Supplier | null>(null);
   const [productNudgeOpen, setProductNudgeOpen] = useState(false);
+  const [supplierLogoSelected, setSupplierLogoSelected] = useState(false);
+  const [supplierWelcome, setSupplierWelcome] = useState<{ company: string; city: string; state: string; categories: string[]; logoUrl: string | null } | null>(null);
   const navigationMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -419,18 +421,22 @@ export default function Home() {
     const payload = Object.fromEntries([...form.entries()].filter(([key]) => key !== "logo" && key !== "profilePhoto")) as Record<string, FormDataEntryValue>;
     payload.categories = JSON.stringify(form.getAll("categories"));
     if (referralCode) payload.referralCode = referralCode;
+    let createdLead: Record<string, unknown> | null = null;
     try {
       const response = await fetch("/api/leads", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
       const result = await readJson(response);
       if (response.status === 401) { window.location.href = result.signIn; return; }
       if (!response.ok) { setToast(result.error || "Não foi possível cadastrar."); return; }
+      createdLead = result.lead || null;
     } catch { setToast("Não foi possível concluir o cadastro. Tente novamente."); return; }
+    let uploadedLogoUrl: string | null = null;
     if (registrationRole === "supplier" && logo instanceof File && logo.size) {
       const logoForm = new FormData();
       logoForm.set("logo", logo);
       logoForm.set("logoConsent", String(payload.logoConsent === "on"));
       const logoResponse = await fetch("/api/supplier-logo", { method: "POST", body: logoForm });
       if (!logoResponse.ok) { const result = await readJson(logoResponse).catch(() => ({})); setToast(result.error || "Cadastro criado, mas não foi possível enviar a logo."); }
+      else { const result = await readJson(logoResponse); uploadedLogoUrl = result.url || null; }
     }
     if (registrationRole === "client" && profilePhoto instanceof File && profilePhoto.size) {
       const photoForm = new FormData();
@@ -444,13 +450,14 @@ export default function Home() {
     setUserRole(registrationRole);
     if (registrationRole === "supplier") {
       const company = String(payload.company || "").trim();
+      const categories = form.getAll("categories").map(String);
       setSupplierCompany(company);
       setSupplierApproved(false);
-      setView("supplier-dashboard");
-      setProductNudgeOpen(true);
+      setSupplierWelcome({ company, city: String(payload.city || createdLead?.city || ""), state: String(payload.state || createdLead?.state || ""), categories, logoUrl: uploadedLogoUrl });
     }
     setRegisterOpen(false);
-    setToast(registrationRole === "supplier" ? "Perfil criado. Você já pode preparar seu catálogo enquanto a gestão conclui a revisão." : "Acesso liberado. Bem-vindo ao Hub Brasil!");
+    setSupplierLogoSelected(false);
+    setToast(registrationRole === "supplier" ? "Cadastro concluído com sucesso." : "Acesso liberado. Bem-vindo ao Hub Brasil!");
     if (selectedSupplier && registrationRole === "client") setView("supplier");
     window.setTimeout(() => setToast(""), 3500);
   }
@@ -538,6 +545,7 @@ export default function Home() {
 
   function openRegistration(role: "client" | "supplier") {
     setRegistrationRole(role);
+    setSupplierLogoSelected(false);
     setRegisterOpen(true);
   }
 
@@ -756,11 +764,38 @@ export default function Home() {
           {registered ? <><span className="access-chip"><i></i>Acesso liberado</span>{!previewMode && <a className="text-action" href="/sign-out">Sair</a>}</> : <a className="text-action" href="/sign-in?return_to=/">Entrar</a>}
           {userRole === "supplier" && !previewMode && <button className="text-action" onClick={() => setView("supplier-dashboard")}>Minha empresa</button>}
           {userRole === "client" && !previewMode && <button className="text-action" onClick={() => setView("client-dashboard")}>Meus pedidos</button>}
-          <button className="primary small" onClick={() => openRegistration("supplier")}>Para fornecedores</button>
+          <button className="primary small" onClick={() => setView("supplier-entry")}>Para fornecedores</button>
         </div>
       </header>
 
       <main>
+        {view === "supplier-entry" && (
+          <section className="supplier-entry-page">
+            <div className="supplier-entry-glow" aria-hidden="true"></div>
+            <div className="supplier-entry-hero">
+              <div className="supplier-entry-copy">
+                <span className="eyebrow">PARA FORNECEDORES</span>
+                <h1>Coloque sua empresa na frente de quem está procurando soluções para rastreamento, telemetria e IoT.</h1>
+                <p>Cadastre gratuitamente sua empresa no Hub Brasil.</p>
+                <button className="primary supplier-entry-cta" onClick={() => openRegistration("supplier")}>Cadastrar minha empresa <span>→</span></button>
+                <small>Cadastro essencial em aproximadamente 2 minutos. Informações adicionais podem ser incluídas depois.</small>
+              </div>
+              <div className="supplier-entry-preview" aria-label="Prévia do perfil empresarial">
+                <span className="preview-orbit"></span>
+                <div className="preview-company-card">
+                  <span className="preview-logo">HB</span>
+                  <div><small>PERFIL EMPRESARIAL</small><strong>Sua empresa no Hub Brasil</strong><span>Categoria · Cidade/UF</span></div>
+                  <i>✓</i>
+                </div>
+              </div>
+            </div>
+            <div className="supplier-benefits" aria-label="Benefícios para fornecedores">
+              <article><span>◎</span><div><strong>Ganhe visibilidade</strong><p>Mostre sua empresa e seus produtos.</p></div></article>
+              <article><span>↗</span><div><strong>Receba oportunidades</strong><p>Demandas compatíveis chegam até você.</p></div></article>
+              <article><span>★</span><div><strong>Construa reputação</strong><p>Qualidade e velocidade aumentam sua relevância.</p></div></article>
+            </div>
+          </section>
+        )}
         {view === "map" && (
           <>
           <section className="map-layout premium-home-hero">
@@ -914,7 +949,7 @@ export default function Home() {
         {view === "messages" && <section className="messages-page"><div className="page-heading"><div><span className="eyebrow">MENSAGENS PRIVADAS</span><h1>Conversas no Hub</h1><p>O contato é compartilhado apenas quando você decide conversar.</p></div><button className="event-create" onClick={() => { setView(userRole === "supplier" ? "supplier-dashboard" : userRole === "client" ? "client-dashboard" : "directory"); }}>Voltar</button></div><div className="messages-layout"><aside><h2>Conversas</h2>{messageData.conversations.length === 0 ? <p>Nenhuma conversa iniciada ainda.</p> : messageData.conversations.map((conversation) => <button key={conversation.id} className={activeConversationId === conversation.id ? "active" : ""} onClick={() => loadMessages(conversation.id)}><strong>{conversation.supplierName || conversation.clientCompany || conversation.clientName || "Contato"}{Boolean(conversation.unreadCount) && <span className="unread-dot">{conversation.unreadCount}</span>}</strong><span>{conversation.subject}</span></button>)}</aside><section className="message-thread">{selectedSupplier && !activeConversationId && userRole === "client" ? <><h2>Nova mensagem para {selectedSupplier.name}</h2><p>Apresente sua necessidade. A empresa receberá a conversa em seu painel.</p><div className="message-templates">{messageTemplates.map((template) => <button type="button" key={template} onClick={() => { const field = document.querySelector<HTMLTextAreaElement>('.message-thread textarea[name="message"]'); if (field) field.value = template; }}>{template.slice(0, 28)}…</button>)}</div><form onSubmit={sendMessage}><textarea name="message" required rows={6} placeholder="Olá, gostaria de saber mais sobre..." /><small className="response-hint">Fornecedores respondem melhor mensagens objetivas — inclua sua necessidade e prazo. Recomendamos aguardar até 24h por um retorno.</small><button className="primary" disabled={formBusy}>{formBusy ? "Enviando…" : "Enviar mensagem →"}</button></form></> : activeConversationId ? <><h2>{messageData.conversations.find((item) => item.id === activeConversationId)?.subject || "Conversa"}</h2><div className="thread-list">{messageData.messages?.map((message) => <article key={message.id} className={message.senderUserId === messageData.currentUserId ? "mine" : ""}><p>{message.body}</p><small>{new Date(message.createdAt).toLocaleString("pt-BR")}{message.senderUserId === messageData.currentUserId && <span className="seen-status">{message.readAt ? " · ✓✓ Visto" : " · ✓ Enviado"}</span>}</small></article>)}</div><form onSubmit={sendMessage}><textarea name="message" required rows={3} placeholder="Escreva sua resposta" /><small className="response-hint">Recomendamos responder em até 24h para manter uma boa taxa de resposta.</small><button className="primary" disabled={formBusy}>{formBusy ? "Enviando…" : "Enviar →"}</button></form></> : <div className="events-empty"><strong>Selecione uma conversa</strong><p>Quando um cliente entrar em contato, ela aparecerá aqui.</p></div>}</section></div></section>}
       </main>
 
-      <footer className="site-footer"><div className="footer-main"><div className="footer-brand"><button className="brand" onClick={() => setView("map")}><span className="brand-mark"><span></span><span></span><span></span></span><span className="brand-copy"><strong>Hub <b>Brasil</b></strong><small>CONECTANDO NEGÓCIOS</small></span></button><p>O ecossistema de negócios do mercado de rastreamento, telemetria e IoT no Brasil.</p></div><div><strong>Plataforma</strong><button onClick={() => setView("directory")}>Fornecedores</button><a href="/instaladores">Instaladores</a><button onClick={() => setView("solutions")}>Soluções</button><button onClick={() => setView("events")}>Eventos</button><button onClick={() => setView("how-it-works")}>Como funciona</button><button onClick={() => openQuoteRequest()}>Solicitar cotação</button></div><div><strong>Soluções por aplicação</strong><a href="/solucoes">Todas as soluções</a><a href="/solucoes/rastreamento-de-frotas">Rastreamento de frotas</a><a href="/solucoes/rastreamento-de-ativos-para-logistica">Rastreamento para logística</a><a href="/solucoes/rastreamento-de-equipamentos-de-obra">Rastreamento de equipamentos de obra</a></div><div><strong>Para empresas</strong><button onClick={() => openRegistration("supplier")}>Cadastrar empresa</button><a href="/instaladores">Cadastrar instalador</a><button onClick={() => setView("about")}>Sobre o Hub</button><button onClick={() => setRegisterOpen(true)}>Entrar</button></div><div><strong>Contato</strong><a href="mailto:suporte@niviontech.com.br">suporte@niviontech.com.br</a><span>Brasil</span></div></div><div className="footer-bottom"><span>© 2026 Hub Brasil. Todos os direitos reservados.</span><div><a href="/termos">Termos de uso</a><a href="/privacidade">Privacidade</a><a href="/admin">Gestão</a></div></div></footer>
+      <footer className="site-footer"><div className="footer-main"><div className="footer-brand"><button className="brand" onClick={() => setView("map")}><span className="brand-mark"><span></span><span></span><span></span></span><span className="brand-copy"><strong>Hub <b>Brasil</b></strong><small>CONECTANDO NEGÓCIOS</small></span></button><p>O ecossistema de negócios do mercado de rastreamento, telemetria e IoT no Brasil.</p></div><div><strong>Plataforma</strong><button onClick={() => setView("directory")}>Fornecedores</button><a href="/instaladores">Instaladores</a><button onClick={() => setView("solutions")}>Soluções</button><button onClick={() => setView("events")}>Eventos</button><button onClick={() => setView("how-it-works")}>Como funciona</button><button onClick={() => openQuoteRequest()}>Solicitar cotação</button></div><div><strong>Soluções por aplicação</strong><a href="/solucoes">Todas as soluções</a><a href="/solucoes/rastreamento-de-frotas">Rastreamento de frotas</a><a href="/solucoes/rastreamento-de-ativos-para-logistica">Rastreamento para logística</a><a href="/solucoes/rastreamento-de-equipamentos-de-obra">Rastreamento de equipamentos de obra</a></div><div><strong>Para empresas</strong><button onClick={() => setView("supplier-entry")}>Cadastrar empresa</button><a href="/instaladores">Cadastrar instalador</a><button onClick={() => setView("about")}>Sobre o Hub</button><button onClick={() => setRegisterOpen(true)}>Entrar</button></div><div><strong>Contato</strong><a href="mailto:suporte@niviontech.com.br">suporte@niviontech.com.br</a><span>Brasil</span></div></div><div className="footer-bottom"><span>© 2026 Hub Brasil. Todos os direitos reservados.</span><div><a href="/termos">Termos de uso</a><a href="/privacidade">Privacidade</a><a href="/admin">Gestão</a></div></div></footer>
 
       <nav className="mobile-nav" aria-label="Navegação móvel">
         <button className={view === "map" ? "active" : ""} onClick={() => setView("map")}><span>⌖</span>Mapa</button>
@@ -924,6 +959,25 @@ export default function Home() {
         <button className={view === "news" ? "active" : ""} onClick={() => setView("news")}><span>◉</span>Radar</button>
         <button onClick={() => setRegisterOpen(true)}><span>◎</span>Conta</button>
       </nav>
+
+      {supplierWelcome && (
+        <div className="modal-backdrop supplier-success-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setSupplierWelcome(null); }}>
+          <section className="supplier-success" role="dialog" aria-modal="true" aria-labelledby="supplier-success-title">
+            <button className="modal-close" onClick={() => setSupplierWelcome(null)} aria-label="Fechar">×</button>
+            <span className="success-check" aria-hidden="true">✓</span>
+            <span className="eyebrow">CADASTRO CONCLUÍDO</span>
+            <h2 id="supplier-success-title">Sua empresa entrou para o Hub Brasil.</h2>
+            <p>Seu perfil agora está em análise para fazer parte da rede de fornecedores do setor. Você poderá preparar sua vitrine enquanto a gestão conclui a curadoria.</p>
+            <div className="supplier-success-preview">
+              <span className="success-logo">{supplierWelcome.logoUrl ? <img src={supplierWelcome.logoUrl} alt="Logo enviada" /> : supplierWelcome.company.slice(0, 2).toUpperCase()}</span>
+              <div><small>PRÉVIA DO SEU PERFIL</small><strong>{supplierWelcome.company}</strong><span>{supplierWelcome.categories.slice(0, 2).map(displayCategory).join(" · ") || "Soluções em análise"}</span><span>{supplierWelcome.city}{supplierWelcome.city && supplierWelcome.state ? "/" : ""}{supplierWelcome.state}</span></div>
+              <em>Em análise</em>
+            </div>
+            <button className="primary full" onClick={() => { setSupplierWelcome(null); setView("supplier-dashboard"); }}>Ver meu perfil <span>→</span></button>
+            <div className="supplier-next-step"><span>Próximo passo opcional</span><strong>Adicione seu primeiro produto.</strong><small>Leva aproximadamente 1 minuto.</small><button onClick={() => { setSupplierWelcome(null); setProductFormOpen(true); }}>Adicionar produto →</button></div>
+          </section>
+        </div>
+      )}
 
       {productNudgeOpen && (
         <div className="modal-backdrop catalog-nudge-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setProductNudgeOpen(false); }}>
@@ -1119,12 +1173,24 @@ export default function Home() {
             <div className="role-selector"><button className={registrationRole === "client" ? "active" : ""} onClick={() => setRegistrationRole("client")}><strong>Sou usuário</strong><span>Quero encontrar e avaliar fornecedores</span></button><button className={registrationRole === "supplier" ? "active" : ""} onClick={() => setRegistrationRole("supplier")}><strong>Sou fornecedor</strong><span>Quero publicar produtos e eventos</span></button></div>
             <form onSubmit={register}>
               <input type="hidden" name="role" value={registrationRole} />
-              <label>Seu nome<input name="name" required placeholder="Como podemos chamar você?" /></label>
-              <WhatsAppField />
-              <label>Endereço<input name="address" required placeholder="Rua, número, bairro e complemento" /></label>
-              <div className="field-row"><label>Nome fantasia {registrationRole === "client" && <small>Opcional</small>}<input name="company" required={registrationRole === "supplier"} placeholder="Nome da empresa" /></label><label>Instagram <small>Opcional</small><input name="instagram" placeholder="@suaempresa" /></label></div>
-              {registrationRole === "client" && <><label>CNPJ <small>Opcional</small><input name="cnpj" inputMode="numeric" placeholder="00.000.000/0000-00" /></label><label>Foto de perfil <small>Opcional · PNG, JPG ou WebP, até 3 MB</small><input name="profilePhoto" type="file" accept="image/png,image/jpeg,image/webp" /></label></>}
-              {registrationRole === "supplier" && <><label>CNPJ<input name="cnpj" required inputMode="numeric" placeholder="00.000.000/0000-00" /><small>Validamos apenas os dígitos; a confirmação empresarial é feita pela gestão.</small></label>{referralCode && <p className="commercial-notice">Você foi indicado por uma empresa parceira do Hub Brasil.</p>}<label>Categoria principal<select name="category" required><option value="">Selecione</option>{solutionCategories.map((item) => <option key={item.name}>{item.name}</option>)}</select></label><fieldset className="solution-selector"><legend>Soluções oferecidas <small>Selecione uma ou mais</small></legend>{solutionCategories.map((item) => <label className="check" key={item.name}><input name="categories" type="checkbox" value={item.name} /> {item.title}</label>)}</fieldset><div className="field-row"><label>Cidade<input name="city" required placeholder="Cidade da sede" /></label><label>Estado<select name="state" required><option value="">UF</option>{BRAZIL_STATES.map((state) => <option key={state}>{state}</option>)}</select></label></div><label>Apresentação da empresa<textarea name="description" rows={3} placeholder="Especialidades, diferenciais e região atendida" /></label><label>Logo da empresa <small>PNG, JPG ou WebP, até 3 MB</small><input name="logo" type="file" accept="image/png,image/jpeg,image/webp" /></label><label className="consent logo-consent"><input name="logoConsent" type="checkbox" required /> <span>Declaro que possuo autorização para utilizar e divulgar esta marca/logotipo no Hub Brasil e autorizo sua exibição no perfil público, diretório e mapa da plataforma.</span></label></>}
+              {registrationRole === "client" ? <>
+                <label>Seu nome<input name="name" required placeholder="Como podemos chamar você?" /></label>
+                <WhatsAppField />
+                <label>Endereço<input name="address" required placeholder="Rua, número, bairro e complemento" /></label>
+                <div className="field-row"><label>Nome fantasia <small>Opcional</small><input name="company" placeholder="Nome da empresa" /></label><label>Instagram <small>Opcional</small><input name="instagram" placeholder="@suaempresa" /></label></div>
+                <label>CNPJ <small>Opcional</small><input name="cnpj" inputMode="numeric" placeholder="00.000.000/0000-00" /></label>
+                <label>Foto de perfil <small>Opcional · PNG, JPG ou WebP, até 3 MB</small><input name="profilePhoto" type="file" accept="image/png,image/jpeg,image/webp" /></label>
+              </> : <>
+                <div className="registration-progress"><span>Cadastro essencial</span><strong>Leva cerca de 2 minutos</strong></div>
+                <label>Empresa<input name="company" required autoComplete="organization" placeholder="Nome da sua empresa" /></label>
+                <WhatsAppField />
+                <div className="field-row"><label>Cidade<input name="city" required autoComplete="address-level2" placeholder="Cidade da sede" /></label><label>UF<select name="state" required autoComplete="address-level1"><option value="">Selecione</option>{BRAZIL_STATES.map((state) => <option key={state}>{state}</option>)}</select></label></div>
+                {referralCode && <p className="commercial-notice">Você foi indicado por uma empresa parceira do Hub Brasil.</p>}
+                <fieldset className="solution-selector solution-cards"><legend>O que sua empresa oferece? <small>Escolha uma ou mais.</small></legend>{solutionCategories.map((item) => <label className="check" key={item.name}><input name="categories" type="checkbox" value={item.name} /><span aria-hidden="true">{item.icon}</span>{item.title}</label>)}</fieldset>
+                <label className="optional-upload">Logo da empresa <small>Opcional · você também pode adicionar depois</small><input name="logo" type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => setSupplierLogoSelected(Boolean(event.currentTarget.files?.length))} /></label>
+                {supplierLogoSelected && <label className="consent logo-consent"><input name="logoConsent" type="checkbox" required /> <span>Declaro que possuo autorização para utilizar e divulgar esta marca/logotipo no Hub Brasil e autorizo sua exibição no perfil público, diretório e mapa da plataforma.</span></label>}
+                <p className="progressive-note"><strong>Quer deixar seu perfil ainda melhor?</strong> Depois do cadastro, você poderá adicionar descrição, CNPJ, site, regiões atendidas e produtos — um passo por vez.</p>
+              </>}
               <label className="consent"><input type="checkbox" required /> <span>Li e concordo com a <a href="/privacidade" target="_blank">Política de Privacidade</a> e os <a href="/termos" target="_blank">Termos de Uso</a>.</span></label>
               <button className="primary full" type="submit">{registrationRole === "supplier" ? "Criar perfil da empresa" : "Liberar meu acesso"} <span>→</span></button>
             </form>
