@@ -2,6 +2,7 @@
 
 import { type ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { BRAZIL_STATES } from "./brazil-states";
+import { formatCnpj, isValidCnpj, normalizeCnpj } from "./cnpj";
 import { WhatsAppField } from "./whatsapp-field";
 
 // Os tipos oficiais da Cloudflare tipam Response.json() como `unknown` em vez de `any`;
@@ -232,6 +233,9 @@ export default function Home() {
   const [pendingContactSupplier, setPendingContactSupplier] = useState<Supplier | null>(null);
   const [productNudgeOpen, setProductNudgeOpen] = useState(false);
   const [supplierLogoSelected, setSupplierLogoSelected] = useState(false);
+  const [cnpjLookup, setCnpjLookup] = useState<{ status: "idle" | "loading" | "success" | "error"; message: string; registrationStatus?: string }>({ status: "idle", message: "" });
+  const cnpjLookupRequest = useRef(0);
+  const lastResolvedCnpj = useRef("");
   const [supplierWelcome, setSupplierWelcome] = useState<{ company: string; city: string; state: string; categories: string[]; logoUrl: string | null } | null>(null);
   const navigationMenuRef = useRef<HTMLDivElement>(null);
 
@@ -445,6 +449,42 @@ export default function Home() {
 
   function closeContactForSupplier() {
     setPendingContactSupplier(null);
+  }
+
+  async function lookupSupplierCnpj(event: ChangeEvent<HTMLInputElement>) {
+    const input = event.currentTarget;
+    input.value = formatCnpj(input.value);
+    const cnpj = normalizeCnpj(input.value);
+    if (!isValidCnpj(cnpj)) {
+      lastResolvedCnpj.current = "";
+      setCnpjLookup(cnpj.length === 14 ? { status: "error", message: "Confira os dígitos ou continue o cadastro sem CNPJ." } : { status: "idle", message: "" });
+      return;
+    }
+    if (lastResolvedCnpj.current === cnpj) return;
+
+    const requestId = ++cnpjLookupRequest.current;
+    setCnpjLookup({ status: "loading", message: "Buscando dados da empresa…" });
+    try {
+      const response = await fetch(`/api/cnpj/${cnpj}`);
+      const result = await readJson(response);
+      if (requestId !== cnpjLookupRequest.current) return;
+      if (!response.ok) throw new Error(result.error || "Consulta indisponível agora.");
+      const company = result.company as { company: string; city: string; state: string; address?: string | null; registrationStatus: string };
+      const form = input.form;
+      const companyInput = form?.elements.namedItem("company") as HTMLInputElement | null;
+      const cityInput = form?.elements.namedItem("city") as HTMLInputElement | null;
+      const stateInput = form?.elements.namedItem("state") as HTMLSelectElement | null;
+      const addressInput = form?.elements.namedItem("address") as HTMLInputElement | null;
+      if (companyInput) companyInput.value = company.company;
+      if (cityInput) cityInput.value = company.city;
+      if (stateInput && (BRAZIL_STATES as readonly string[]).includes(company.state)) stateInput.value = company.state;
+      if (addressInput && company.address) addressInput.value = company.address;
+      lastResolvedCnpj.current = cnpj;
+      setCnpjLookup({ status: "success", message: "Empresa encontrada — dados preenchidos automaticamente", registrationStatus: company.registrationStatus });
+    } catch (error) {
+      if (requestId !== cnpjLookupRequest.current) return;
+      setCnpjLookup({ status: "error", message: error instanceof Error ? error.message : "Consulta indisponível agora. Continue manualmente." });
+    }
   }
 
   async function register(event: FormEvent<HTMLFormElement>) {
@@ -1349,9 +1389,12 @@ export default function Home() {
                 <label>Foto de perfil <small>Opcional · PNG, JPG ou WebP, até 3 MB</small><input name="profilePhoto" type="file" accept="image/png,image/jpeg,image/webp" /></label>
               </> : <>
                 <div className="registration-progress"><span>Cadastro essencial</span><strong>Leva cerca de 2 minutos</strong></div>
+                <label>CNPJ <small>Opcional · usado somente para preencher dados cadastrais</small><input name="cnpj" inputMode="numeric" autoComplete="off" placeholder="00.000.000/0000-00" maxLength={18} onChange={lookupSupplierCnpj} /></label>
+                {cnpjLookup.status !== "idle" && <div className={`cnpj-lookup ${cnpjLookup.status}`} role={cnpjLookup.status === "error" ? "alert" : "status"} aria-live="polite"><span aria-hidden="true">{cnpjLookup.status === "loading" ? "↻" : cnpjLookup.status === "success" ? "✓" : "!"}</span><div><strong>{cnpjLookup.message}</strong>{cnpjLookup.status === "success" && <small>Situação cadastral: {cnpjLookup.registrationStatus}. Isso não significa aprovação ou verificação pelo Hub Brasil.</small>}{cnpjLookup.status === "error" && <small>A consulta externa não bloqueia seu cadastro. Preencha os campos abaixo e continue.</small>}</div></div>}
                 <label>Empresa<input name="company" required autoComplete="organization" placeholder="Nome da sua empresa" /></label>
                 <WhatsAppField />
                 <div className="field-row"><label>Cidade<input name="city" required autoComplete="address-level2" placeholder="Cidade da sede" /></label><label>UF<select name="state" required autoComplete="address-level1"><option value="">Selecione</option>{BRAZIL_STATES.map((state) => <option key={state}>{state}</option>)}</select></label></div>
+                <label>Endereço <small>Opcional · revise se foi preenchido automaticamente</small><input name="address" autoComplete="street-address" placeholder="Rua, número, bairro e CEP" /></label>
                 {referralCode && <p className="commercial-notice">Você foi indicado por uma empresa parceira do Hub Brasil.</p>}
                 <fieldset className="solution-selector solution-cards"><legend>O que sua empresa oferece? <small>Escolha uma ou mais.</small></legend>{solutionCategories.map((item) => <label className="check" key={item.name}><input name="categories" type="checkbox" value={item.name} /><span aria-hidden="true">{item.icon}</span>{item.title}</label>)}</fieldset>
                 <label className="optional-upload">Logo da empresa <small>Opcional · você também pode adicionar depois</small><input name="logo" type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => setSupplierLogoSelected(Boolean(event.currentTarget.files?.length))} /></label>
