@@ -51,6 +51,7 @@ test("formulário mantém fallback manual e aprovação independente", () => {
   const leadsRoute = fs.readFileSync(new URL("../app/api/leads/route.ts", import.meta.url), "utf8");
   assert.match(page, /Empresa encontrada — dados preenchidos automaticamente/);
   assert.match(page, /A consulta externa não bloqueia seu cadastro/);
+  assert.match(page, /await lookupCompanyByCnpj\(cnpj\)/);
   assert.match(page, /name="company" required/);
   assert.match(page, /name="city" required/);
   assert.match(leadsRoute, /status: role === "supplier" \? "pending" : "approved"/);

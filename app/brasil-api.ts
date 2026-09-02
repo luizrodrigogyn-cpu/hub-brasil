@@ -30,6 +30,24 @@ function addressFrom(data: Record<string, unknown>) {
   return parts.length ? parts.join(" · ") : null;
 }
 
+export function companyLookupFromBrasilApiData(cnpj: string, data: Record<string, unknown>): CompanyLookup {
+  const legalName = clean(data.razao_social);
+  const tradeName = clean(data.nome_fantasia) || null;
+  const city = clean(data.municipio);
+  const state = clean(data.uf).toUpperCase();
+  if (!legalName || !city || !state) throw new Error("invalid_provider_response");
+  return {
+    cnpj,
+    company: tradeName || legalName,
+    legalName,
+    tradeName,
+    city,
+    state,
+    registrationStatus: clean(data.descricao_situacao_cadastral) || "Não informada",
+    address: addressFrom(data),
+  };
+}
+
 export async function lookupCompanyByCnpj(
   input: string,
   options: { fetcher?: typeof fetch; timeoutMs?: number; now?: number } = {},
@@ -56,21 +74,7 @@ export async function lookupCompanyByCnpj(
   if (!response.ok) throw new Error(response.status === 404 ? "company_not_found" : "provider_unavailable");
 
   const data = await response.json() as Record<string, unknown>;
-  const legalName = clean(data.razao_social);
-  const tradeName = clean(data.nome_fantasia) || null;
-  const city = clean(data.municipio);
-  const state = clean(data.uf).toUpperCase();
-  if (!legalName || !city || !state) throw new Error("invalid_provider_response");
-  const company: CompanyLookup = {
-    cnpj,
-    company: tradeName || legalName,
-    legalName,
-    tradeName,
-    city,
-    state,
-    registrationStatus: clean(data.descricao_situacao_cadastral) || "Não informada",
-    address: addressFrom(data),
-  };
+  const company = companyLookupFromBrasilApiData(cnpj, data);
 
   if (cache.size >= CACHE_MAX_ENTRIES) cache.delete(cache.keys().next().value as string);
   cache.set(cnpj, { value: company, expiresAt: now + CACHE_TTL_MS });

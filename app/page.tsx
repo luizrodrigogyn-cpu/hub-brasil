@@ -2,6 +2,7 @@
 
 import { type ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { BRAZIL_STATES } from "./brazil-states";
+import { lookupCompanyByCnpj, type CompanyLookup } from "./brasil-api";
 import { formatCnpj, isValidCnpj, normalizeCnpj } from "./cnpj";
 import { WhatsAppField } from "./whatsapp-field";
 
@@ -468,8 +469,16 @@ export default function Home() {
       const response = await fetch(`/api/cnpj/${cnpj}`);
       const result = await readJson(response);
       if (requestId !== cnpjLookupRequest.current) return;
-      if (!response.ok) throw new Error(result.error || "Consulta indisponível agora.");
-      const company = result.company as { company: string; city: string; state: string; address?: string | null; registrationStatus: string };
+      let company: CompanyLookup;
+      if (response.ok) {
+        company = result.company as CompanyLookup;
+      } else {
+        // Alguns provedores bloqueiam tráfego originado em datacenters da Cloudflare.
+        // Como a BrasilAPI permite CORS, uma segunda tentativa no navegador mantém o
+        // preenchimento disponível sem transformar a consulta em requisito do cadastro.
+        company = (await lookupCompanyByCnpj(cnpj)).company;
+      }
+      if (requestId !== cnpjLookupRequest.current) return;
       const form = input.form;
       const companyInput = form?.elements.namedItem("company") as HTMLInputElement | null;
       const cityInput = form?.elements.namedItem("city") as HTMLInputElement | null;
