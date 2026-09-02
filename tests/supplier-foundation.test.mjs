@@ -21,9 +21,9 @@ test("entrada do fornecedor apresenta proposta curta e três benefícios", () =>
 });
 
 test("cadastro inicial do fornecedor mantém apenas os dados essenciais obrigatórios", () => {
-  assert.match(page, /Cadastro essencial/);
+  assert.match(page, /INFORMAÇÕES ESSENCIAIS/);
   assert.match(page, /O que sua empresa oferece\?/);
-  assert.match(page, /Logo da empresa <small>Opcional/);
+  assert.match(page, /Adicionar logo agora <small>Opcional/);
   assert.doesNotMatch(page, /registrationRole === "supplier"[^\n]*<label>CNPJ<input name="cnpj" required/);
   assert.match(leadsRoute, /Fornecedor deve informar empresa, WhatsApp, ao menos uma solução, cidade e estado/);
   assert.match(leadsRoute, /role === "supplier" && cnpj && !isValidCnpj/);

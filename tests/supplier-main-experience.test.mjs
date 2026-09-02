@@ -13,7 +13,7 @@ test("cockpit limita a home aos quatro indicadores comerciais", () => {
 
 test("Para você seleciona no máximo três ações prioritárias", () => {
   assert.ok(page.includes("].filter(Boolean).slice(0, 3)"));
-  assert.ok(page.includes("As ações mais importantes para gerar negócios agora."));
+  assert.ok(page.includes("As ações de maior impacto agora."));
 });
 
 test("feed comercial reutiliza o motor de compatibilidade e protege a ação existente", () => {
