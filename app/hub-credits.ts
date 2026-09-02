@@ -1,5 +1,6 @@
 import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { activityEvents, contentReports, conversationMessages, conversations, creditLedger, creditRules, creditWallets, eventInterests, favorites, founderMemberSlots, highlightActivations, hubScoreSnapshots, hubSettings, leads, needInterests, products, quoteRecipients, referrals, supplierEvents, supplierRatings, supplierUpdates } from "../db/schema";
+export { isValidCnpj, normalizeCnpj } from "./cnpj";
 
 export const DEFAULT_CREDIT_RULES = [
   ["profile_complete", "Perfil empresarial completo", 250, "earn"],
@@ -13,21 +14,6 @@ export const DEFAULT_CREDIT_RULES = [
   ["highlight_search", "Destaque na busca por 7 dias", 150, "spend"],
   ["highlight_product", "Produto em destaque por 7 dias", 100, "spend"],
 ] as const;
-
-export function normalizeCnpj(value: string) { return value.replace(/\D/g, ""); }
-
-export function isValidCnpj(value: string) {
-  const cnpj = normalizeCnpj(value);
-  if (!/^\d{14}$/.test(cnpj) || /^(\d)\1{13}$/.test(cnpj)) return false;
-  const digit = (base: string, weights: number[]) => {
-    const sum = base.split("").reduce((total, item, index) => total + Number(item) * weights[index], 0);
-    const rest = sum % 11;
-    return rest < 2 ? 0 : 11 - rest;
-  };
-  const first = digit(cnpj.slice(0, 12), [5,4,3,2,9,8,7,6,5,4,3,2]);
-  const second = digit(`${cnpj.slice(0, 12)}${first}`, [6,5,4,3,2,9,8,7,6,5,4,3,2]);
-  return first === Number(cnpj[12]) && second === Number(cnpj[13]);
-}
 
 export function profileCompleteness(profile: Record<string, unknown>) {
   const checks = [profile.name, profile.phone, profile.company, profile.category, profile.city, profile.state, profile.description, profile.phoneVerifiedAt, profile.serviceStates || profile.servesNationwide, profile.services];
