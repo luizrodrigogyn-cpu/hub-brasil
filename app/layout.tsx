@@ -56,6 +56,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="pt-BR">
+      <head>
+        <link rel="preconnect" href="https://clerk.hub.niviontech.com.br" crossOrigin="anonymous" />
+        <link rel="dns-prefetch" href="https://clerk.hub.niviontech.com.br" />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >

@@ -419,7 +419,7 @@ body{font-family:var(--font-geist-sans),Arial,sans-serif;font-size:16px;line-hei
 .clerk-form-shell{position:relative;min-height:320px;display:grid;place-items:center}
 .clerk-form-shell>.cl-rootBox{position:relative;z-index:2;width:100%;display:flex;justify-content:center}.clerk-form-shell>.cl-rootBox>.cl-cardBox{width:min(100%,400px);margin-inline:auto}
 .clerk-loading-card{position:absolute;inset:10px 0 0;display:grid;place-content:center;justify-items:center;gap:10px;padding:28px;border:1px dashed rgba(107,158,231,.38);border-radius:16px;background:rgba(4,17,39,.42);text-align:center;color:#eef5ff}.clerk-loading-card.static{position:relative;inset:auto;width:100%;min-height:300px}
-.clerk-form-shell:has(.cl-cardBox) .clerk-loading-card{display:none}
+.clerk-form-shell:has(input) .clerk-loading-card{display:none}
 .clerk-loading-card>span{width:31px;height:31px;border:3px solid rgba(112,162,239,.24);border-top-color:#62d1f2;border-radius:50%;animation:clerk-spin .9s linear infinite}
 .clerk-loading-card strong{font-size:15px}.clerk-loading-card small{color:#9eb2cf;line-height:1.5}
 .clerk-loading-card button,.auth-unavailable button{margin-top:6px;border:1px solid rgba(113,164,240,.48);border-radius:9px;background:#15366b;color:#fff;padding:10px 14px;font-weight:750;cursor:pointer}
