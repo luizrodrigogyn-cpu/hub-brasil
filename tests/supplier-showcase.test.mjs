@@ -15,7 +15,7 @@ test("perfil público premium mantém confiança, catálogo, região, avaliaçõ
 });
 
 test("perfil progressivo mostra uma única próxima ação positiva", () => {
-  assert.match(page, /Seu perfil está ficando completo/);
+  assert.match(page, /Seu perfil está \{supplierCompleteness\}% completo/);
   assert.match(page, /Uma melhoria de cada vez/);
   assert.match(page, /supplierProfileNextAction/);
   assert.match(page, /PRÓXIMO PASSO/);

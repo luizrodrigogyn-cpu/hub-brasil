@@ -13,8 +13,9 @@ test("inteligência comercial usa no máximo três recomendações explicáveis"
   assert.doesNotMatch(page, /Math\.random\(\)/);
 });
 
-test("recomendações usam oportunidades, catálogo e métricas reais", () => {
-  assert.match(page, /pendingSupplierOpportunities\[0\]/);
+test("recomendações não duplicam oportunidades e usam catálogo e métricas reais", () => {
+  const insights = page.slice(page.indexOf("const supplierInsights = ["), page.indexOf("].filter(Boolean).slice(0, 3)", page.indexOf("const supplierInsights = [")));
+  assert.doesNotMatch(insights, /pendingSupplierOpportunities\[0\]/);
   assert.match(page, /uncoveredCategory/);
   assert.match(page, /supplierStats\?\.quoteResponses7d/);
   assert.match(page, /supplierStats\?\.quoteRequests7d/);
